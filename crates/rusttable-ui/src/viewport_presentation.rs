@@ -4,7 +4,10 @@
 //! [`DisplayPresentationPort`].  GTK only owns the paintable and visible status; it never owns
 //! color transforms, monitor discovery, export pixels, or device resources.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The viewport presentation reports typed preview failures at the application/UI boundary."
+)]
 
 use rusttable_core::{PhotoId, Revision};
 use rusttable_display_profile::{MonitorId, ProfileSelection};
@@ -119,7 +122,7 @@ impl PresentationStatus {
     }
 }
 
-fn profile_label(profile: ProfileSelection) -> &'static str {
+const fn profile_label(profile: ProfileSelection) -> &'static str {
     match profile {
         ProfileSelection::Override => "override profile",
         ProfileSelection::OperatingSystem => "OS profile",
@@ -279,7 +282,7 @@ pub enum DisplayPresentationState {
 
 impl DisplayPresentationState {
     #[must_use]
-    pub fn status(&self) -> PresentationStatus {
+    pub const fn status(&self) -> PresentationStatus {
         match self {
             Self::Unavailable => {
                 PresentationStatus::Failed(PresentationFailure::ServiceUnavailable)

@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc, clippy::too_many_arguments)]
-
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write as _;
@@ -25,6 +23,10 @@ pub struct RecipeId(String);
 
 impl RecipeId {
     /// Creates an opaque, stable recipe identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the identifier is empty or contains path/control characters.
     pub fn new(value: impl Into<String>) -> Result<Self, RecipeError> {
         let value = value.into();
         if !crate::contract::opaque_identifier(&value) {
@@ -55,6 +57,11 @@ impl RecipeRevision {
         self.0
     }
 
+    /// Advances the revision without wrapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the revision would overflow.
     pub const fn next(self) -> Result<Self, RecipeError> {
         match self.0.checked_add(1) {
             Some(value) => Ok(Self(value)),
@@ -70,6 +77,11 @@ pub struct RecipeTemplate {
 }
 
 impl RecipeTemplate {
+    /// Creates a versioned opaque filename template reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the identifier is invalid or the version is zero.
     pub fn new(id: impl Into<String>, version: u32) -> Result<Self, RecipeError> {
         let id = id.into();
         if !crate::contract::opaque_identifier(&id) || version == 0 {
@@ -100,6 +112,11 @@ pub struct RecipeDestination {
 }
 
 impl RecipeDestination {
+    /// Creates a destination using an opaque identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the destination identifier is invalid.
     pub fn new(
         id: impl Into<String>,
         collision: crate::CollisionPolicy,
@@ -146,7 +163,7 @@ impl RecipeDestination {
     }
 
     #[must_use]
-    pub fn parameters(&self) -> &BTreeMap<String, String> {
+    pub const fn parameters(&self) -> &BTreeMap<String, String> {
         &self.parameters
     }
 }
@@ -158,6 +175,11 @@ pub struct PostSuccessAction {
 }
 
 impl PostSuccessAction {
+    /// Creates a post-success action reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the action identifier is invalid.
     pub fn new(id: impl Into<String>) -> Result<Self, RecipeError> {
         let id = id.into();
         if !crate::contract::opaque_identifier(&id) {
@@ -183,7 +205,7 @@ impl PostSuccessAction {
     }
 
     #[must_use]
-    pub fn parameters(&self) -> &BTreeMap<String, String> {
+    pub const fn parameters(&self) -> &BTreeMap<String, String> {
         &self.parameters
     }
 }
@@ -360,6 +382,11 @@ pub struct ExportRecipe {
 }
 
 impl ExportRecipe {
+    /// Builds and hashes a recipe from its draft fields.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when draft validation or canonical hashing fails.
     pub fn from_draft(draft: ExportRecipeDraft) -> Result<Self, RecipeError> {
         let recipe = Self {
             id: draft.id,
@@ -389,7 +416,7 @@ impl ExportRecipe {
     }
 
     #[must_use]
-    pub fn id(&self) -> &RecipeId {
+    pub const fn id(&self) -> &RecipeId {
         &self.id
     }
 
@@ -414,12 +441,12 @@ impl ExportRecipe {
     }
 
     #[must_use]
-    pub fn encoder_settings(&self) -> &EncoderSettings {
+    pub const fn encoder_settings(&self) -> &EncoderSettings {
         &self.encoder_settings
     }
 
     #[must_use]
-    pub fn destination(&self) -> &RecipeDestination {
+    pub const fn destination(&self) -> &RecipeDestination {
         &self.destination
     }
 
@@ -464,7 +491,7 @@ impl ExportRecipe {
     }
 
     #[must_use]
-    pub fn filename_template(&self) -> &RecipeTemplate {
+    pub const fn filename_template(&self) -> &RecipeTemplate {
         &self.filename_template
     }
 
@@ -489,6 +516,10 @@ impl ExportRecipe {
     }
 
     /// Returns a new immutable revision; the previous recipe remains unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when identity, revision, or draft validation fails.
     pub fn revised(&self, draft: ExportRecipeDraft) -> Result<Self, RecipeError> {
         if draft.id != self.id {
             return Err(RecipeError::IdentityChanged);
@@ -498,6 +529,11 @@ impl ExportRecipe {
         next.with_hash()
     }
 
+    /// Returns a new immutable disabled revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the revision would overflow or validation fails.
     pub fn disabled(&self) -> Result<Self, RecipeError> {
         let mut next = self.clone();
         next.revision = self.revision.next()?;
@@ -507,6 +543,14 @@ impl ExportRecipe {
 
     /// Resolves the recipe into a fully explicit request after a caller supplies the photo/edit
     /// snapshot and the registered filename template. No recipe field is silently downgraded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when recipe validation, profile resolution, or request validation fails.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the explicit recipe-to-request dependency boundary"
+    )]
     pub fn resolve_request(
         &self,
         photo_id: PhotoId,
@@ -566,6 +610,11 @@ impl ExportRecipe {
         Ok(request)
     }
 
+    /// Validates all persisted recipe fields and secret-material boundaries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any recipe field is invalid or contains secret material.
     pub fn validate(&self) -> Result<(), RecipeError> {
         if self.name.trim().is_empty() || self.name.len() > 256 {
             return Err(RecipeError::InvalidField { field: "name" });
@@ -616,6 +665,11 @@ impl ExportRecipe {
         Ok(())
     }
 
+    /// Negotiates this recipe against a registered capability set.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the validation request cannot be constructed or validated.
     pub fn capability_report(
         &self,
         capabilities: &crate::CapabilitySet,
@@ -644,6 +698,10 @@ impl ExportRecipe {
 
     /// Canonical persistence encoding. It includes only opaque credential references, never
     /// credential material; `export_json` redacts even those references for sharing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when recipe validation or canonical JSON serialization fails.
     pub fn canonical_json(&self) -> Result<String, RecipeError> {
         self.validate()?;
         canonical_string(&self.document(true))
@@ -666,6 +724,11 @@ impl ExportRecipe {
         )
     }
 
+    /// Restores and verifies a recipe from canonical JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when JSON, schema, field, or content-hash validation fails.
     pub fn from_canonical_json(input: &str) -> Result<Self, RecipeError> {
         let value: Value = serde_json::from_str(input).map_err(|_| RecipeError::MalformedJson)?;
         let schema = crate::recipe_parse::string(&value, "schema")?;
@@ -681,6 +744,11 @@ impl ExportRecipe {
         Ok(recipe)
     }
 
+    /// Returns a copy with a new identity and first revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the new identity or resulting recipe is invalid.
     pub fn with_id(&self, id: RecipeId) -> Result<Self, RecipeError> {
         let mut clone = self.clone();
         clone.id = id;
@@ -895,7 +963,7 @@ fn action_value(action: &PostSuccessAction) -> Value {
     serde_json::json!({"id": action.id, "parameters": action.parameters})
 }
 
-fn collision_id(value: crate::CollisionPolicy) -> &'static str {
+const fn collision_id(value: crate::CollisionPolicy) -> &'static str {
     match value {
         crate::CollisionPolicy::CreateNew => "create_new",
         crate::CollisionPolicy::ReplaceExisting => "replace_existing",
@@ -905,7 +973,7 @@ fn collision_id(value: crate::CollisionPolicy) -> &'static str {
         crate::CollisionPolicy::VersionRevision => "version_revision",
     }
 }
-fn quality_id(value: PipelineQuality) -> &'static str {
+const fn quality_id(value: PipelineQuality) -> &'static str {
     match value {
         PipelineQuality::Draft => "draft",
         PipelineQuality::Standard => "standard",
@@ -913,7 +981,7 @@ fn quality_id(value: PipelineQuality) -> &'static str {
         PipelineQuality::Reference => "reference",
     }
 }
-fn interpolation_id(value: Interpolation) -> &'static str {
+const fn interpolation_id(value: Interpolation) -> &'static str {
     match value {
         Interpolation::Nearest => "nearest",
         Interpolation::Bilinear => "bilinear",
@@ -921,7 +989,7 @@ fn interpolation_id(value: Interpolation) -> &'static str {
         Interpolation::Lanczos => "lanczos",
     }
 }
-fn intent_id(value: RenderingIntent) -> &'static str {
+const fn intent_id(value: RenderingIntent) -> &'static str {
     match value {
         RenderingIntent::Perceptual => "perceptual",
         RenderingIntent::Relative => "relative",
@@ -929,13 +997,13 @@ fn intent_id(value: RenderingIntent) -> &'static str {
         RenderingIntent::Absolute => "absolute",
     }
 }
-fn bpc_id(value: BlackPointCompensation) -> &'static str {
+const fn bpc_id(value: BlackPointCompensation) -> &'static str {
     match value {
         BlackPointCompensation::Disabled => "disabled",
         BlackPointCompensation::Enabled => "enabled",
     }
 }
-fn alpha_id(value: AlphaPolicy) -> &'static str {
+const fn alpha_id(value: AlphaPolicy) -> &'static str {
     match value {
         AlphaPolicy::Preserve => "preserve",
         AlphaPolicy::ReplaceOpaque => "replace_opaque",
@@ -943,21 +1011,21 @@ fn alpha_id(value: AlphaPolicy) -> &'static str {
         AlphaPolicy::Ignore => "ignore",
     }
 }
-fn dither_id(value: DitherPolicy) -> &'static str {
+const fn dither_id(value: DitherPolicy) -> &'static str {
     match value {
         DitherPolicy::None => "none",
         DitherPolicy::Ordered8x8 => "ordered_8x8",
         DitherPolicy::ErrorDiffusion => "error_diffusion",
     }
 }
-fn action_id(value: MetadataAction) -> &'static str {
+const fn action_id(value: MetadataAction) -> &'static str {
     match value {
         MetadataAction::Include => "include",
         MetadataAction::Exclude => "exclude",
         MetadataAction::Redact => "redact",
     }
 }
-pub(crate) fn format_from_encoder(value: &str) -> Option<OutputFormat> {
+pub fn format_from_encoder(value: &str) -> Option<OutputFormat> {
     match value.to_ascii_lowercase().as_str() {
         "png" => Some(OutputFormat::Png),
         "jpeg" | "jpg" => Some(OutputFormat::Jpeg),

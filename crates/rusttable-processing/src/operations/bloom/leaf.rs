@@ -976,7 +976,7 @@ fn native_box_scratch_requested_bytes(samples: usize) -> Result<usize, BloomErro
         .ok_or(BloomError::SizeOverflow)
 }
 
-fn finite_parameter(name: &'static str, value: f32) -> Result<f32, BloomParameterError> {
+const fn finite_parameter(name: &'static str, value: f32) -> Result<f32, BloomParameterError> {
     if !value.is_finite() {
         return Err(BloomParameterError::NonFinite(name));
     }

@@ -165,7 +165,7 @@ impl<T> DarkroomPanelProjection<T> {
     }
 
     #[must_use]
-    pub fn with_view_state(mut self, expanded: bool, scroll_position_milli: u32) -> Self {
+    pub const fn with_view_state(mut self, expanded: bool, scroll_position_milli: u32) -> Self {
         self.expanded = expanded;
         self.scroll_position_milli = scroll_position_milli;
         self
@@ -269,7 +269,7 @@ pub enum DarkroomPanelAction {
 }
 
 impl DarkroomPanelAction {
-    fn target(&self) -> DarkroomPanelTarget {
+    const fn target(&self) -> DarkroomPanelTarget {
         match self {
             Self::SelectHistory { target, .. }
             | Self::NavigateHistory { target, .. }
@@ -283,7 +283,7 @@ impl DarkroomPanelAction {
         }
     }
 
-    fn revision(&self) -> Revision {
+    const fn revision(&self) -> Revision {
         match self {
             Self::SelectHistory { revision, .. }
             | Self::NavigateHistory { revision, .. }
@@ -380,12 +380,7 @@ impl DarkroomPanelRouter {
 
 pub type DarkroomPanelActionHandler = Rc<dyn Fn(DarkroomPanelAction)>;
 
-pub(crate) fn panel_expander(
-    id: &str,
-    title: &str,
-    open: bool,
-    body: &gtk4::Box,
-) -> gtk4::Expander {
+pub fn panel_expander(id: &str, title: &str, open: bool, body: &gtk4::Box) -> gtk4::Expander {
     let expander = gtk4::Expander::builder()
         .label(title)
         .expanded(open)
@@ -404,7 +399,7 @@ fn panel_title(id: &str, title: &str) -> gtk4::Box {
     module_title(id, title)
 }
 
-pub(crate) fn panel_button(id: &str, label: &str) -> gtk4::Button {
+pub fn panel_button(id: &str, label: &str) -> gtk4::Button {
     let button = gtk4::Button::with_label(label);
     button.set_widget_name(id);
     button.set_focus_on_click(false);
@@ -413,7 +408,7 @@ pub(crate) fn panel_button(id: &str, label: &str) -> gtk4::Button {
     button
 }
 
-pub(crate) fn append_status(body: &gtk4::Box, text: &str) {
+pub fn append_status(body: &gtk4::Box, text: &str) {
     let status = gtk4::Label::new(Some(text));
     status.set_halign(gtk4::Align::Start);
     status.add_css_class("dim-label");
@@ -421,7 +416,7 @@ pub(crate) fn append_status(body: &gtk4::Box, text: &str) {
     body.append(&status);
 }
 
-pub(crate) fn append_fact(body: &gtk4::Box, label: &str, value: &str) {
+pub fn append_fact(body: &gtk4::Box, label: &str, value: &str) {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     let label_widget = gtk4::Label::new(Some(label));
     label_widget.set_halign(gtk4::Align::Start);

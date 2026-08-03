@@ -96,7 +96,6 @@ pub struct ColorBalanceRgbParametersV1 {
 
 impl ColorBalanceRgbParametersV1 {
     #[must_use]
-    #[allow(clippy::too_many_arguments, reason = "preserves native v1 field order")]
     pub const fn new(values: [f32; COLORBALANCERGB_FIELD_COUNT_V1]) -> Self {
         Self {
             shadows_y: values[0],
@@ -610,7 +609,7 @@ impl ColorBalanceRgbHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ColorBalanceRgbParametersV5, ColorBalanceRgbCodecError> {
+    pub const fn current(&self) -> Result<ColorBalanceRgbParametersV5, ColorBalanceRgbCodecError> {
         match self {
             Self::V1(value) => Ok(migrate_v1_to_v5(*value)),
             Self::V2(value) => Ok(migrate_v2_to_v5(*value)),

@@ -318,9 +318,14 @@ impl Default for CallbackResult {
 }
 
 /// These independent booleans preserve the distinct capability dimensions
-/// required by the manifest contract; replacing them with one enum would lose
-/// valid combinations such as consuming and publishing a raster mask.
-#[allow(clippy::struct_excessive_bools)]
+/// required by the manifest contract.
+///
+/// Replacing them with one enum would lose valid combinations such as consuming
+/// and publishing a raster mask.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "These independent capability flags preserve valid combinations that cannot be represented by one enum."
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default)]
 pub struct CapabilityContract {
     pub supports_shared_blending: bool,
@@ -401,7 +406,7 @@ fn default_tolerance_class() -> String {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct OperationOverrideFile {
+pub struct OperationOverrideFile {
     #[serde(rename = "operation", default)]
     pub operations: Vec<OperationOverride>,
 }

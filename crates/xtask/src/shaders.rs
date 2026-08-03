@@ -11,7 +11,7 @@ const GENERATED: &str = "crates/rusttable-gpu/src/shader/generated.rs";
 const SOURCE_MAP: &str = "architecture/rusttable-shader-source-map.toml";
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ShadersCommand {
+pub enum ShadersCommand {
     Generate,
     Check {
         #[arg(long)]
@@ -25,7 +25,7 @@ pub(crate) enum ShadersCommand {
     },
 }
 
-pub(crate) fn run(root: &Path, command: &ShadersCommand) -> Result {
+pub fn run(root: &Path, command: &ShadersCommand) -> Result {
     match command {
         ShadersCommand::Generate => generate(root),
         ShadersCommand::Check { all: _ } => check(root),
@@ -111,7 +111,7 @@ fn smoke(root: &Path, qualified_backends: bool, cpu_parity: bool) -> Result {
     Ok(())
 }
 
-pub(crate) fn verify_source_map(root: &Path) -> Result {
+pub fn verify_source_map(root: &Path) -> Result {
     let text = fs::read_to_string(root.join(SOURCE_MAP))
         .map_err(|error| format!("shader source map: read failed: {error}"))?;
     let document = toml::from_str::<toml::Value>(&text)

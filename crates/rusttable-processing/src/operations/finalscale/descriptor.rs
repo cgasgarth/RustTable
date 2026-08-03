@@ -11,7 +11,10 @@ use super::{
 };
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the final-scale descriptor keeps source-ordered resampling and output metadata together"
+)]
 pub fn finalscale_descriptor() -> OperationDescriptor {
     let integer = |id: &str, maximum: i64| ParameterDescriptor {
         id: id.to_owned(),

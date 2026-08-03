@@ -171,7 +171,12 @@ fn color_mapping_scale_image() -> RgbaF32Image {
             } else {
                 0.76
             };
-            RgbaF32Pixel::new(light, light * 0.68 + 0.12, 0.1 + (1.0 - light) * 0.4, 0.5)
+            RgbaF32Pixel::new(
+                light,
+                light.mul_add(0.68, 0.12),
+                (1.0 - light).mul_add(0.4, 0.1),
+                0.5,
+            )
         })
         .collect();
     RgbaF32Image::new(
@@ -354,6 +359,10 @@ fn mixed_lab_defringe_preview_and_export_share_the_same_edited_state() {
 }
 
 #[test]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native exposure black-level equation arithmetic order"
+)]
 fn exposure_applies_darktable_black_level_scale_without_clipping() {
     let graph = graph(vec![operation(
         10,

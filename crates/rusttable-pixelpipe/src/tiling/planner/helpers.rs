@@ -186,7 +186,7 @@ fn ceil_div(value: u32, divisor: u32) -> Result<u32, TilePlanError> {
         .ok_or(TilePlanError::ArithmeticOverflow)
 }
 
-pub(super) fn can_reduce(error: &TilePlanError) -> bool {
+pub(super) const fn can_reduce(error: &TilePlanError) -> bool {
     matches!(
         error,
         TilePlanError::OverBudget { .. } | TilePlanError::MaxAllocation { .. }

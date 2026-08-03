@@ -46,9 +46,7 @@ pub fn render_operation_manifest(manifest: &OperationManifest) -> Result<String,
 /// # Errors
 ///
 /// Returns an error when any compatibility invariant is violated.
-pub(crate) fn validate_operation_manifest_shape(
-    manifest: &OperationManifest,
-) -> Result<(), ScanError> {
+pub fn validate_operation_manifest_shape(manifest: &OperationManifest) -> Result<(), ScanError> {
     if manifest.schema_version != 3 {
         return Err(ScanError::InvalidManifest {
             message: format!(

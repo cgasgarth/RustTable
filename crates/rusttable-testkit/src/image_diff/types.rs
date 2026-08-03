@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::{DIFF_SCHEMA_VERSION, DiffError, MAX_ARTIFACT_BYTES, artifacts};
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DiffArtifactPayload {
     pub schema_version: u32,
     pub kind: ArtifactKind,

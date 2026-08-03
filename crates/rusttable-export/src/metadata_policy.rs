@@ -128,7 +128,7 @@ fn native_strtol_hex(raw: &str) -> i64 {
     }
 }
 
-fn hex_digit(byte: u8) -> Option<u8> {
+const fn hex_digit(byte: u8) -> Option<u8> {
     match byte {
         b'0'..=b'9' => Some(byte - b'0'),
         b'a'..=b'f' => Some(byte - b'a' + 10),
@@ -163,7 +163,7 @@ impl NativeMetadataExportConfig {
     }
 
     #[must_use]
-    pub fn flags_key_exists(&self) -> bool {
+    pub const fn flags_key_exists(&self) -> bool {
         self.flags.is_some()
     }
 
@@ -395,7 +395,7 @@ fn groups(policy: MetadataPolicy, excluded: bool) -> Vec<String> {
     .collect()
 }
 
-fn action(value: MetadataAction, include: CanonicalAction) -> CanonicalAction {
+const fn action(value: MetadataAction, include: CanonicalAction) -> CanonicalAction {
     match value {
         MetadataAction::Include => include,
         MetadataAction::Exclude => CanonicalAction::Exclude,

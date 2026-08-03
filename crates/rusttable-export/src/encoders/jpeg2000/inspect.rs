@@ -187,7 +187,9 @@ fn parse_siz(body: &[u8]) -> Result<(u32, u32, u8, u8), InspectionError> {
     Ok((width, height, components, depth))
 }
 
-fn parse_cod(body: &[u8]) -> Result<(ProgressionOrder, Transform, u8, u8, u8), InspectionError> {
+const fn parse_cod(
+    body: &[u8],
+) -> Result<(ProgressionOrder, Transform, u8, u8, u8), InspectionError> {
     if body.len() < 10 {
         return Err(InspectionError::Malformed("short COD"));
     }

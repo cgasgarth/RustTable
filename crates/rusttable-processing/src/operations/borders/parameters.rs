@@ -215,7 +215,7 @@ pub struct BordersParametersV4 {
 }
 
 impl BordersParametersV4 {
-    pub fn new(config: BordersConfig) -> Self {
+    pub const fn new(config: BordersConfig) -> Self {
         Self {
             config,
             aspect_text: [0; 20],
@@ -407,7 +407,7 @@ pub fn migrate_history(history: BordersHistory) -> Result<BordersParametersV4, B
         BordersHistory::Opaque { version, .. } => Err(BordersCodecError::OpaqueSource(version)),
     }
 }
-fn migrate_v3(mut c: BordersConfig) -> BordersConfig {
+const fn migrate_v3(mut c: BordersConfig) -> BordersConfig {
     c.basis = if matches!(c.aspect, BordersAspect::Constant) && !c.max_border_size {
         BordersBasis::Width
     } else {

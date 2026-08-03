@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use rusttable_color::{ColorEncoding, Precision};
 use rusttable_image::Roi;
 use rusttable_masks::MaskGraph;
@@ -64,7 +62,7 @@ impl PipelineSnapshotInput {
     }
 
     #[must_use]
-    pub fn with_input(mut self, input: PipelineInput) -> Self {
+    pub const fn with_input(mut self, input: PipelineInput) -> Self {
         self.input = input;
         self
     }
@@ -367,11 +365,12 @@ impl PipelineSnapshot {
 
     /// Publication is valid only for the generation that produced the output.
     #[must_use]
-    pub fn publication_is_current(&self, current: PublicationGeneration) -> bool {
+    pub const fn publication_is_current(&self, current: PublicationGeneration) -> bool {
         self.publication_generation.get() == current.get()
     }
 
-    pub(crate) fn prepared(mut self) -> Self {
+    #[must_use]
+    pub const fn prepared(mut self) -> Self {
         self.raster_status = RasterStatus::Prepared;
         self
     }

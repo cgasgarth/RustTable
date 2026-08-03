@@ -599,7 +599,7 @@ impl Matrix {
         })
     }
 
-    fn index(&self, row: usize, column: usize) -> usize {
+    const fn index(&self, row: usize, column: usize) -> usize {
         if self.banded {
             if row == column {
                 return row + self.size;

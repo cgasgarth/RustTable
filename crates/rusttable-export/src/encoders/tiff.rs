@@ -503,7 +503,7 @@ fn write_tags<W: Write + Seek, K: TiffKind>(
     Ok(())
 }
 
-fn density_rational(density: Density) -> (ResolutionUnit, Rational) {
+const fn density_rational(density: Density) -> (ResolutionUnit, Rational) {
     match density.unit() {
         DensityUnit::Inch => (
             ResolutionUnit::Inch,
@@ -592,9 +592,9 @@ impl SampleBytes for u8 {
 impl SampleBytes for u16 {
     fn from_bytes(bytes: &[u8], order: ByteOrder) -> Self {
         match order {
-            ByteOrder::Big => u16::from_be_bytes([bytes[0], bytes[1]]),
-            ByteOrder::Little => u16::from_le_bytes([bytes[0], bytes[1]]),
-            ByteOrder::Native => u16::from_ne_bytes([bytes[0], bytes[1]]),
+            ByteOrder::Big => Self::from_be_bytes([bytes[0], bytes[1]]),
+            ByteOrder::Little => Self::from_le_bytes([bytes[0], bytes[1]]),
+            ByteOrder::Native => Self::from_ne_bytes([bytes[0], bytes[1]]),
         }
     }
 }
@@ -605,7 +605,7 @@ impl SampleBytes for f32 {
             ByteOrder::Little => u32::from_le_bytes(bytes.try_into().unwrap()),
             ByteOrder::Native => u32::from_ne_bytes(bytes.try_into().unwrap()),
         };
-        f32::from_bits(value)
+        Self::from_bits(value)
     }
 }
 
@@ -771,7 +771,7 @@ float_type!(
     tiff::tags::PhotometricInterpretation::RGB
 );
 
-fn codec_compression(value: Compression) -> Result<CodecCompression, Error> {
+const fn codec_compression(value: Compression) -> Result<CodecCompression, Error> {
     Ok(match value {
         Compression::None => CodecCompression::Uncompressed,
         Compression::Lzw => CodecCompression::Lzw,

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native color arithmetic order is preserved for IEEE-754 cross-backend parity."
+)]
+
 use std::fmt;
 
 use crate::{FiniteF32, FiniteF32Error};
@@ -556,7 +561,7 @@ impl WorkingRgbImage {
         self.pixels.get(index)
     }
 
-    pub(crate) fn from_validated_parts_with_frame(
+    pub(crate) const fn from_validated_parts_with_frame(
         dimensions: RasterDimensions,
         pixels: Vec<LinearRgb>,
         frame: WorkingFrameDescriptor,

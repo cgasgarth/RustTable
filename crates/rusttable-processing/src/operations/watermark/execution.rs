@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Watermark arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
@@ -243,7 +247,7 @@ impl WatermarkPlan {
                 }
             }
         }
-        Some((sample[0], sample[1], sample[2], sample[3]))
+        Some(sample.into())
     }
 }
 

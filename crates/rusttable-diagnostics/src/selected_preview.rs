@@ -206,7 +206,8 @@ impl SelectedPreviewMetadata {
         self
     }
 
-    pub(crate) fn fields(&self) -> &[DiagnosticField] {
+    #[must_use]
+    pub fn fields(&self) -> &[DiagnosticField] {
         &self.fields
     }
 
@@ -245,8 +246,8 @@ impl SelectedPreviewMetadata {
     }
 }
 
-pub(crate) const SELECTED_PREVIEW_SUBSYSTEM: &str = "preview";
-pub(crate) const SELECTED_PREVIEW_FAILURE_IDENTITY: &str = "selected_failure";
+pub const SELECTED_PREVIEW_SUBSYSTEM: &str = "preview";
+pub const SELECTED_PREVIEW_FAILURE_IDENTITY: &str = "selected_failure";
 
 #[cfg(test)]
 mod tests {

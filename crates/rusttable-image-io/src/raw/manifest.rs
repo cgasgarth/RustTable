@@ -159,7 +159,7 @@ fn unreviewed_descriptor(camera: &Camera) -> RawCapabilityDescriptor {
         normalized_model: bounded(&camera.clean_model),
         bit_depth: camera
             .bps
-            .or((camera.real_bps != 0).then_some(camera.real_bps))
+            .or_else(|| (camera.real_bps != 0).then_some(camera.real_bps))
             .and_then(|value| u8::try_from(value).ok()),
         corpus_fixtures: Vec::new(),
     }
@@ -231,7 +231,7 @@ fn parse_container(value: &str) -> Option<RawContainerKind> {
     })
 }
 
-fn container_for_hint(hint: FormatHint) -> Option<RawContainerKind> {
+const fn container_for_hint(hint: FormatHint) -> Option<RawContainerKind> {
     Some(match hint {
         FormatHint::CR2 => RawContainerKind::Cr2,
         FormatHint::CR3 => RawContainerKind::Cr3,

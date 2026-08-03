@@ -78,8 +78,9 @@ impl AllocationClass {
     }
 }
 
-/// Initialization is tracked independently from the physical bytes. Even
-/// though the safe adapter starts its blocks in a deterministic state, an
+/// Initialization is tracked independently from the physical bytes.
+///
+/// Even though the safe adapter starts its blocks in a deterministic state, an
 /// uninitialized lease cannot read them until its owner publishes validity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InitializationPolicy {
@@ -521,7 +522,7 @@ impl fmt::Display for HostPoolError {
 
 impl std::error::Error for HostPoolError {}
 
-pub(crate) fn checked_bucket_request(bytes: usize) -> Result<usize, HostPoolError> {
+pub fn checked_bucket_request(bytes: usize) -> Result<usize, HostPoolError> {
     if bytes == 0 {
         return Err(HostPoolError::InvalidRequest);
     }
@@ -544,6 +545,6 @@ pub(crate) fn checked_bucket_request(bytes: usize) -> Result<usize, HostPoolErro
     }
 }
 
-pub(crate) fn within_waste_limit(capacity: usize, bytes: usize) -> bool {
+pub const fn within_waste_limit(capacity: usize, bytes: usize) -> bool {
     capacity <= bytes.saturating_add(bytes / 4)
 }

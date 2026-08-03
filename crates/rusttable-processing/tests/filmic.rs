@@ -24,13 +24,13 @@ use filmic::{
     xyz_d50_to_lab, xyz_d50_to_prophoto_rgb,
 };
 
-fn v1() -> FilmicParametersV1 {
+const fn v1() -> FilmicParametersV1 {
     FilmicParametersV1::new(
         18.0, -8.65, 2.45, 0.0, 18.0, 0.0, 100.0, 2.2, 2.0, 1.5, 60.0, -12.0, 1,
     )
 }
 
-fn v2() -> FilmicParametersV2 {
+const fn v2() -> FilmicParametersV2 {
     FilmicParametersV2::new(
         18.0, -8.65, 2.45, 0.0, 18.0, 0.0, 100.0, 2.2, 2.0, 1.5, 60.0, -12.0, 2, 1,
     )

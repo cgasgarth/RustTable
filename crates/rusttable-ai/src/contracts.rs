@@ -56,7 +56,7 @@ pub struct DimensionSpec {
 }
 
 impl DimensionSpec {
-    pub fn static_size(value: u32) -> Result<Self, ContractError> {
+    pub const fn static_size(value: u32) -> Result<Self, ContractError> {
         if value == 0 {
             return Err(ContractError::ZeroDimension);
         }

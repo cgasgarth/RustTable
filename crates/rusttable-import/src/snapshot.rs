@@ -439,7 +439,7 @@ impl SourceSnapshotSequentialReader {
             .checked_add(
                 u64::try_from(amount).map_err(|_| SourceSnapshotReadError::LengthConversion)?,
             )
-            .ok_or(SourceSnapshotReadError::OffsetOverflow {
+            .ok_or_else(|| SourceSnapshotReadError::OffsetOverflow {
                 offset: self.position,
                 length: u64::try_from(amount).unwrap_or(u64::MAX),
             })?;

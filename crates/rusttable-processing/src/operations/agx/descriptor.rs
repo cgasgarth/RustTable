@@ -8,9 +8,9 @@ use crate::descriptor::{
 
 use super::{AGX_COMPATIBILITY_ID, AGX_RUST_ID, AGX_SCHEMA_VERSION, AgxParametersV7};
 
-#[allow(
+#[expect(
     clippy::approx_constant,
-    reason = "the native GTK rotation range is the exact decimal value 0.5236"
+    reason = "The native GTK rotation range is the exact decimal value 0.5236."
 )]
 const AGX_ROTATION_BOUND: f64 = 0.5236;
 

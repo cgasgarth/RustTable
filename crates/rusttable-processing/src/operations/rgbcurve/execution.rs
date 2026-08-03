@@ -11,6 +11,10 @@
     clippy::cast_precision_loss,
     reason = "native tile and pixel loops use source-width arithmetic"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native RGB Curve luminance and execution equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt;
 
@@ -347,7 +351,7 @@ pub struct RgbCurveRuntime {
 
 impl RgbCurveRuntime {
     #[must_use]
-    pub fn new(parameters: RgbCurveParametersV1) -> Self {
+    pub const fn new(parameters: RgbCurveParametersV1) -> Self {
         let histogram_middle_grey = parameters.compensate_middle_grey;
         Self {
             parameters,

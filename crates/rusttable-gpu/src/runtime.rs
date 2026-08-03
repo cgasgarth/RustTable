@@ -81,10 +81,9 @@ impl GpuRuntime {
             return Err(GpuInitError::Cancelled);
         }
         let deadline = config.deadline.max(Duration::from_millis(1));
-        match tokio::time::timeout(deadline, Self::initialize_inner(config.clone())).await {
-            Ok(result) => result,
-            Err(_) => Err(GpuInitError::TimedOut),
-        }
+        tokio::time::timeout(deadline, Self::initialize_inner(config.clone()))
+            .await
+            .unwrap_or_else(|_| Err(GpuInitError::TimedOut))
     }
 
     async fn initialize_inner(config: GpuRuntimeConfig) -> Result<Self, GpuInitError> {
@@ -163,12 +162,12 @@ impl GpuRuntime {
     }
 
     #[must_use]
-    pub fn snapshot(&self) -> &GpuCapabilitySnapshot {
+    pub const fn snapshot(&self) -> &GpuCapabilitySnapshot {
         &self.snapshot
     }
 
     #[must_use]
-    pub fn is_cpu_only(&self) -> bool {
+    pub const fn is_cpu_only(&self) -> bool {
         self.snapshot.is_cpu_only()
     }
 
@@ -181,7 +180,7 @@ impl GpuRuntime {
     }
 
     #[must_use]
-    pub fn health_check(&self) -> bool {
+    pub const fn health_check(&self) -> bool {
         self.instance.is_some()
             && self.device.is_some()
             && self.queue.is_some()
@@ -209,7 +208,7 @@ fn record_fault(faults: &Mutex<FaultTracker>, kind: crate::FaultKind) {
     }
 }
 
-fn map_selection_error(error: SelectionError) -> GpuInitError {
+const fn map_selection_error(error: SelectionError) -> GpuInitError {
     match error {
         SelectionError::NoAdapter => GpuInitError::NoAdapter,
         SelectionError::NoCoreCapableAdapter => GpuInitError::NoCoreCapableAdapter,

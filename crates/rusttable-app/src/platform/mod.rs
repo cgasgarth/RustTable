@@ -8,18 +8,18 @@ use rusttable_core::platform::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum StartupPreflight {
+pub enum StartupPreflight {
     Supported(PlatformDecision),
     Unsupported(PlatformDecision),
 }
 
 impl StartupPreflight {
-    pub(crate) const fn is_supported(&self) -> bool {
+    pub const fn is_supported(&self) -> bool {
         matches!(self, Self::Supported(_))
     }
 }
 
-pub(crate) fn startup_preflight() -> StartupPreflight {
+pub fn startup_preflight() -> StartupPreflight {
     let registry = PlatformRegistry::default();
     let identity = collect_identity().unwrap_or_else(fallback_identity);
     let decision = registry.evaluate(identity, ApplicationMode::Desktop);
@@ -109,7 +109,7 @@ fn native_versions(
     None
 }
 
-#[allow(dead_code)]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn find_dotted_version(value: &str) -> Option<OsVersion> {
     value.split_whitespace().find_map(|token| {
         let start = token.find(|character: char| character.is_ascii_digit())?;

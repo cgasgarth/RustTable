@@ -53,7 +53,7 @@ pub enum RawLinearSourceKind {
     AlreadyLinearRgb,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawLinearCalibration {
     identity: [u8; 32],
     camera_to_rec2020: Matrix3,
@@ -86,7 +86,7 @@ pub enum CalibrationError {
     Invalid,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinearRawRgbU16 {
     dimensions: ImageDimensions,
     samples: Vec<u16>,
@@ -199,7 +199,7 @@ pub enum LinearRawRgbU16Error {
     SampleOutsideWhite { index: usize, value: u16 },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RawLinearSource {
     XTrans {
         raw: RawMosaic,
@@ -234,6 +234,7 @@ impl RawLinearSource {
         }
     }
 
+    #[must_use]
     pub fn source_identity(&self) -> [u8; 32] {
         match self {
             Self::XTrans {
@@ -269,7 +270,7 @@ impl RawLinearSource {
     }
 
     #[must_use]
-    pub fn calibration(&self) -> Option<&RawLinearCalibration> {
+    pub const fn calibration(&self) -> Option<&RawLinearCalibration> {
         match self {
             Self::XTrans { calibration, .. }
             | Self::AlreadyLinearRgb {
@@ -447,7 +448,7 @@ pub enum OutputRequestError {
     Invalid,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawLinearDenoiseRequest {
     source: RawLinearSource,
     edit: RawLinearEditSnapshot,
@@ -622,7 +623,7 @@ impl RawLinearPlan {
         &self.excluded
     }
     #[must_use]
-    pub(crate) fn color_plan(&self) -> &TransformPlan {
+    pub(crate) const fn color_plan(&self) -> &TransformPlan {
         &self.color_plan
     }
     #[must_use]
@@ -734,7 +735,7 @@ pub struct RawLinearReceipt {
     pub grouped: bool,
 }
 
-pub(crate) fn write_roi(hasher: &mut Sha256, roi: Roi) {
+pub fn write_roi(hasher: &mut Sha256, roi: Roi) {
     for value in [roi.x(), roi.y(), roi.width(), roi.height()] {
         hasher.update(value.to_le_bytes());
     }
@@ -760,7 +761,7 @@ fn source_identity(
     hasher.finalize().into()
 }
 
-pub(crate) fn edit_identity(edit: &RawLinearEditSnapshot) -> [u8; 32] {
+pub fn edit_identity(edit: &RawLinearEditSnapshot) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(b"rusttable.raw-linear-edit-v1");
     hasher.update(edit.revision.to_le_bytes());

@@ -224,7 +224,7 @@ impl ColorCorrectionGridState {
     }
 
     #[must_use]
-    fn with_endpoint(self, endpoint: ColorCorrectionEndpoint, a: f64, b: f64) -> Self {
+    const fn with_endpoint(self, endpoint: ColorCorrectionEndpoint, a: f64, b: f64) -> Self {
         match endpoint {
             ColorCorrectionEndpoint::Shadows => Self {
                 loa: a,
@@ -240,7 +240,7 @@ impl ColorCorrectionGridState {
     }
 
     #[must_use]
-    fn reset_endpoint(self, endpoint: ColorCorrectionEndpoint) -> Self {
+    const fn reset_endpoint(self, endpoint: ColorCorrectionEndpoint) -> Self {
         self.with_endpoint(endpoint, 0.0, 0.0)
     }
 }
@@ -345,7 +345,7 @@ impl ColorCorrectionGridModel {
     }
 
     #[must_use]
-    pub fn double_click(&mut self) -> ColorCorrectionDoubleClick {
+    pub const fn double_click(&mut self) -> ColorCorrectionDoubleClick {
         let Some(endpoint) = self.selected else {
             self.state = ColorCorrectionGridState::DEFAULT;
             return ColorCorrectionDoubleClick::AllDefaults;
@@ -364,9 +364,11 @@ impl ColorCorrectionGridModel {
     ) -> Option<ColorCorrectionGridState> {
         let endpoint = self.selected?;
         let (a, b) = self.state.endpoint(endpoint);
-        let a = (a + delta_a * COLORCORRECTION_KEY_STEP * speed)
+        let a = (delta_a * COLORCORRECTION_KEY_STEP)
+            .mul_add(speed, a)
             .clamp(-COLORCORRECTION_GRID_MAX, COLORCORRECTION_GRID_MAX);
-        let b = (b + delta_b * COLORCORRECTION_KEY_STEP * speed)
+        let b = (delta_b * COLORCORRECTION_KEY_STEP)
+            .mul_add(speed, b)
             .clamp(-COLORCORRECTION_GRID_MAX, COLORCORRECTION_GRID_MAX);
         self.state = self.state.with_endpoint(endpoint, a, b);
         Some(self.state)
@@ -375,15 +377,15 @@ impl ColorCorrectionGridModel {
 
 #[must_use]
 pub fn scrolled_saturation(current: f64, unit_delta: i32) -> f64 {
-    (current - 0.1 * f64::from(unit_delta)).clamp(
+    0.1f64.mul_add(-f64::from(unit_delta), current).clamp(
         COLORCORRECTION_SATURATION.minimum,
         COLORCORRECTION_SATURATION.maximum,
     )
 }
 
 fn pointer_to_lab(x: f64, y: f64, width: f64, height: f64) -> Option<(f64, f64)> {
-    let inner_width = width - 2.0 * COLORCORRECTION_GRID_INSET;
-    let inner_height = height - 2.0 * COLORCORRECTION_GRID_INSET;
+    let inner_width = 2.0f64.mul_add(-COLORCORRECTION_GRID_INSET, width);
+    let inner_height = 2.0f64.mul_add(-COLORCORRECTION_GRID_INSET, height);
     if !x.is_finite()
         || !y.is_finite()
         || !inner_width.is_finite()
@@ -395,8 +397,8 @@ fn pointer_to_lab(x: f64, y: f64, width: f64, height: f64) -> Option<(f64, f64)>
     }
     let mouse_x = (x - COLORCORRECTION_GRID_INSET).clamp(0.0, inner_width);
     let mouse_y = (inner_height - 1.0 - y + COLORCORRECTION_GRID_INSET).clamp(0.0, inner_height);
-    let a = (2.0 * mouse_x - inner_width) * COLORCORRECTION_GRID_MAX / inner_width;
-    let b = (2.0 * mouse_y - inner_height) * COLORCORRECTION_GRID_MAX / inner_height;
+    let a = 2.0f64.mul_add(mouse_x, -inner_width) * COLORCORRECTION_GRID_MAX / inner_width;
+    let b = 2.0f64.mul_add(mouse_y, -inner_height) * COLORCORRECTION_GRID_MAX / inner_height;
     Some((a, b))
 }
 
@@ -435,6 +437,10 @@ pub(crate) struct ColorCorrectionGridGtkContext {
 /// Grid motion is therefore kept live locally and committed once on release;
 /// this is the bounded history-coalescing residual until the rail owns a
 /// stack-wide live snapshot/revision reconciliation seam.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source Color Correction grid keeps draw geometry and GTK pointer/key callbacks together."
+)]
 pub(crate) fn build_grid(context: ColorCorrectionGridGtkContext) -> gtk4::DrawingArea {
     let ColorCorrectionGridGtkContext {
         widget_id,
@@ -726,8 +732,8 @@ fn draw_grid(
     let height = f64::from(height);
     cairo.set_source_rgb(0.2, 0.2, 0.2);
     let _ = cairo.paint();
-    let inner_width = width - 2.0 * COLORCORRECTION_GRID_INSET;
-    let inner_height = height - 2.0 * COLORCORRECTION_GRID_INSET;
+    let inner_width = 2.0f64.mul_add(-COLORCORRECTION_GRID_INSET, width);
+    let inner_height = 2.0f64.mul_add(-COLORCORRECTION_GRID_INSET, height);
     if inner_width <= 0.0 || inner_height <= 0.0 {
         return;
     }
@@ -809,8 +815,14 @@ fn endpoint_screen_position(
 ) -> (f64, f64) {
     let (a, b) = state.endpoint(endpoint);
     (
-        COLORCORRECTION_GRID_INSET + 0.5 * width * (1.0 + a / COLORCORRECTION_GRID_MAX),
-        COLORCORRECTION_GRID_INSET + 0.5 * height * (1.0 - b / COLORCORRECTION_GRID_MAX),
+        (0.5 * width).mul_add(
+            1.0 + a / COLORCORRECTION_GRID_MAX,
+            COLORCORRECTION_GRID_INSET,
+        ),
+        (0.5 * height).mul_add(
+            1.0 - b / COLORCORRECTION_GRID_MAX,
+            COLORCORRECTION_GRID_INSET,
+        ),
     )
 }
 
@@ -866,7 +878,7 @@ fn srgb_encode(value: f64) -> f64 {
     let encoded = if value <= 0.003_130_8 {
         12.92 * value
     } else {
-        1.055 * value.powf(1.0 / 2.4) - 0.055
+        1.055f64.mul_add(value.powf(1.0 / 2.4), -0.055)
     };
     encoded.clamp(0.0, 1.0)
 }

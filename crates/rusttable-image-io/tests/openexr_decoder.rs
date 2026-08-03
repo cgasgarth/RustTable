@@ -14,7 +14,7 @@ use rusttable_image_io::{
     RawCancellationToken, RawSourceError,
 };
 
-fn limits() -> ExrDecodeLimits {
+const fn limits() -> ExrDecodeLimits {
     ExrDecodeLimits {
         max_source_bytes: 2_000_000,
         max_width: 128,
@@ -32,7 +32,7 @@ fn limits() -> ExrDecodeLimits {
     }
 }
 
-fn encoding(compression: Compression, blocks: Blocks) -> Encoding {
+const fn encoding(compression: Compression, blocks: Blocks) -> Encoding {
     Encoding {
         compression,
         blocks,

@@ -3,7 +3,8 @@
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
-    reason = "image dimensions are checked before the fixed DWT arithmetic and float conversion"
+    clippy::suboptimal_flops,
+    reason = "image dimensions are checked before the fixed DWT arithmetic and source equation order is preserved"
 )]
 
 use super::{DETAIL_BAND_MULTIPLIERS, Strength};
@@ -126,7 +127,7 @@ fn dwt_denoise(image: &mut [f32], width: usize, height: usize, noise: [f32; 5]) 
     }
 }
 
-fn reflect(index: isize, length: usize) -> usize {
+const fn reflect(index: isize, length: usize) -> usize {
     if length <= 1 {
         return 0;
     }

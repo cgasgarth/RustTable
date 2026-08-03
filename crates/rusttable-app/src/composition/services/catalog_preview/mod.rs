@@ -14,7 +14,7 @@ use rusttable_render::{
     SourceColorPolicy,
 };
 
-pub(crate) mod smoke;
+pub mod smoke;
 
 use crate::composition::services::preview::{PreviewError, PreviewService};
 
@@ -97,7 +97,7 @@ impl CatalogPreviewService {
     /// # Errors
     ///
     /// Returns a typed catalog, source, cancellation, decode, or render error.
-    pub(crate) fn render_with_receipt_and_cancellation(
+    pub fn render_with_receipt_and_cancellation(
         &self,
         request: CatalogPreviewRequest<'_>,
         imports: &dyn ImportRepository,
@@ -168,7 +168,7 @@ impl CatalogPreviewService {
         let record = imports
             .find_by_photo_id(edit.photo_id())
             .map_err(CatalogPreviewError::ImportRepository)?
-            .ok_or(CatalogPreviewError::UnknownPhoto {
+            .ok_or_else(|| CatalogPreviewError::UnknownPhoto {
                 photo_id: edit.photo_id(),
             })?;
         self.render_record_with_receipt(

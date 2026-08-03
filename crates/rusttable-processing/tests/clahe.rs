@@ -1,5 +1,3 @@
-#![allow(clippy::float_cmp)]
-
 use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
     PhotoId, Revision,

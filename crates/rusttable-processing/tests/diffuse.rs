@@ -1,4 +1,11 @@
-#![allow(clippy::float_cmp)]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Diffuse test vectors preserve IEEE-754 parity order."
+)]
+#![expect(
+    clippy::float_cmp,
+    reason = "Diffuse fixtures assert exact native floating-point compatibility."
+)]
 
 #[path = "../src/operations/diffuse/mod.rs"]
 pub mod diffuse;

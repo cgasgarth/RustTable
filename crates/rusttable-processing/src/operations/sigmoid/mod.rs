@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Sigmoid arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded Sigmoid CPU leaf ported from `src/iop/sigmoid.c`.
 //!
 //! The leaf owns the native v3 parameter ABI, v1/v2 migrations, the generalized
@@ -1730,7 +1735,7 @@ fn matrix_is_finite(matrix: SigmoidMatrix) -> bool {
     matrix.into_iter().flatten().all(f32::is_finite)
 }
 
-fn identity_matrix() -> SigmoidMatrix {
+const fn identity_matrix() -> SigmoidMatrix {
     [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 }
 

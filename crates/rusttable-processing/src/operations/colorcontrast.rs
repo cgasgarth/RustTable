@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Contrast arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible `colorcontrast` parameters and Lab D50 point processing.
 //!
 //! The byte codec and scalar equations are derived from
@@ -242,7 +247,7 @@ impl ColorContrastHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ColorContrastParametersV2, ColorContrastCodecError> {
+    pub const fn current(&self) -> Result<ColorContrastParametersV2, ColorContrastCodecError> {
         match self {
             Self::V1(parameters) => Ok(migrate_v1_to_v2(*parameters)),
             Self::V2(parameters) => Ok(*parameters),
@@ -323,7 +328,7 @@ impl ColorContrastConfig {
     }
 
     #[must_use]
-    pub fn defaults() -> Self {
+    pub const fn defaults() -> Self {
         Self {
             a_steepness: FiniteF32::from_proven_finite(COLOR_CONTRAST_DEFAULT_A_STEEPNESS),
             a_offset: FiniteF32::from_proven_finite(COLOR_CONTRAST_DEFAULT_A_OFFSET),

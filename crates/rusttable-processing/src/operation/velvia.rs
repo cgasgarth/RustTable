@@ -5,9 +5,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const VELVIA_PARAMETERS: [&str; 2] = ["strength", "bias"];
 
-pub(crate) fn compile_velvia(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_velvia(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &VELVIA_PARAMETERS)?;
     let config = VelviaConfig::new(
         super::parameter_f32(operation, "strength", f64::from(VELVIA_DEFAULT_STRENGTH))?,

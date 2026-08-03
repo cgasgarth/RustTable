@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -134,7 +132,7 @@ impl CacheLifecycle {
     }
 
     #[must_use]
-    pub fn with_memory(store: CacheStore, memory: ThumbnailMemoryCache) -> Self {
+    pub const fn with_memory(store: CacheStore, memory: ThumbnailMemoryCache) -> Self {
         Self {
             store,
             memory: Some(memory),
@@ -152,10 +150,16 @@ impl CacheLifecycle {
         &self.store
     }
 
-    pub fn store_mut(&mut self) -> &mut CacheStore {
+    pub const fn store_mut(&mut self) -> &mut CacheStore {
         &mut self.store
     }
 
+    /// Resolves a thumbnail through memory, durable storage, or the producer.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache or producer error when a lease, durable entry, or
+    /// publication step cannot complete.
     pub fn resolve_with<E>(
         &mut self,
         key: ThumbnailKey,
@@ -283,6 +287,12 @@ impl CacheLifecycle {
         })
     }
 
+    /// Applies one source/edit/profile change and invalidates affected entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns a generation, cache, or in-memory invalidation error when the
+    /// lifecycle cannot publish the new generation.
     pub fn apply(
         &mut self,
         event: CacheChangeEvent,
@@ -452,8 +462,7 @@ mod tests {
         });
         commit_reached.recv().expect("ready commit reached");
 
-        let mut invalidator_lifecycle =
-            CacheLifecycle::with_memory(invalidator_store, memory.clone());
+        let mut invalidator_lifecycle = CacheLifecycle::with_memory(invalidator_store, memory);
         let report = invalidator_lifecycle
             .apply(CacheChangeEvent::EditChanged {
                 photo_id: cache_key.photo_id(),

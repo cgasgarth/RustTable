@@ -1,4 +1,7 @@
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "collection repository methods share one typed redb persistence error boundary"
+)]
 
 use std::path::Path;
 use std::sync::Arc;
@@ -31,6 +34,11 @@ pub struct RedbCollectionRepository {
 }
 
 impl RedbCollectionRepository {
+    /// Opens the shared schema-versioned collection database.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed unavailable or corrupt-persisted-data error.
     pub fn open(path: &Path) -> Result<Self, CollectionRepositoryError> {
         let database = schema::open(path).map_err(|error| map_schema_error(&error))?;
         Ok(Self {
@@ -40,6 +48,10 @@ impl RedbCollectionRepository {
     }
 
     /// Opens a repository with a test-only failure seam immediately before commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed unavailable or corrupt-persisted-data error.
     #[doc(hidden)]
     pub fn open_with_before_commit_hook<F>(
         path: &Path,
@@ -146,6 +158,11 @@ impl RedbCollectionRepository {
     }
 
     /// Rechecks the state and all derived indexes without changing the catalog.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or unavailable error when persisted state or
+    /// one of its indexes cannot be read or validated.
     pub fn check_integrity(&self) -> Result<(), CollectionRepositoryError> {
         let state = self.load()?;
         let transaction = self
@@ -333,6 +350,11 @@ impl RedbCollectionRepository {
 
     /// Loads the durable active lighttable state, migrating the older active-view payload when
     /// this is the first access after the feature was introduced.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption or unavailable error when the state cannot
+    /// be read, migrated, validated, or persisted.
     pub fn load_active_lighttable_state(
         &self,
     ) -> Result<ActiveLighttableState, CollectionRepositoryError> {
@@ -362,6 +384,11 @@ impl RedbCollectionRepository {
     }
 
     /// Persists one complete active lighttable state in a single catalog transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed corruption, unavailable, or commit error when the state
+    /// cannot be validated or written atomically.
     pub fn persist_active_lighttable_state(
         &self,
         state: &ActiveLighttableState,
@@ -507,7 +534,7 @@ impl RedbCollectionRepository {
 fn name_key(name: &str, id: rusttable_catalog::CollectionId) -> Vec<u8> {
     format!("{name}\0{id}").into_bytes()
 }
-fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> CollectionRepositoryError {
+const fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> CollectionRepositoryError {
     match error {
         rusttable_catalog::RepositoryError::Unavailable => CollectionRepositoryError::Unavailable,
         rusttable_catalog::RepositoryError::CommitFailure => {

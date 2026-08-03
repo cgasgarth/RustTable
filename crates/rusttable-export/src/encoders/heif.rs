@@ -1,5 +1,4 @@
 //! HEIF/HEIC still-image export through one explicit HEVC encoder contract.
-#![allow(clippy::missing_errors_doc)]
 
 use std::fmt;
 use std::io::{self, Write};
@@ -54,7 +53,7 @@ impl EncoderId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Settings {
     pub encoder: EncoderId,
     pub lossless: bool,
@@ -212,6 +211,12 @@ impl Encoder {
         self.settings
     }
 
+    /// Encodes an artifact into a HEIF/HEIC byte vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, conversion, codec, cancellation, or
+    /// output inspection fails.
     pub fn encode_to_vec(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -219,6 +224,12 @@ impl Encoder {
         self.encode_to_vec_with_budget(artifact, EncodeBudget::default(), &NeverCancel)
     }
 
+    /// Encodes an artifact while applying queue-budget and cancellation limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, conversion, codec, cancellation, or
+    /// output inspection fails.
     pub fn encode_to_vec_with_budget<C: EncodeCancellation>(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -310,6 +321,12 @@ impl Encoder {
         Ok((bytes, receipt))
     }
 
+    /// Encodes an artifact and writes it to a path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when encoding or file creation, writing, flushing, or
+    /// synchronization fails.
     pub fn encode_to_path(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -333,6 +350,11 @@ impl Encoder {
 }
 
 impl Settings {
+    /// Validates codec limits and quality settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a limit or quality setting is unsupported.
     pub fn validate(self) -> Result<(), Error> {
         if self.max_metadata_bytes == 0
             || self.max_metadata_bytes > MAX_METADATA_BYTES
@@ -440,21 +462,21 @@ fn map_codec_error(error: rusttable_heif_native::Error) -> Error {
         other => Error::Codec(other.to_string()),
     }
 }
-fn bit_depth(value: OutputBitDepth) -> BitDepth {
+const fn bit_depth(value: OutputBitDepth) -> BitDepth {
     match value {
         OutputBitDepth::Eight => BitDepth::Eight,
         OutputBitDepth::Ten => BitDepth::Ten,
         OutputBitDepth::Twelve => BitDepth::Twelve,
     }
 }
-fn range(settings: Settings) -> Range {
+const fn range(settings: Settings) -> Range {
     if settings.full_range {
         Range::Full
     } else {
         Range::Limited
     }
 }
-fn subsampling(value: ChromaSubsampling) -> Subsampling {
+const fn subsampling(value: ChromaSubsampling) -> Subsampling {
     match value {
         ChromaSubsampling::FourFourFour => Subsampling::FourFourFour,
         ChromaSubsampling::FourTwoTwo => Subsampling::FourTwoTwo,

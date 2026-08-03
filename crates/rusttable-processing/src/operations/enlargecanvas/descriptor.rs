@@ -11,7 +11,10 @@ use super::{
 };
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the enlarge-canvas descriptor preserves source parameter order and geometry metadata"
+)]
 pub fn enlargecanvas_descriptor() -> OperationDescriptor {
     let percent = |id: &str| ParameterDescriptor {
         id: id.to_owned(),

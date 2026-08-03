@@ -15,7 +15,7 @@ pub enum RawBayerPlanError {
     UnsupportedCfa,
 }
 
-pub(crate) fn compile(
+pub fn compile(
     request: &RawBayerDenoiseRequest,
     descriptor: &RawBayerModelDescriptor,
 ) -> Result<RawBayerPlan, RawBayerPlanError> {

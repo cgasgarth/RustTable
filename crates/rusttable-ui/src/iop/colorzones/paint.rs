@@ -1,12 +1,6 @@
 //! Cairo paint adapter for Color Zones primitives derived from
 //! Darktable `src/iop/colorzones.c` lines 1033-1677.
 
-#![allow(
-    clippy::cast_precision_loss,
-    clippy::many_single_char_names,
-    reason = "paint coordinates directly mirror the bounded native grids and Lab notation"
-)]
-
 use gtk4::{
     cairo::{Antialias, Context},
     gdk::RGBA,
@@ -292,8 +286,8 @@ struct PaintFrame {
 impl PaintFrame {
     fn new(width: i32, height: i32) -> Option<Self> {
         let inset = f64::from(COLORZONES_GRAPH_INSET);
-        let width = f64::from(width) - 2.0 * inset;
-        let height = f64::from(height) - 2.0 * inset;
+        let width = 2.0f64.mul_add(-inset, f64::from(width));
+        let height = 2.0f64.mul_add(-inset, f64::from(height));
         (width > 0.0 && height > 0.0).then_some(Self {
             x: inset,
             y: inset,
@@ -304,19 +298,19 @@ impl PaintFrame {
 
     fn rectangle(self, cairo: &Context, bounds: ColorZonesRect) {
         cairo.rectangle(
-            self.x + f64::from(bounds.x) * self.width,
-            self.y + f64::from(bounds.y) * self.height,
+            f64::from(bounds.x).mul_add(self.width, self.x),
+            f64::from(bounds.y).mul_add(self.height, self.y),
             f64::from(bounds.width) * self.width,
             f64::from(bounds.height) * self.height,
         );
     }
 
     fn screen_x(self, x: f32) -> f64 {
-        self.x + f64::from(x) * self.width
+        f64::from(x).mul_add(self.width, self.x)
     }
 
     fn screen_y(self, y: f32) -> f64 {
-        self.y + (1.0 - f64::from(y)) * self.height
+        (1.0 - f64::from(y)).mul_add(self.height, self.y)
     }
 }
 
@@ -381,7 +375,7 @@ fn srgb_encode(value: f64) -> f64 {
     let encoded = if value <= 0.003_130_8 {
         12.92 * value
     } else {
-        1.055 * value.powf(1.0 / 2.4) - 0.055
+        1.055f64.mul_add(value.powf(1.0 / 2.4), -0.055)
     };
     encoded.clamp(0.0, 1.0)
 }

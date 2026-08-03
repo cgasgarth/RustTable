@@ -48,7 +48,7 @@ enum InstanceActionKind {
 }
 
 impl InstanceActionKind {
-    fn action(
+    const fn action(
         self,
         module_id: String,
         operation_id: OperationId,
@@ -213,7 +213,10 @@ fn direct_child_named(root: &gtk4::Box, name: &str) -> Option<gtk4::Widget> {
 }
 
 /// Builds one ordered control row from the typed presentation snapshot.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source-ordered GTK row builder keeps control construction and action wiring together."
+)]
 pub(super) fn build_control_row(
     control: &DarkroomControlViewModel,
     panel_widget_id: &str,
@@ -457,7 +460,7 @@ pub(super) fn dispatch_module_action(
     }
 }
 
-fn stale_actual_revision(error: &DarkroomModuleError) -> Option<Revision> {
+const fn stale_actual_revision(error: &DarkroomModuleError) -> Option<Revision> {
     match error {
         DarkroomModuleError::StaleRevision { actual, .. }
         | DarkroomModuleError::Control(

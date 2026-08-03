@@ -207,7 +207,7 @@ pub struct DurableOutputReceipt {
 impl DurableOutputReceipt {
     #[doc(hidden)]
     #[must_use]
-    pub fn new(receipt: OutputReceipt) -> Self {
+    pub const fn new(receipt: OutputReceipt) -> Self {
         Self {
             receipt,
             tag: DurableOutputTag::FileAndParentDirectorySynchronized,
@@ -215,7 +215,7 @@ impl DurableOutputReceipt {
     }
 
     #[must_use]
-    pub fn output(&self) -> &OutputReceipt {
+    pub const fn output(&self) -> &OutputReceipt {
         &self.receipt
     }
 

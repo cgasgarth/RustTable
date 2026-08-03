@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Levels arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Histogram resolution, LUT compilation, and the source-shaped CPU pixel leaf.
 
 use std::fmt;
@@ -75,7 +80,7 @@ impl<'a> LevelsHistogram<'a> {
     }
 
     #[must_use]
-    pub fn bins(self) -> &'a [u32] {
+    pub const fn bins(self) -> &'a [u32] {
         self.bins
     }
 }
@@ -178,9 +183,11 @@ pub fn compute_automatic_levels(
     levels
 }
 
-/// Native four-channel Lab sample. The fourth channel is an alpha/spare value
-/// owned by the surrounding pixelpipe and is passed through untouched by this
-/// operation-local leaf; it is never used in the luminance equation.
+/// Native four-channel Lab sample.
+///
+/// The fourth channel is an alpha/spare value owned by the surrounding
+/// pixelpipe and is passed through untouched by this operation-local leaf; it
+/// is never used in the luminance equation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LevelsPixel {
     channels: [f32; LEVELS_CHANNELS],
@@ -493,16 +500,16 @@ impl LevelsPlan {
         })?;
         let output_bytes = pixels
             .checked_mul(std::mem::size_of::<LevelsPixel>())
-            .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: budget.maximum_bytes(),
             })?;
-        let required = output_bytes.checked_add(LEVELS_MAXIMUM_LUT_BYTES).ok_or(
-            OperationExecutionError::MemoryBudgetExceeded {
+        let required = output_bytes
+            .checked_add(LEVELS_MAXIMUM_LUT_BYTES)
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: budget.maximum_bytes(),
-            },
-        )?;
+            })?;
         if required > budget.maximum_bytes() {
             return Err(OperationExecutionError::MemoryBudgetExceeded {
                 required,

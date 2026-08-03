@@ -168,6 +168,7 @@ pub struct SuperResolutionSettings {
 }
 
 impl SuperResolutionSettings {
+    #[must_use]
     pub fn new(output_profile: ColorProfile) -> Self {
         Self {
             output_profile,
@@ -196,7 +197,7 @@ impl SuperResolutionSettings {
     }
 
     #[must_use]
-    pub fn with_tiff(mut self, tiff: TiffSettings) -> Self {
+    pub const fn with_tiff(mut self, tiff: TiffSettings) -> Self {
         self.tiff = tiff;
         self
     }
@@ -208,13 +209,13 @@ impl SuperResolutionSettings {
     }
 
     #[must_use]
-    pub fn with_shadow_policy(mut self, policy: ShadowPolicy) -> Self {
+    pub const fn with_shadow_policy(mut self, policy: ShadowPolicy) -> Self {
         self.shadow_policy = policy;
         self
     }
 
     #[must_use]
-    pub fn with_wide_gamut_preservation(mut self, preserve: bool) -> Self {
+    pub const fn with_wide_gamut_preservation(mut self, preserve: bool) -> Self {
         self.preserve_wide_gamut = preserve;
         self
     }
@@ -239,6 +240,7 @@ pub struct SuperResolutionRequest {
 }
 
 impl SuperResolutionRequest {
+    #[must_use]
     pub fn new(
         source: LinearRgbaImage,
         source_profile: ColorProfile,

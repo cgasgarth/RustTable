@@ -369,7 +369,7 @@ pub struct CorpusReport {
 
 impl CorpusReport {
     #[must_use]
-    pub fn fixture_report(&self) -> &crate::fixtures::VerificationReport {
+    pub const fn fixture_report(&self) -> &crate::fixtures::VerificationReport {
         &self.fixture_report
     }
 

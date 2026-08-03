@@ -22,7 +22,7 @@ fn evidence(
     )
 }
 
-fn visual(bits: u64, width: u32, height: u32) -> VisualFingerprint {
+const fn visual(bits: u64, width: u32, height: u32) -> VisualFingerprint {
     VisualFingerprint::new(bits, 0, width, height).unwrap()
 }
 

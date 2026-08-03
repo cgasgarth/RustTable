@@ -10,8 +10,8 @@ use rusttable_core::{
 };
 use rusttable_image::{ImageDimensions, ImageProbe, InputFormat};
 
-pub(crate) mod collection;
-pub(crate) mod history_snapshot;
+pub mod collection;
+pub mod history_snapshot;
 
 const RECORD_FORMAT_VERSION: u8 = 1;
 
@@ -54,7 +54,7 @@ struct StoredMetadata {
     value: Vec<u8>,
 }
 
-pub(crate) fn encode(record: &ImportRecord) -> Result<Vec<u8>, ()> {
+pub fn encode(record: &ImportRecord) -> Result<Vec<u8>, ()> {
     let photo = record.photo();
     if photo.assets().count() != 1 || photo.primary_asset().role() != AssetRole::Primary {
         return Err(());
@@ -100,7 +100,7 @@ pub(crate) fn encode(record: &ImportRecord) -> Result<Vec<u8>, ()> {
     to_allocvec(&stored).map_err(|_| ())
 }
 
-pub(crate) fn decode(bytes: &[u8]) -> Result<ImportRecord, ()> {
+pub fn decode(bytes: &[u8]) -> Result<ImportRecord, ()> {
     let stored: StoredRecord = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != RECORD_FORMAT_VERSION {
         return Err(());
@@ -345,10 +345,10 @@ mod tests {
         ImportRecord::new(&candidate, photo).unwrap()
     }
 }
-pub(crate) mod duplicates;
-pub(crate) mod edit;
-pub(crate) mod history;
-pub(crate) mod import_details;
-pub(crate) mod organization;
-pub(crate) mod photo_groups;
-pub(crate) mod virtual_copies;
+pub mod duplicates;
+pub mod edit;
+pub mod history;
+pub mod import_details;
+pub mod organization;
+pub mod photo_groups;
+pub mod virtual_copies;

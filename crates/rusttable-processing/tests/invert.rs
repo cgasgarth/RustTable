@@ -1,4 +1,7 @@
-#![allow(clippy::float_cmp, reason = "tests assert exact compatibility maxima")]
+#![expect(
+    clippy::float_cmp,
+    reason = "Invert compatibility tests assert exact native maxima and signed values."
+)]
 
 use rusttable_processing::descriptor::{OperationFlags, invert_descriptor};
 use rusttable_processing::operations::invert::{

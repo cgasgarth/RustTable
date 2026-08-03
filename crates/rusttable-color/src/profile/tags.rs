@@ -7,7 +7,7 @@ use super::{
 use crate::{FiniteF32, Matrix3};
 use rusttable_core::numerics::ordered::finite_divide_f32;
 
-pub(crate) fn parse_tag(
+pub fn parse_tag(
     tag: IccSignature,
     data: &[u8],
     limits: IccProfileLimits,
@@ -103,7 +103,7 @@ fn parse_xyz_values(tag: IccSignature, data: &[u8]) -> Result<IccTagValue, IccPa
     Ok(IccTagValue::Xyz(values))
 }
 
-pub(crate) fn parse_curve_sequence(
+pub fn parse_curve_sequence(
     tag: IccSignature,
     data: &[u8],
     count: usize,
@@ -418,7 +418,7 @@ fn parse_localized(
     Ok(records)
 }
 
-fn parse_cicp(tag: IccSignature, data: &[u8]) -> Result<IccTagValue, IccParseError> {
+const fn parse_cicp(tag: IccSignature, data: &[u8]) -> Result<IccTagValue, IccParseError> {
     if data.len() != 12 || data[11] > 1 {
         return Err(IccParseError::InvalidTagData(tag));
     }
@@ -475,7 +475,7 @@ fn require_type(
         .ok_or(IccParseError::InvalidTagType { tag, actual })
 }
 
-fn validate_lut_type_for_tag(
+const fn validate_lut_type_for_tag(
     tag: IccSignature,
     type_signature: IccSignature,
 ) -> Result<(), IccParseError> {

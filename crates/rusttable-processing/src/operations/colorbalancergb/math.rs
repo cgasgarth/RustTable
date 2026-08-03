@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Balance RGB math order is preserved for IEEE-754 parity."
+)]
+
 //! Source-shaped scalar color math for `src/iop/colorbalancergb.c`.
 //!
 //! The constants and operation ordering are copied from

@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::fmt;
 
 use rusttable_color::Precision;
@@ -157,6 +155,11 @@ pub struct ApproximationId(String);
 
 impl ApproximationId {
     /// Creates a bounded ASCII identifier that can be retained in receipts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ModeRequestError::InvalidApproximationId`] when the value is
+    /// empty, too long, non-ASCII, or contains an unsupported character.
     pub fn new(value: impl Into<String>) -> Result<Self, ModeRequestError> {
         let value = value.into();
         if value.is_empty()
@@ -187,7 +190,10 @@ pub enum OperationInclusion {
 }
 
 /// Immutable capability metadata supplied by the #265 registry.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each boolean is an independent registry capability contract"
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModeOperationCapability {
     operation_id: u128,
@@ -306,8 +312,11 @@ pub struct BasicStackFixture {
 }
 
 impl BasicStackFixture {
+    ///
+    /// # Panics
+    ///
+    /// The fixed fixture identifiers are valid by construction.
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     pub fn raster() -> Self {
         let preview_approximation =
             ApproximationId::new("exposure.preview-fast").expect("constant");
@@ -350,7 +359,7 @@ pub struct ModeRequest {
 
 impl ModeRequest {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         purpose: PipelinePurpose,
         quality: ModeQuality,
         target: TargetIdentity,
@@ -400,7 +409,7 @@ impl ModeRequest {
     }
 
     #[must_use]
-    pub fn preview(output: crate::OutputSpec, target: TargetIdentity) -> Self {
+    pub const fn preview(output: crate::OutputSpec, target: TargetIdentity) -> Self {
         Self::new(
             PipelinePurpose::Preview,
             ModeQuality::Balanced,
@@ -410,12 +419,12 @@ impl ModeRequest {
     }
 
     #[must_use]
-    pub fn full(output: crate::OutputSpec, target: TargetIdentity) -> Self {
+    pub const fn full(output: crate::OutputSpec, target: TargetIdentity) -> Self {
         Self::new(PipelinePurpose::Full, ModeQuality::Exact, target, output)
     }
 
     #[must_use]
-    pub fn thumbnail(output: crate::OutputSpec, target: TargetIdentity) -> Self {
+    pub const fn thumbnail(output: crate::OutputSpec, target: TargetIdentity) -> Self {
         Self::new(
             PipelinePurpose::Thumbnail,
             ModeQuality::Balanced,
@@ -425,7 +434,7 @@ impl ModeRequest {
     }
 
     #[must_use]
-    pub fn export(output: crate::OutputSpec, target: TargetIdentity) -> Self {
+    pub const fn export(output: crate::OutputSpec, target: TargetIdentity) -> Self {
         Self::new(PipelinePurpose::Export, ModeQuality::Exact, target, output)
     }
 
@@ -814,7 +823,87 @@ impl ModePlan {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ModePlanner;
 
+struct ModeOperationSelection {
+    included_operations: Vec<u128>,
+    approximations: Vec<(u128, ApproximationId)>,
+    supports_masks: bool,
+    supports_analysis: bool,
+}
+
+fn select_mode_operations(
+    request: &ModeRequest,
+    operations: &[ModeOperationCapability],
+) -> Result<ModeOperationSelection, ModePlanningError> {
+    let mut included_operations = Vec::new();
+    let mut approximations = Vec::new();
+    let mut supports_masks = false;
+    let mut supports_analysis = false;
+    for operation in operations {
+        if !operation.purposes().contains(&request.purpose) {
+            if operation.mandatory() {
+                return Err(ModePlanningError::Finding(
+                    ModeFinding::UnsupportedPurpose {
+                        operation_id: operation.operation_id(),
+                        purpose: request.purpose,
+                    },
+                ));
+            }
+            continue;
+        }
+        let excluded = matches!(
+            operation.inclusion(),
+            OperationInclusion::Diagnostic | OperationInclusion::Presentation
+        ) && matches!(
+            request.purpose,
+            PipelinePurpose::Thumbnail | PipelinePurpose::Export
+        );
+        if excluded && !operation.mandatory() {
+            continue;
+        }
+        if excluded && operation.mandatory() {
+            return Err(ModePlanningError::Finding(ModeFinding::ExcludedOperation {
+                operation_id: operation.operation_id(),
+                inclusion: operation.inclusion(),
+            }));
+        }
+        let approximation_allowed = request.degradation.allows_approximation(request.purpose)
+            && matches!(request.quality, ModeQuality::Interactive);
+        if !operation.supports_exact() && !approximation_allowed {
+            return Err(ModePlanningError::Finding(ModeFinding::ExactUnavailable {
+                operation_id: operation.operation_id(),
+            }));
+        }
+        if !operation.supports_exact() && operation.approximations().is_empty() {
+            return Err(ModePlanningError::Finding(
+                ModeFinding::UnsupportedOperationApproximation {
+                    operation_id: operation.operation_id(),
+                },
+            ));
+        }
+        included_operations.push(operation.operation_id());
+        supports_masks |= operation.supports_masks();
+        supports_analysis |= operation.supports_analysis();
+        if approximation_allowed && let Some(approximation) = operation.approximations().first() {
+            approximations.push((operation.operation_id(), approximation.clone()));
+        }
+    }
+    included_operations.sort_unstable();
+    approximations.sort_by_key(|entry| entry.0);
+    Ok(ModeOperationSelection {
+        included_operations,
+        approximations,
+        supports_masks,
+        supports_analysis,
+    })
+}
+
 impl ModePlanner {
+    /// Plans a request against the immutable mode contract.
+    ///
+    /// # Errors
+    ///
+    /// Returns a planning error when the request or operation capability set
+    /// is inconsistent with the snapshot.
     pub fn plan_request(
         &self,
         request: ModeRequest,
@@ -824,7 +913,12 @@ impl ModePlanner {
         self.plan(snapshot, request, operations)
     }
 
-    #[allow(clippy::too_many_lines)]
+    /// Plans a snapshot directly against the supplied request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a planning error when the request, output, or operation
+    /// capabilities cannot satisfy the selected mode.
     pub fn plan(
         &self,
         snapshot: &PipelineSnapshot,
@@ -843,67 +937,12 @@ impl ModePlanner {
                 ModeRequestError::ThumbnailUpscale,
             ));
         }
-        let mut included_operations = Vec::new();
-        let mut approximations = Vec::new();
-        let mut supports_masks = false;
-        let mut supports_analysis = false;
-        for operation in operations {
-            if !operation.purposes().contains(&request.purpose) {
-                if operation.mandatory() {
-                    return Err(ModePlanningError::Finding(
-                        ModeFinding::UnsupportedPurpose {
-                            operation_id: operation.operation_id(),
-                            purpose: request.purpose,
-                        },
-                    ));
-                }
-                continue;
-            }
-            let excluded = matches!(
-                operation.inclusion(),
-                OperationInclusion::Diagnostic | OperationInclusion::Presentation
-            ) && matches!(
-                request.purpose,
-                PipelinePurpose::Thumbnail | PipelinePurpose::Export
-            );
-            if excluded && !operation.mandatory() {
-                continue;
-            }
-            if matches!(
-                operation.inclusion(),
-                OperationInclusion::Diagnostic | OperationInclusion::Presentation
-            ) && operation.mandatory()
-                && excluded
-            {
-                return Err(ModePlanningError::Finding(ModeFinding::ExcludedOperation {
-                    operation_id: operation.operation_id(),
-                    inclusion: operation.inclusion(),
-                }));
-            }
-            let approximation_allowed = request.degradation.allows_approximation(request.purpose)
-                && matches!(request.quality, ModeQuality::Interactive);
-            if !operation.supports_exact() && !approximation_allowed {
-                return Err(ModePlanningError::Finding(ModeFinding::ExactUnavailable {
-                    operation_id: operation.operation_id(),
-                }));
-            }
-            if !operation.supports_exact() && operation.approximations().is_empty() {
-                return Err(ModePlanningError::Finding(
-                    ModeFinding::UnsupportedOperationApproximation {
-                        operation_id: operation.operation_id(),
-                    },
-                ));
-            }
-            included_operations.push(operation.operation_id());
-            supports_masks |= operation.supports_masks();
-            supports_analysis |= operation.supports_analysis();
-            if approximation_allowed && let Some(approximation) = operation.approximations().first()
-            {
-                approximations.push((operation.operation_id(), approximation.clone()));
-            }
-        }
-        included_operations.sort_unstable();
-        approximations.sort_by_key(|entry| entry.0);
+        let ModeOperationSelection {
+            included_operations,
+            approximations,
+            supports_masks,
+            supports_analysis,
+        } = select_mode_operations(&request, operations)?;
         if matches!(request.masks, MaskRequest::Required) && !supports_masks {
             return Err(ModePlanningError::Finding(ModeFinding::MaskUnsupported));
         }

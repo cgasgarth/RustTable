@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Basic Adjust analysis order is preserved for IEEE-754 parity."
+)]
+
 //! Source-derived automatic analysis for Darktable's legacy `basicadj`.
 //!
 //! Source lineage: `src/iop/basicadj.c` histogram and auto-level helpers.
@@ -309,6 +314,10 @@ impl BasicAdjAnalysisPlan {
     /// Returns an error when automatic controls are disabled, cancellation is
     /// requested, the selection has no usable samples, or the input cannot be
     /// represented safely.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "analysis keeps the native bounded histogram's integer and f32 conversion order"
+    )]
     pub fn analyze_with_cancellation(
         config: BasicAdjConfig,
         raster: BasicAdjAnalysisRaster<'_>,
@@ -437,6 +446,12 @@ impl fmt::Display for BasicAdjAnalysisError {
 
 impl std::error::Error for BasicAdjAnalysisError {}
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "the bounded native histogram formula narrows a nonnegative f32 bin index"
+)]
 fn bin_for(value: f32) -> usize {
     if value <= 0.0 {
         return 0;
@@ -447,6 +462,12 @@ fn bin_for(value: f32) -> usize {
     (value * BASICADJ_HISTOGRAM_BINS as f32) as usize
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "percentile rank conversion follows the native histogram's bounded f32 arithmetic"
+)]
 fn percentile(histogram: &[u64], count: u64, quantile: f32) -> f32 {
     let rank = ((count - 1) as f32 * quantile).floor() as u64;
     let mut cumulative = 0_u64;
@@ -459,10 +480,18 @@ fn percentile(histogram: &[u64], count: u64, quantile: f32) -> f32 {
     value_for_bin(histogram.len() - 1)
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "histogram bin centers are emitted in the native f32 value domain"
+)]
 fn value_for_bin(bin: usize) -> f32 {
     (bin as f32 + 0.5) / BASICADJ_HISTOGRAM_BINS as f32
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Native BasicAdj auto-analysis preserves the source histogram state machine and correction order."
+)]
 fn resolve_values(
     config: BasicAdjConfig,
     histogram: &[u64],
@@ -515,12 +544,17 @@ fn resolve_values(
         return Ok(neutral_values());
     }
 
-    let threshold = (imax as f32 + 1.0).ln() / 2.0_f32.ln();
-    let mut overex = 0_i32;
-    if octile[6] > threshold {
+    let threshold = (imax as f32).ln_1p() / 2.0_f32.ln();
+    #[expect(
+        clippy::useless_let_if_seq,
+        reason = "Native sequential octile corrections preserve octile[6] before octile[7]."
+    )]
+    let mut overex = if octile[6] > threshold {
         octile[6] = 1.5 * octile[5] - 0.5 * octile[4];
-        overex = 2;
-    }
+        2
+    } else {
+        0_i32
+    };
     if octile[7] > threshold {
         octile[7] = 1.5 * octile[6] - 0.5 * octile[5];
         overex = 1;
@@ -673,7 +707,7 @@ fn sum_and_average(histogram: &[u64]) -> (f32, f32) {
     (sum, average / sum)
 }
 
-fn neutral_values() -> BasicAdjResolvedValues {
+const fn neutral_values() -> BasicAdjResolvedValues {
     BasicAdjResolvedValues {
         black_point: 0.0,
         exposure: 0.0,
@@ -684,7 +718,7 @@ fn neutral_values() -> BasicAdjResolvedValues {
     }
 }
 
-fn nan_to_zero(value: f32) -> f32 {
+const fn nan_to_zero(value: f32) -> f32 {
     if value.is_nan() { 0.0 } else { value }
 }
 

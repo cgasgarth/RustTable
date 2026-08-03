@@ -27,7 +27,7 @@ use crate::views::lighttable::{FilmstripSpec, LighttableCollectionState};
 use crate::widgets::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface};
 
 #[derive(Clone)]
-pub(crate) struct WorkspaceRenderHandle {
+pub struct WorkspaceRenderHandle {
     pub(super) lighttable: gtk4::GridView,
     pub(super) lighttable_empty_state: gtk4::Stack,
     pub(super) filmstrip: gtk4::FlowBox,
@@ -75,7 +75,10 @@ enum PhotoSurface {
 }
 
 impl WorkspaceRenderHandle {
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The source-ordered Lighttable render keeps stale-state cleanup and widget publication together."
+    )]
     pub(super) fn render(
         &self,
         view_model: &PhotoWorkspaceViewModel,
@@ -241,7 +244,7 @@ impl WorkspaceRenderHandle {
         let previous_details = Rc::new(previous_details);
         let photo_tiles = Rc::clone(&self.photo_tiles);
         let photo_details = Rc::clone(&self.photo_details);
-        let selection_for_bind = selection.clone();
+        let selection_for_bind = selection;
         let thumbnail_window_changed = Rc::clone(&self.thumbnail_window_changed);
         let photos_by_id_for_bind = photos_by_id;
         let view_model_for_bind = view_model.clone();

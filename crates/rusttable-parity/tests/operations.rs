@@ -18,7 +18,7 @@ fn evidence(field: &str, path: &str) -> String {
     )
 }
 
-fn version_evidence() -> &'static str {
+const fn version_evidence() -> &'static str {
     "source_commit = \"fixture\"\nsource_path = \"src/iop/zeta.c\"\nline_start = 1\nline_end = 1\nreason = \"fixture AST layout\"\nreviewer = \"cgasgarth\"\nevidence_hash = \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n"
 }
 

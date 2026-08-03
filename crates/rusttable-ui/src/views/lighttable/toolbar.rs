@@ -12,7 +12,7 @@ use crate::CollectionProperty;
 use crate::gui::darktable_components::{button as shared_button, dropdown as shared_dropdown};
 use crate::gui::{LIGHTTABLE_TOOLBAR, ThemeRole, apply_theme_role};
 
-fn lighttable_toolbar_dropdowns_expand() -> bool {
+const fn lighttable_toolbar_dropdowns_expand() -> bool {
     false
 }
 
@@ -166,7 +166,7 @@ pub struct LighttableToolbarState {
 
 impl LighttableToolbarState {
     #[must_use]
-    pub fn new(total_count: usize) -> Self {
+    pub const fn new(total_count: usize) -> Self {
         Self {
             property: CollectionProperty::Filename,
             search_text: String::new(),
@@ -258,7 +258,7 @@ impl LighttableToolbarState {
     }
 
     #[must_use]
-    pub fn has_active_filter(&self) -> bool {
+    pub const fn has_active_filter(&self) -> bool {
         !self.search_text.is_empty() || self.visible_count != self.total_count
     }
 
@@ -288,7 +288,6 @@ pub struct LighttableToolbar {
 }
 
 impl LighttableToolbar {
-    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn new() -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);

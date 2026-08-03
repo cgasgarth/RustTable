@@ -13,7 +13,13 @@ pub struct PresentationEvent {
 }
 
 impl PresentationEvent {
-    pub(crate) fn new(sequence: u64, encoded_json: String) -> Result<Self, DiagnosticsError> {
+    /// Creates a bounded presentation event.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DiagnosticsError::EventTooLarge`] when the encoded record exceeds the recent-event
+    /// budget.
+    pub fn new(sequence: u64, encoded_json: String) -> Result<Self, DiagnosticsError> {
         if encoded_json.len() > RECENT_EVENT_BYTES {
             return Err(DiagnosticsError::EventTooLarge);
         }
@@ -34,20 +40,20 @@ impl PresentationEvent {
     }
 }
 
-pub(crate) struct RecentEvents {
+pub struct RecentEvents {
     events: Mutex<VecDeque<PresentationEvent>>,
     bytes: Mutex<usize>,
 }
 
 impl RecentEvents {
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             events: Mutex::new(VecDeque::new()),
             bytes: Mutex::new(0),
         }
     }
 
-    pub(crate) fn push(&self, event: PresentationEvent) -> Result<(), DiagnosticsError> {
+    pub fn push(&self, event: PresentationEvent) -> Result<(), DiagnosticsError> {
         let mut events = self.events.lock().map_err(|_| DiagnosticsError::Poisoned)?;
         let mut bytes = self.bytes.lock().map_err(|_| DiagnosticsError::Poisoned)?;
         while events.len() >= RECENT_EVENT_LIMIT
@@ -59,11 +65,13 @@ impl RecentEvents {
             *bytes = bytes.saturating_sub(oldest.encoded_json.len());
         }
         *bytes = bytes.saturating_add(event.encoded_json.len());
+        drop(bytes);
         events.push_back(event);
+        drop(events);
         Ok(())
     }
 
-    pub(crate) fn snapshot(&self) -> Result<Vec<PresentationEvent>, DiagnosticsError> {
+    pub fn snapshot(&self) -> Result<Vec<PresentationEvent>, DiagnosticsError> {
         self.events
             .lock()
             .map_err(|_| DiagnosticsError::Poisoned)

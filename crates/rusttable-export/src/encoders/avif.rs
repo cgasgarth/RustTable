@@ -1,6 +1,4 @@
 //! AVIF still-image export with RustTable-owned YUV conversion and validation.
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::too_many_lines)]
 
 use std::fmt;
 use std::io::{self, Write};
@@ -191,6 +189,12 @@ impl Encoder {
         self.settings
     }
 
+    /// Encodes an artifact into an AVIF byte vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, conversion, codec, cancellation, or
+    /// output inspection fails.
     pub fn encode_to_vec(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -198,6 +202,16 @@ impl Encoder {
         self.encode_to_vec_with_budget(artifact, EncodeBudget::default(), &NeverCancel)
     }
 
+    /// Encodes an artifact while applying queue-budget and cancellation limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, conversion, codec, cancellation, or
+    /// output inspection fails.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the source-derived AVIF validation, conversion, and inspection sequence together"
+    )]
     pub fn encode_to_vec_with_budget<C: EncodeCancellation>(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -313,6 +327,12 @@ impl Encoder {
         Ok((bytes, receipt))
     }
 
+    /// Encodes an artifact and writes it to a path atomically on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when encoding or file creation, writing, flushing, or
+    /// synchronization fails.
     pub fn encode_to_path(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -336,6 +356,12 @@ impl Encoder {
 }
 
 impl Settings {
+    /// Validates codec limits and quality settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a limit, quality, speed, lossless, or
+    /// subsampling setting is unsupported.
     pub fn validate(self) -> Result<(), Error> {
         if self.max_metadata_bytes == 0
             || self.max_metadata_bytes > MAX_METADATA_BYTES
@@ -425,7 +451,10 @@ fn validate_artifact(artifact: &CanonicalArtifact<'_>, settings: Settings) -> Re
     Ok(())
 }
 
-fn native_options(settings: Settings, budget: EncodeBudget) -> rusttable_avif_native::Options {
+const fn native_options(
+    settings: Settings,
+    budget: EncodeBudget,
+) -> rusttable_avif_native::Options {
     rusttable_avif_native::Options {
         quality: settings.quality,
         alpha_quality: settings.alpha_quality,
@@ -441,7 +470,7 @@ fn native_options(settings: Settings, budget: EncodeBudget) -> rusttable_avif_na
     }
 }
 
-fn native_matrix(value: Matrix) -> rusttable_avif_native::Matrix {
+const fn native_matrix(value: Matrix) -> rusttable_avif_native::Matrix {
     match value {
         Matrix::Bt601 => rusttable_avif_native::Matrix::Bt601,
         Matrix::Bt709 => rusttable_avif_native::Matrix::Bt709,
@@ -449,20 +478,20 @@ fn native_matrix(value: Matrix) -> rusttable_avif_native::Matrix {
         Matrix::Identity => rusttable_avif_native::Matrix::Identity,
     }
 }
-fn bit_depth(value: OutputBitDepth) -> BitDepth {
+const fn bit_depth(value: OutputBitDepth) -> BitDepth {
     match value {
         OutputBitDepth::Eight => BitDepth::Eight,
         OutputBitDepth::Ten => BitDepth::Ten,
     }
 }
-fn range(settings: Settings) -> Range {
+const fn range(settings: Settings) -> Range {
     if settings.full_range {
         Range::Full
     } else {
         Range::Limited
     }
 }
-fn subsampling(value: ChromaSubsampling) -> Subsampling {
+const fn subsampling(value: ChromaSubsampling) -> Subsampling {
     match value {
         ChromaSubsampling::FourFourFour => Subsampling::FourFourFour,
         ChromaSubsampling::FourTwoTwo => Subsampling::FourTwoTwo,

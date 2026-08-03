@@ -237,7 +237,7 @@ pub struct JxlHeader {
 
 impl JxlHeader {
     #[must_use]
-    pub fn output_dimensions(&self) -> ImageDimensions {
+    pub const fn output_dimensions(&self) -> ImageDimensions {
         self.orientation.output_dimensions(self.dimensions)
     }
 
@@ -376,7 +376,7 @@ pub struct JxlPixelData {
 
 impl JxlPixelData {
     #[must_use]
-    pub fn byte_len(&self) -> usize {
+    pub const fn byte_len(&self) -> usize {
         self.samples.len().saturating_mul(size_of::<f32>())
     }
 }

@@ -73,7 +73,10 @@ impl ViewportControls {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source-ordered darkroom page keeps viewport hierarchy, overlays, panels, and handlers together."
+)]
 pub(super) fn darkroom_page(
     preview: &PhotoPreview,
     state: &Rc<RefCell<DarkroomViewportState>>,
@@ -207,18 +210,18 @@ pub(super) fn darkroom_page(
     }
     let (canvas, canvas_stage) = prepare_canvas_stage(preview);
     let controls = ViewportControls {
-        zoom: zoom.clone(),
-        fit: fit.clone(),
-        before_after: before_after.clone(),
-        soft_proof: soft_proof.clone(),
-        gamut_check: gamut_check.clone(),
+        zoom,
+        fit,
+        before_after,
+        soft_proof,
+        gamut_check,
         projection: projection.clone(),
-        overlay_before: overlay_before.clone(),
-        overlay_soft_proof: overlay_soft_proof.clone(),
-        overlay_gamut: overlay_gamut.clone(),
-        overlay_sample: overlay_sample.clone(),
+        overlay_before,
+        overlay_soft_proof,
+        overlay_gamut,
+        overlay_sample,
         composition_guide: composition_guide.clone(),
-        guides: guides.clone(),
+        guides,
         left_panel: left_panel.clone(),
         right_panel: right_panel.clone(),
         filmstrip: filmstrip.clone(),
@@ -403,7 +406,10 @@ fn canvas_projection(
     })
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Rounded dimensions are clamped to the bounded i32 GTK allocation domain."
+)]
 fn rounded_dimension(value: f64) -> i32 {
     value.round().clamp(1.0, f64::from(i32::MAX)) as i32
 }
@@ -524,7 +530,7 @@ fn toolbar(id: &str, accessible_name: &str) -> gtk4::Box {
     toolbar
 }
 
-pub(crate) fn chrome_toggle(id: &str, label: &str, accessible_name: &str) -> gtk4::ToggleButton {
+pub fn chrome_toggle(id: &str, label: &str, accessible_name: &str) -> gtk4::ToggleButton {
     let button = shared_toggle_button(id, label);
     button.set_tooltip_text(Some(accessible_name));
     button.update_property(&[Property::Label(accessible_name)]);
@@ -885,7 +891,10 @@ fn prepare_canvas_stage(preview: &PhotoPreview) -> (Option<gtk4::Picture>, Optio
     (Some(canvas), Some(stage))
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Rounded pointer deltas are clamped to the bounded i32 GTK allocation domain."
+)]
 fn rounded_delta(value: f64) -> i32 {
     if !value.is_finite() {
         return 0;

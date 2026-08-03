@@ -1,4 +1,7 @@
-#![allow(clippy::missing_panics_doc)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "Clipping descriptor invariants are checked by bounded static contract construction."
+)]
 
 use crate::descriptor::{
     AlphaPolicy, CapabilityContract, DescriptorId, ImagePredicate, InputOutputContract,
@@ -31,7 +34,10 @@ pub const fn history_policy() -> ClippingHistoryPolicy {
 }
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the clipping descriptor keeps source parameter order and geometry metadata together"
+)]
 pub fn clipping_descriptor() -> OperationDescriptor {
     let scalar = |id: &str, min: f64, max: f64, default: f64, unit: &str| ParameterDescriptor {
         id: id.to_owned(),

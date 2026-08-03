@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Bloom blend test vectors preserve source evaluation order and IEEE-754 parity."
+)]
+
 use rusttable_core::{
     Edit, EditId, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,
@@ -28,7 +33,7 @@ fn pixel(red: f32, green: f32, blue: f32) -> LinearRgb {
     )
 }
 
-fn lab_pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> BloomPixel {
+const fn lab_pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> BloomPixel {
     BloomPixel::new(lightness, a, b, alpha)
 }
 

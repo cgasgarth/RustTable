@@ -3,6 +3,10 @@
     clippy::float_cmp,
     reason = "source-derived tests compare native f32 values and deterministic byte layouts"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Transfer test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 #[path = "../src/operations/colortransfer/mod.rs"]
 mod colortransfer;

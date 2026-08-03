@@ -231,7 +231,7 @@ pub enum GtkPreviewState {
 }
 
 impl GtkPreviewState {
-    fn failed(photo_id: Option<PhotoId>, kind: GtkPreviewFailureKind) -> Self {
+    const fn failed(photo_id: Option<PhotoId>, kind: GtkPreviewFailureKind) -> Self {
         Self::Failed(GtkPreviewFailure { photo_id, kind })
     }
 
@@ -491,7 +491,10 @@ mod tests {
         PhotoId::new(value).expect("test photo ID is non-zero")
     }
 
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the compact ICC fixture writes fixed-width profile offsets and fixed-point values"
+    )]
     fn matrix_profile(red: f32) -> Vec<u8> {
         let tag_count = 4_usize;
         let table_size = 4 + tag_count * 12;
@@ -670,7 +673,7 @@ mod tests {
         );
         let selected = batch.first_selected_photo().expect("fixture import photo");
         let mut catalog_controller =
-            crate::gtk_controller::GtkCatalogController::load_catalog_at(catalog.clone());
+            crate::gtk_controller::GtkCatalogController::load_catalog_at(catalog);
         assert!(catalog_controller.select_photo(selected));
         let descriptor = monitor_descriptor("P3 active display");
         let monitor_id = descriptor.id();

@@ -383,7 +383,7 @@ impl Operation {
     }
 
     #[must_use]
-    pub fn key(&self) -> &OperationKey {
+    pub const fn key(&self) -> &OperationKey {
         &self.key
     }
 

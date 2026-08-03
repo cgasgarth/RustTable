@@ -1,6 +1,9 @@
 //! Durable saved, recent, and active library-view state.
 
-#![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "collection persistence constructors share one typed validation boundary"
+)]
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -553,6 +556,10 @@ impl ActiveLighttableState {
     }
 
     /// Validates the serialized shape before it reaches an application controller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the version, search text, or selection is not canonical.
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.version != ACTIVE_LIGHTTABLE_STATE_VERSION {
             return Err("unsupported active lighttable state version");
@@ -628,6 +635,11 @@ pub struct SavedCollection {
 }
 
 impl SavedCollection {
+    /// Creates a validated saved collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the name or description exceeds its bound.
     pub fn new(
         id: CollectionId,
         name: impl Into<String>,
@@ -670,15 +682,20 @@ impl SavedCollection {
         self.provenance
     }
     #[must_use]
-    pub fn with_revision(mut self, revision: u64) -> Self {
+    pub const fn with_revision(mut self, revision: u64) -> Self {
         self.revision = revision;
         self
     }
     #[must_use]
-    pub fn with_provenance(mut self, provenance: CollectionProvenance) -> Self {
+    pub const fn with_provenance(mut self, provenance: CollectionProvenance) -> Self {
         self.provenance = provenance;
         self
     }
+    /// Renames the collection and advances its revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the name is invalid or the revision overflows.
     pub fn rename(&mut self, name: impl Into<String>) -> Result<(), CollectionValidationError> {
         self.name = validate_name(name.into())?;
         self.revision = self
@@ -742,7 +759,7 @@ pub enum ActiveLibraryView {
 
 impl ActiveLibraryView {
     #[must_use]
-    pub fn all_photos() -> Self {
+    pub const fn all_photos() -> Self {
         Self::Inline {
             definition: CollectionViewDefinition::new(
                 CollectionQuery::AllPhotos,
@@ -821,6 +838,11 @@ impl CollectionState {
         }
         index
     }
+    /// Applies one immutable collection-state command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the command conflicts with current state or validation fails.
     pub fn apply(&mut self, command: CollectionCommand) -> Result<(), CollectionError> {
         let mut next = self.clone();
         next.apply_inner(command)?;
@@ -832,6 +854,11 @@ impl CollectionState {
         *self = next;
         Ok(())
     }
+    /// Validates collection indexes, references, and revision invariants.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when persisted state is inconsistent or exceeds a bound.
     pub fn validate(&self) -> Result<(), String> {
         if self.recent.len() > MAX_RECENT_QUERIES {
             return Err("recent query cap exceeded".to_owned());
@@ -859,6 +886,10 @@ impl CollectionState {
         }
         Ok(())
     }
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the source-derived collection command transition order together"
+    )]
     fn apply_inner(&mut self, command: CollectionCommand) -> Result<(), CollectionError> {
         match command {
             CollectionCommand::Create(collection) => {
@@ -877,7 +908,7 @@ impl CollectionState {
                 let current = self
                     .saved
                     .get(&collection.id())
-                    .ok_or(CollectionError::MissingCollection(collection.id()))?;
+                    .ok_or_else(|| CollectionError::MissingCollection(collection.id()))?;
                 if current.revision() != expected_revision {
                     return Err(CollectionError::StaleRevision {
                         expected: expected_revision,
@@ -1056,7 +1087,18 @@ pub enum CollectionRepositoryError {
 }
 
 pub trait CollectionRepository {
+    /// Loads the current durable collection state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the repository is unavailable or corrupt.
     fn load(&self) -> Result<CollectionState, CollectionRepositoryError>;
+
+    /// Applies one collection command and returns the committed state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, conflict detection, or persistence fails.
     fn apply(
         &mut self,
         command: CollectionCommand,

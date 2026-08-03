@@ -135,7 +135,7 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
         source_model.generation(),
     )
     .expect("selected RAW source");
-    let action = ImportAction::Import(request.clone());
+    let action = ImportAction::Import(request);
     let ImportAction::Import(request) = action else {
         panic!("source selection must cross the typed import action boundary");
     };
@@ -364,7 +364,7 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
             .map(rusttable_app::CatalogPreviewReceipt::identity_hash)
     );
 
-    let mut darkroom_panels = GtkDarkroomPanelController::new(Some(catalog_path.clone()));
+    let mut darkroom_panels = GtkDarkroomPanelController::new(Some(catalog_path));
     let projections = darkroom_panels
         .select_photo(DarkroomPanelTarget::new(
             photo_id,
@@ -391,7 +391,6 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
     };
     let loading_workspace = ready.workspace().clone();
     let workspace = loading_workspace
-        .clone()
         .with_selected_preview(photo_id, SelectedPreviewState::Ready(metadata))
         .expect("selected detail");
     let detail = workspace

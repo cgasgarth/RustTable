@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "sRGB transfer test vectors preserve source evaluation order and IEEE-754 parity."
+)]
+
 use rusttable_processing::{
     EncodedSrgbOutput, FiniteF32, GamutClipReport, LinearRgb, RasterDimensions, RgbChannel,
     SourceRgb, SourceRgbImage, SrgbChannel, WorkingRgbImage, encode_linear_srgb,
@@ -55,7 +60,7 @@ fn black_and_white_encode_exactly() {
     assert_eq!(output.clipping(), GamutClipReport::default());
 }
 
-fn expected_f32(value: f32) -> u32 {
+const fn expected_f32(value: f32) -> u32 {
     value.to_bits()
 }
 

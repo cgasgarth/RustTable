@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Shared native operation arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
@@ -11,9 +15,9 @@ use sha2::{Digest, Sha256};
 use crate::{FiniteF32, LinearRgb, RasterDimensions, RgbChannel};
 
 /// Maximum native bytes encoded by one core text parameter.
-pub(crate) const NATIVE_PAYLOAD_CHUNK_BYTES: usize = 2_048;
+pub const NATIVE_PAYLOAD_CHUNK_BYTES: usize = 2_048;
 
-pub(crate) fn encode_native_payload_chunks(bytes: &[u8]) -> Vec<String> {
+pub fn encode_native_payload_chunks(bytes: &[u8]) -> Vec<String> {
     bytes
         .chunks(NATIVE_PAYLOAD_CHUNK_BYTES)
         .map(|chunk| {
@@ -27,7 +31,7 @@ pub(crate) fn encode_native_payload_chunks(bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
-pub(crate) fn decode_native_payload_chunks(
+pub fn decode_native_payload_chunks(
     chunks: &[&str],
     expected_bytes: usize,
 ) -> Result<Vec<u8>, String> {
@@ -72,7 +76,7 @@ const fn hex_digit(byte: u8) -> Option<u8> {
     }
 }
 
-pub(crate) fn rgb_to_hsl(rgb: [f32; 3]) -> (f32, f32, f32) {
+pub fn rgb_to_hsl(rgb: [f32; 3]) -> (f32, f32, f32) {
     let [red, green, blue] = rgb;
     let maximum = red.max(green).max(blue);
     let minimum = red.min(green).min(blue);
@@ -103,7 +107,7 @@ pub(crate) fn rgb_to_hsl(rgb: [f32; 3]) -> (f32, f32, f32) {
 }
 
 #[must_use]
-pub(crate) fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> [f32; 3] {
+pub fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> [f32; 3] {
     if saturation.to_bits() == 0.0_f32.to_bits() {
         return [lightness; 3];
     }
@@ -156,7 +160,7 @@ fn hue_to_rgb(first: f32, second: f32, hue: f32) -> f32 {
 /// Rust executes the canonical CPU operation serially, so one state represents
 /// the operation's worker state without exposing scheduling-dependent output.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TeaState {
+pub struct TeaState {
     words: [u32; 2],
 }
 
@@ -329,7 +333,7 @@ impl Default for ReconstructionBudget {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReconstructionReceipt {
     compatibility_name: &'static str,
     schema_version: u16,
@@ -388,7 +392,7 @@ impl ReconstructionReceipt {
     }
 }
 
-pub(crate) fn validate_shape(
+pub fn validate_shape(
     dimensions: RasterDimensions,
     pixels: &[LinearRgb],
 ) -> Result<(), OperationExecutionError> {
@@ -408,7 +412,7 @@ pub(crate) fn validate_shape(
     }
 }
 
-pub(crate) fn checked_bytes(
+pub fn checked_bytes(
     pixel_count: usize,
     buffers: usize,
     budget: ReconstructionBudget,
@@ -417,7 +421,7 @@ pub(crate) fn checked_bytes(
         .checked_mul(buffers)
         .and_then(|value| value.checked_mul(std::mem::size_of::<LinearRgb>()))
         .and_then(|value| value.checked_add(pixel_count.saturating_mul(16)))
-        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+        .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: budget.maximum_bytes(),
         })?;
@@ -431,11 +435,11 @@ pub(crate) fn checked_bytes(
     }
 }
 
-pub(crate) fn luma(pixel: LinearRgb) -> f32 {
+pub fn luma(pixel: LinearRgb) -> f32 {
     0.2126 * pixel.red().get() + 0.7152 * pixel.green().get() + 0.0722 * pixel.blue().get()
 }
 
-pub(crate) fn chroma(pixel: LinearRgb) -> (f32, f32) {
+pub fn chroma(pixel: LinearRgb) -> (f32, f32) {
     let lightness = luma(pixel);
     (
         pixel.red().get() - lightness,
@@ -443,7 +447,7 @@ pub(crate) fn chroma(pixel: LinearRgb) -> (f32, f32) {
     )
 }
 
-pub(crate) fn from_luma_chroma(lightness: f32, chroma: (f32, f32)) -> Option<LinearRgb> {
+pub fn from_luma_chroma(lightness: f32, chroma: (f32, f32)) -> Option<LinearRgb> {
     let red = lightness + chroma.0;
     let blue = lightness + chroma.1;
     let green = (lightness - 0.2126 * red - 0.0722 * blue) / 0.7152;
@@ -459,7 +463,7 @@ pub(crate) fn from_luma_chroma(lightness: f32, chroma: (f32, f32)) -> Option<Lin
     }
 }
 
-pub(crate) fn neighborhood(
+pub fn neighborhood(
     dimensions: RasterDimensions,
     index: usize,
     radius: u32,
@@ -485,7 +489,7 @@ pub(crate) fn neighborhood(
     })
 }
 
-pub(crate) fn apply_opacity(
+pub fn apply_opacity(
     source: LinearRgb,
     candidate: LinearRgb,
     opacity: f32,
@@ -503,7 +507,7 @@ pub(crate) fn apply_opacity(
     .ok_or(())
 }
 
-pub(crate) fn digest_pixels(pixels: &[LinearRgb]) -> [u8; 32] {
+pub fn digest_pixels(pixels: &[LinearRgb]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(b"rusttable.reconstruction.raster.v1");
     for pixel in pixels {

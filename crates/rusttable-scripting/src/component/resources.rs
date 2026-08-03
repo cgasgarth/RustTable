@@ -34,7 +34,7 @@ pub struct ResourceRegistry {
 
 impl ResourceRegistry {
     #[must_use]
-    pub fn new(limit: usize) -> Self {
+    pub const fn new(limit: usize) -> Self {
         Self {
             next: 1,
             generation: 1,

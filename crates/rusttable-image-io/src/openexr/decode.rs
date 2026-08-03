@@ -153,14 +153,11 @@ impl ExrDecoder {
     }
 }
 
-pub(crate) fn is_exr_signature(bytes: &[u8]) -> bool {
+pub fn is_exr_signature(bytes: &[u8]) -> bool {
     bytes.starts_with(&MAGIC)
 }
 
-pub(crate) fn decode_exr_probe(
-    bytes: &[u8],
-    limits: DecodeLimits,
-) -> Result<ImageProbe, ImageInputError> {
+pub fn decode_exr_probe(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
     let header = ExrDecoder::new()
         .inspect_bytes(bytes, ExrDecodeLimits::from_common(limits))
         .map_err(map_input_error)?;
@@ -174,7 +171,7 @@ pub(crate) fn decode_exr_probe(
     ))
 }
 
-pub(crate) fn decode_legacy_rgba8(
+pub fn decode_legacy_rgba8(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<(ImageDimensions, Vec<u8>), ImageInputError> {
@@ -612,7 +609,7 @@ fn level_size(rounding: RoundingMode, full: u32, level: u32) -> Result<u32, ExrD
     .max(1))
 }
 
-fn mapping_layout(mapping: &ExrChannelMapping) -> ChannelLayout {
+const fn mapping_layout(mapping: &ExrChannelMapping) -> ChannelLayout {
     match mapping {
         ExrChannelMapping::Gray { alpha: None, .. } => ChannelLayout::Gray,
         ExrChannelMapping::Gray { alpha: Some(_), .. } => ChannelLayout::GrayA,
@@ -661,7 +658,12 @@ fn to_rgba8(pixels: &ExrPixelData) -> Result<Vec<u8>, ImageInputError> {
                 return Err(unsupported_input("mosaic OpenEXR output"));
             }
         };
-        rgba.extend([red, green, blue, alpha].map(float_to_u8));
+        rgba.extend([
+            float_to_u8(red),
+            float_to_u8(green),
+            float_to_u8(blue),
+            float_to_u8(alpha),
+        ]);
     }
     Ok(rgba)
 }
@@ -708,7 +710,7 @@ fn check_cancel(request: &ExrDecodeRequest) -> Result<(), ExrDecodeError> {
     }
 }
 
-fn enforce_limit(kind: &'static str, actual: u64, limit: u64) -> Result<(), ExrDecodeError> {
+const fn enforce_limit(kind: &'static str, actual: u64, limit: u64) -> Result<(), ExrDecodeError> {
     if actual > limit {
         Err(ExrDecodeError::Limit {
             kind,
@@ -784,7 +786,7 @@ fn malformed_input(message: &str) -> ImageInputError {
     }
 }
 
-fn unsupported_input(_message: &str) -> ImageInputError {
+const fn unsupported_input(_message: &str) -> ImageInputError {
     ImageInputError::UnsupportedFeature {
         format: InputFormat::OpenExr,
         reason: rusttable_image::UnsupportedImageFeature::SampleFormat,

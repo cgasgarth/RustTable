@@ -1,7 +1,10 @@
 //! ABI-shaped parameters from `src/iop/toneequal.c`.
 
 #![forbid(unsafe_code)]
-#![allow(clippy::excessive_precision)]
+#![expect(
+    clippy::excessive_precision,
+    reason = "Tone Equalizer constants are copied from the native parameter ABI without decimal rounding."
+)]
 
 use std::fmt;
 

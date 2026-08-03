@@ -1,5 +1,3 @@
-#![allow(clippy::all, clippy::pedantic)]
-
 use flate2::read::ZlibDecoder;
 use rusttable_color::IccColorSpace;
 use rusttable_image::{ColorEncoding, DecodeLimits, ImageDimensions, ImageInputError};
@@ -15,14 +13,19 @@ use super::types::{
 const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 
 #[derive(Debug, Clone)]
-pub(crate) struct ParsedPng {
+pub struct ParsedPng {
     pub header: PngHeader,
     pub palette: Option<Vec<u8>>,
     pub transparency: Option<Vec<u8>>,
     pub dimensions: ImageDimensions,
 }
 
-pub(crate) fn parse(
+#[expect(
+    clippy::option_if_let_else,
+    clippy::too_many_lines,
+    reason = "PNG parsing keeps chunk ordering and metadata precedence auditable at the format boundary."
+)]
+pub fn parse(
     bytes: &[u8],
     limits: PngDecodeLimits,
     complete: bool,
@@ -45,7 +48,7 @@ pub(crate) fn parse(
     let mut idat_done = false;
     let mut saw_iend = false;
     let mut saw_actl = false;
-    let mut saw_fctl = false;
+    let mut saw_frame_control = false;
     let mut saw_fdat = false;
     let mut default_image = false;
     let mut animation = None;
@@ -212,12 +215,12 @@ pub(crate) fn parse(
             )));
         }
         if kind == *b"PLTE" {
-            if singleton.insert(kind) == false {
+            if !singleton.insert(kind) {
                 return Err(PngDecodeError::Malformed("duplicate PLTE".to_owned()));
             }
             if data.is_empty()
                 || data.len() > 768
-                || data.len() % 3 != 0
+                || !data.len().is_multiple_of(3)
                 || matches!(ct, PngColorType::Grayscale | PngColorType::GrayscaleAlpha)
             {
                 return Err(PngDecodeError::Malformed("invalid PLTE chunk".to_owned()));
@@ -234,7 +237,7 @@ pub(crate) fn parse(
                     "tRNS must precede IDAT".to_owned(),
                 ));
             }
-            if singleton.insert(kind) == false {
+            if !singleton.insert(kind) {
                 return Err(PngDecodeError::Malformed("duplicate tRNS".to_owned()));
             }
             match ct {
@@ -364,9 +367,11 @@ pub(crate) fn parse(
             .map_err(|error| {
                 PngDecodeError::Malformed(format!("invalid embedded ICC profile: {error}"))
             })?;
-            let id = source_color
-                .profile()
-                .expect("embedded ICC has an identity");
+            let Some(id) = source_color.profile() else {
+                return Err(PngDecodeError::Malformed(
+                    "embedded ICC profile has no identity".to_owned(),
+                ));
+            };
             let inventory = PngProfileInventory {
                 bytes: u64::try_from(profile.len()).map_err(|_| arithmetic())?,
                 sha256: Sha256::digest(&profile).into(),
@@ -489,9 +494,9 @@ pub(crate) fn parse(
                     "APNG frame exceeds canvas".to_owned(),
                 ));
             }
-            saw_fctl = true;
+            saw_frame_control = true;
         } else if kind == *b"fdAT" {
-            if !saw_actl || !saw_fctl || data.len() < 4 {
+            if !saw_actl || !saw_frame_control || data.len() < 4 {
                 return Err(PngDecodeError::Malformed(
                     "invalid fdAT sequence".to_owned(),
                 ));
@@ -503,9 +508,7 @@ pub(crate) fn parse(
                 .compressed_data_bytes
                 .checked_add(compressed)
                 .ok_or_else(arithmetic)?;
-        } else if kind == *b"IDAT" {
-            // handled above
-        } else if kind == *b"PLTE" || kind == *b"tRNS" {
+        } else if matches!(&kind, b"IDAT" | b"PLTE" | b"tRNS") {
             // handled above
         } else if kind[0].is_ascii_uppercase() {
             return Err(PngDecodeError::Malformed(format!(
@@ -530,16 +533,15 @@ pub(crate) fn parse(
             "indexed PNG is missing PLTE".to_owned(),
         ));
     }
-    if let Some(palette) = &palette {
-        if matches!(ct, PngColorType::Indexed)
-            && transparency
-                .as_ref()
-                .is_some_and(|trns| trns.len() > palette.len() / 3)
-        {
-            return Err(PngDecodeError::Malformed(
-                "indexed transparency exceeds palette".to_owned(),
-            ));
-        }
+    if let Some(palette) = &palette
+        && matches!(ct, PngColorType::Indexed)
+        && transparency
+            .as_ref()
+            .is_some_and(|trns| trns.len() > palette.len() / 3)
+    {
+        return Err(PngDecodeError::Malformed(
+            "indexed transparency exceeds palette".to_owned(),
+        ));
     }
     if chunks.compressed_data_bytes > limits.max_compressed_bytes {
         return Err(PngDecodeError::Limit {
@@ -561,8 +563,8 @@ pub(crate) fn parse(
     }
     let encoding = if let Some(encoding) = metadata.cicp.and_then(PngCicp::color_encoding) {
         encoding
-    } else if icc_profile.is_some() {
-        ColorEncoding::External(icc_profile.expect("profile exists").profile_id)
+    } else if let Some(icc_profile) = icc_profile {
+        ColorEncoding::External(icc_profile.profile_id)
     } else if srgb_intent.is_some() {
         ColorEncoding::Srgb
     } else {
@@ -597,7 +599,7 @@ pub(crate) fn parse(
     Ok(ParsedPng {
         dimensions,
         palette,
-        transparency: transparency.clone(),
+        transparency,
         header: PngHeader {
             dimensions,
             color_type: ct,
@@ -613,7 +615,7 @@ pub(crate) fn parse(
     })
 }
 
-pub(crate) fn common_limits(limits: DecodeLimits) -> PngDecodeLimits {
+pub const fn common_limits(limits: DecodeLimits) -> PngDecodeLimits {
     PngDecodeLimits::from_common(limits)
 }
 
@@ -690,7 +692,7 @@ fn output_bytes(
     palette: Option<&[u8]>,
 ) -> Result<u64, PngDecodeError> {
     let channels: u64 = match color {
-        PngColorType::Indexed => {
+        PngColorType::Indexed | PngColorType::Rgb => {
             if transparency {
                 4
             } else {
@@ -705,13 +707,6 @@ fn output_bytes(
             }
         }
         PngColorType::GrayscaleAlpha => 2,
-        PngColorType::Rgb => {
-            if transparency {
-                4
-            } else {
-                3
-            }
-        }
         PngColorType::Rgba => 4,
     };
     let bytes_per_sample = if matches!(color, PngColorType::Indexed) || depth.bits() < 8 {
@@ -783,13 +778,13 @@ fn check_singleton(
     singleton: &mut std::collections::BTreeSet<[u8; 4]>,
     kind: [u8; 4],
 ) -> Result<(), PngDecodeError> {
-    if !singleton.insert(kind) {
+    if singleton.insert(kind) {
+        Ok(())
+    } else {
         Err(PngDecodeError::Malformed(format!(
             "duplicate {} chunk",
             ascii_kind(kind)
         )))
-    } else {
-        Ok(())
     }
 }
 fn check_sequence(data: &[u8], next: &mut u32) -> Result<(), PngDecodeError> {
@@ -850,7 +845,7 @@ fn bounded_zlib(data: &[u8], limit: u64) -> Result<Vec<u8>, PngDecodeError> {
 fn ascii_kind(kind: [u8; 4]) -> String {
     String::from_utf8_lossy(&kind).into_owned()
 }
-fn arithmetic() -> PngDecodeError {
+const fn arithmetic() -> PngDecodeError {
     PngDecodeError::Input(ImageInputError::ArithmeticOverflow)
 }
 

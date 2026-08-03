@@ -18,6 +18,10 @@
     clippy::too_many_arguments,
     reason = "the native callback is a source-shaped four-channel f32 operation"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native RAW Prepare gain-map coordinates preserve source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt;
 
@@ -185,7 +189,7 @@ pub struct RawPrepareImageMetadata {
 
 impl RawPrepareImageMetadata {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         dimensions: RasterDimensions,
         flags: u32,
         sample_format: RawPrepareSampleFormat,
@@ -337,7 +341,7 @@ impl Default for RawPrepareTiling {
 /// exact scaled `piece->buf_in` dimensions used by gain-map coordinates;
 /// `output` uses the global output coordinates used by `_BL` and gain-map
 /// interpolation.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RawPrepareTile {
     input: RasterDimensions,
     full_input: RasterDimensions,
@@ -479,8 +483,11 @@ pub struct RawPrepareGainMap {
 
 impl RawPrepareGainMap {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The gain-map constructor preserves the native ABI field order."
+    )]
+    pub const fn new(
         top: u32,
         left: u32,
         bottom: u32,
@@ -593,7 +600,7 @@ impl RawPrepareGainMapSet {
     }
 
     #[must_use]
-    pub fn maps(&self) -> &[RawPrepareGainMap; 4] {
+    pub const fn maps(&self) -> &[RawPrepareGainMap; 4] {
         &self.maps
     }
 }
@@ -1162,7 +1169,7 @@ fn allocate<T: Default + Clone>(count: u64) -> Result<Vec<T>, RawPrepareError> {
     Ok(output)
 }
 
-fn black_level_index(crop: &RawPrepareCrop, tile: RawPrepareTile, x: u32, y: u32) -> usize {
+const fn black_level_index(crop: &RawPrepareCrop, tile: RawPrepareTile, x: u32, y: u32) -> usize {
     let row = (y + tile.output_y + crop.top as u32) & 1;
     let col = (x + tile.output_x + crop.left as u32) & 1;
     ((row << 1) + col) as usize

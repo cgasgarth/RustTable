@@ -99,7 +99,6 @@ impl MetadataPacketLimits {
     /// # Errors
     ///
     /// Returns [`crate::MetadataLimitsError::ZeroLimit`] when any cap is zero.
-    #[allow(clippy::too_many_arguments)]
     pub const fn new(
         max_source_bytes: u64,
         max_packet_bytes: u64,

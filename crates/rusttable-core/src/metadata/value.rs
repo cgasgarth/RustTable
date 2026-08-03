@@ -88,7 +88,7 @@ impl PositiveRational {
     /// # Errors
     ///
     /// Returns an error when either component is zero.
-    pub fn new(numerator: u64, denominator: u64) -> Result<Self, PositiveRationalError> {
+    pub const fn new(numerator: u64, denominator: u64) -> Result<Self, PositiveRationalError> {
         if numerator == 0 {
             return Err(PositiveRationalError::ZeroNumerator);
         }
@@ -124,7 +124,7 @@ impl fmt::Display for PositiveRationalError {
 
 impl std::error::Error for PositiveRationalError {}
 
-fn gcd(mut left: u64, mut right: u64) -> u64 {
+const fn gcd(mut left: u64, mut right: u64) -> u64 {
     while right != 0 {
         let remainder = left % right;
         left = right;

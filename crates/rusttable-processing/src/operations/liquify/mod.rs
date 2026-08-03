@@ -214,7 +214,10 @@ pub struct LiquifyNode {
 }
 
 impl LiquifyNode {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "node constructor mirrors the native serialized path-node field order"
+    )]
     pub fn new(
         path: LiquifyPathKind,
         node_type: LiquifyNodeType,
@@ -309,7 +312,7 @@ impl LiquifyNode {
         self
     }
 
-    fn link_values(&self) -> (i8, i8, i8, u8, u8) {
+    const fn link_values(&self) -> (i8, i8, i8, u8, u8) {
         (
             self.prev,
             self.index,
@@ -491,7 +494,7 @@ impl LiquifyConfig {
     pub fn nodes(&self) -> &[LiquifyNode] {
         self.parameters.nodes()
     }
-    pub fn parameters(&self) -> &LiquifyParametersV1 {
+    pub const fn parameters(&self) -> &LiquifyParametersV1 {
         &self.parameters
     }
 
@@ -507,7 +510,7 @@ impl LiquifyConfig {
     }
 }
 
-fn is_unknown_type(error: &LiquifyValidationError) -> bool {
+const fn is_unknown_type(error: &LiquifyValidationError) -> bool {
     matches!(
         error,
         LiquifyValidationError::UnknownWarpType(_)
@@ -518,7 +521,7 @@ fn is_unknown_type(error: &LiquifyValidationError) -> bool {
     )
 }
 
-fn hex_digit(value: u8) -> Option<u8> {
+const fn hex_digit(value: u8) -> Option<u8> {
     match value {
         b'0'..=b'9' => Some(value - b'0'),
         b'a'..=b'f' => Some(value - b'a' + 10),
@@ -727,10 +730,10 @@ impl LiquifyPlan {
     pub fn field(&self) -> &[LiquifyPoint] {
         &self.field
     }
-    pub fn stamps(&self) -> usize {
+    pub const fn stamps(&self) -> usize {
         self.stamps.len()
     }
-    pub fn config(&self) -> &LiquifyConfig {
+    pub const fn config(&self) -> &LiquifyConfig {
         &self.config
     }
 

@@ -16,17 +16,21 @@ use rusttable_ui::{
     DarkroomControlValue, DarkroomModuleAction, DarkroomModuleActionHandler, GtkShell,
 };
 
-pub(crate) type DarkroomEditCommitHandler = Rc<dyn Fn()>;
+pub type DarkroomEditCommitHandler = Rc<dyn Fn()>;
 
-pub(crate) struct DarkroomEditBridge {
-    pub(crate) controller: Rc<RefCell<GtkDarkroomEditController>>,
-    pub(crate) handler: DarkroomModuleActionHandler,
-    pub(crate) colorzones_handler: ColorZonesGtkActionHandler,
-    pub(crate) colorzones_preferences_handler: ColorZonesGtkPreferencesHandler,
+pub struct DarkroomEditBridge {
+    pub controller: Rc<RefCell<GtkDarkroomEditController>>,
+    pub handler: DarkroomModuleActionHandler,
+    pub colorzones_handler: ColorZonesGtkActionHandler,
+    pub colorzones_preferences_handler: ColorZonesGtkPreferencesHandler,
     after_commit: Rc<RefCell<Option<DarkroomEditCommitHandler>>>,
 }
 
-pub(crate) fn install(
+#[expect(
+    clippy::too_many_lines,
+    reason = "preserve the source-ordered darkroom action, projection, and publication transaction"
+)]
+pub fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
@@ -38,7 +42,7 @@ pub(crate) fn install(
     let lifecycle = Rc::clone(lifecycle);
     let thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
     let display_profile = Rc::clone(display_profile);
-    let diagnostics = diagnostics.clone();
+    let publish_diagnostics = diagnostics.clone();
     let controller = Rc::new(RefCell::new(
         GtkDarkroomEditController::new(
             catalog
@@ -54,7 +58,6 @@ pub(crate) fn install(
     let publish_lifecycle = Rc::clone(&lifecycle);
     let publish_thumbnail_lifecycle = Rc::clone(&thumbnail_lifecycle);
     let publish_display_profile = Rc::clone(&display_profile);
-    let publish_diagnostics = diagnostics.clone();
     let publish_after_commit = Rc::clone(&after_commit);
     let publish_processing_change = Rc::new(move |outcome: &DarkroomEditOutcome| {
         if !outcome.processing_changed() {
@@ -228,7 +231,7 @@ pub(crate) fn install(
     }
 }
 
-fn preserves_mounted_control(action: &DarkroomModuleAction) -> bool {
+const fn preserves_mounted_control(action: &DarkroomModuleAction) -> bool {
     action.operation_id().is_some()
         && matches!(
             action,
@@ -241,7 +244,7 @@ fn preserves_mounted_control(action: &DarkroomModuleAction) -> bool {
 }
 
 impl DarkroomEditBridge {
-    pub(crate) fn set_after_commit(&self, handler: DarkroomEditCommitHandler) {
+    pub fn set_after_commit(&self, handler: DarkroomEditCommitHandler) {
         self.after_commit.replace(Some(handler));
     }
 }

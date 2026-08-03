@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Transfer arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded CPU compatibility leaf for Darktable's deprecated color transfer.
 //!
 //! The exact v1 payload, typed history import, scalar evaluator, and full-frame
@@ -623,7 +628,7 @@ impl fmt::Display for ColorTransferCodecError {
 impl std::error::Error for ColorTransferCodecError {}
 
 /// Checked, bounded CPU application plan for one full-frame Lab raster.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ColorTransferPlan {
     parameters: ColorTransferParameters,
     dimensions: RasterDimensions,
@@ -853,7 +858,7 @@ fn check_memory(
         .checked_mul(std::mem::size_of::<ColorTransferPixel>())
         .and_then(|bytes| bytes.checked_add(COLORTRANSFER_HISTOGRAM_BINS * 4))
         .and_then(|bytes| bytes.checked_add(COLORTRANSFER_MAX_CLUSTERS * (2 * 4 + 2 * 4 + 4 + 4)))
-        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+        .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: budget.maximum_bytes(),
         })?;
@@ -895,7 +900,7 @@ struct CapturedLab {
 /// but `capture_histogram()` and `kmeans()` use `3 * pixel` in the retained C
 /// source.  Keeping this raw view is intentional, including the resulting
 /// overlap with the fourth lane of four-lane input.
-fn captured_lab(input: &[ColorTransferPixel], pixel_index: usize) -> CapturedLab {
+const fn captured_lab(input: &[ColorTransferPixel], pixel_index: usize) -> CapturedLab {
     let base = pixel_index
         .checked_mul(COLORTRANSFER_CAPTURE_STRIDE)
         .expect("validated raster fits the bounded capture view");

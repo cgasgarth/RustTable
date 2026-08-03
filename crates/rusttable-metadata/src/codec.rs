@@ -372,7 +372,7 @@ fn decode_datetime(reader: &mut Reader<'_>) -> Result<MetadataDateTime, Metadata
     )
 }
 
-fn source_code(source: MetadataSource) -> u8 {
+const fn source_code(source: MetadataSource) -> u8 {
     match source {
         MetadataSource::Exif => 0,
         MetadataSource::Iptc => 1,
@@ -391,7 +391,7 @@ fn source_code(source: MetadataSource) -> u8 {
         MetadataSource::ExportOverride => 14,
     }
 }
-fn decode_source(code: u8) -> Result<MetadataSource, MetadataDomainError> {
+const fn decode_source(code: u8) -> Result<MetadataSource, MetadataDomainError> {
     match code {
         0 => Ok(MetadataSource::Exif),
         1 => Ok(MetadataSource::Iptc),
@@ -411,7 +411,7 @@ fn decode_source(code: u8) -> Result<MetadataSource, MetadataDomainError> {
         _ => Err(MetadataDomainError::InvalidCodec("source")),
     }
 }
-fn privacy_code(value: PrivacyClass) -> u8 {
+const fn privacy_code(value: PrivacyClass) -> u8 {
     match value {
         PrivacyClass::Public => 0,
         PrivacyClass::Personal => 1,
@@ -419,7 +419,7 @@ fn privacy_code(value: PrivacyClass) -> u8 {
         PrivacyClass::Location => 3,
     }
 }
-fn decode_privacy(code: u8) -> Result<PrivacyClass, MetadataDomainError> {
+const fn decode_privacy(code: u8) -> Result<PrivacyClass, MetadataDomainError> {
     match code {
         0 => Ok(PrivacyClass::Public),
         1 => Ok(PrivacyClass::Personal),
@@ -428,7 +428,7 @@ fn decode_privacy(code: u8) -> Result<PrivacyClass, MetadataDomainError> {
         _ => Err(MetadataDomainError::InvalidCodec("privacy")),
     }
 }
-fn warning_code(value: NormalizationWarning) -> u8 {
+const fn warning_code(value: NormalizationWarning) -> u8 {
     match value {
         NormalizationWarning::UnicodeNfc => 0,
         NormalizationWarning::Trimmed => 1,
@@ -437,7 +437,7 @@ fn warning_code(value: NormalizationWarning) -> u8 {
         NormalizationWarning::LossyConversion => 4,
     }
 }
-fn decode_warning(code: u8) -> Result<NormalizationWarning, MetadataDomainError> {
+const fn decode_warning(code: u8) -> Result<NormalizationWarning, MetadataDomainError> {
     match code {
         0 => Ok(NormalizationWarning::UnicodeNfc),
         1 => Ok(NormalizationWarning::Trimmed),
@@ -447,7 +447,7 @@ fn decode_warning(code: u8) -> Result<NormalizationWarning, MetadataDomainError>
         _ => Err(MetadataDomainError::InvalidCodec("warning")),
     }
 }
-fn precision_code(value: DatePrecision) -> u8 {
+const fn precision_code(value: DatePrecision) -> u8 {
     match value {
         DatePrecision::Year => 0,
         DatePrecision::Month => 1,
@@ -460,7 +460,7 @@ fn precision_code(value: DatePrecision) -> u8 {
         DatePrecision::Nanosecond => 8,
     }
 }
-fn decode_precision(code: u8) -> Result<DatePrecision, MetadataDomainError> {
+const fn decode_precision(code: u8) -> Result<DatePrecision, MetadataDomainError> {
     match code {
         0 => Ok(DatePrecision::Year),
         1 => Ok(DatePrecision::Month),
@@ -479,7 +479,7 @@ struct Writer {
     bytes: Vec<u8>,
 }
 impl Writer {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self { bytes: Vec::new() }
     }
     fn bytes(&mut self, value: &[u8]) {

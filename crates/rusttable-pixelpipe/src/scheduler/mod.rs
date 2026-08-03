@@ -1,11 +1,9 @@
-#![allow(clippy::missing_errors_doc, clippy::needless_pass_by_value)]
-
 use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, Instant};
 
-pub(crate) mod executor;
-pub(crate) mod metrics;
-pub(crate) mod model;
+pub mod executor;
+pub mod metrics;
+pub mod model;
 
 use self::executor::isolate_work_unit;
 use self::metrics::{MetricsMut, SchedulerMetrics, SchedulerSnapshot, ShutdownReport};
@@ -26,7 +24,7 @@ struct TaskRecord {
 }
 
 impl TaskRecord {
-    fn new(spec: TaskSpec, enqueue_sequence: u64, now: Instant) -> Self {
+    const fn new(spec: TaskSpec, enqueue_sequence: u64, now: Instant) -> Self {
         Self {
             spec,
             state: TaskState::Queued,
@@ -117,10 +115,22 @@ impl CpuScheduler {
         self.config
     }
 
+    /// Admits a task using the current clock.
+    ///
+    /// # Errors
+    ///
+    /// Returns the admission error when shutdown, queue, dependency, resource,
+    /// or accounting constraints reject the task.
     pub fn submit(&mut self, spec: TaskSpec) -> Result<AdmitReceipt, SchedulerError> {
         self.submit_at(spec, Instant::now())
     }
 
+    /// Admits a task at a supplied clock instant.
+    ///
+    /// # Errors
+    ///
+    /// Returns the admission error when shutdown, queue, dependency, resource,
+    /// or accounting constraints reject the task.
     pub fn submit_at(
         &mut self,
         spec: TaskSpec,
@@ -196,7 +206,7 @@ impl CpuScheduler {
         Ok(receipt)
     }
 
-    fn validate_claim(&self, claim: &ResourceClaim) -> Result<(), SchedulerError> {
+    const fn validate_claim(&self, claim: &ResourceClaim) -> Result<(), SchedulerError> {
         if claim.worker_tokens() > self.config.worker_limit()
             || claim.max_parallelism() > self.config.worker_limit()
             || claim.memory_bytes() > self.config.memory_limit()
@@ -262,7 +272,7 @@ impl CpuScheduler {
                 || self.active_pipelines < self.config.active_pipeline_limit())
     }
 
-    fn record_resource_wait(&mut self, claim: &ResourceClaim) {
+    const fn record_resource_wait(&mut self, claim: &ResourceClaim) {
         if self.active_workers + claim.worker_tokens() > self.config.worker_limit() {
             self.metrics.worker_waits = self.metrics.worker_waits.saturating_add(1);
         }
@@ -295,7 +305,7 @@ impl CpuScheduler {
                 let _ = self.finish_queued(
                     task_id,
                     TaskState::Skipped,
-                    Some(TaskFailure::DependencyFailed),
+                    Some(&TaskFailure::DependencyFailed),
                     now,
                 );
             }
@@ -372,10 +382,22 @@ impl CpuScheduler {
             .copied()
     }
 
+    /// Requests cancellation using the current clock.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task is unknown or scheduler accounting has
+    /// already degraded.
     pub fn cancel(&mut self, task_id: TaskId) -> Result<TaskState, SchedulerError> {
         self.cancel_at(task_id, Instant::now())
     }
 
+    /// Requests cancellation at a supplied clock instant.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task is unknown or scheduler accounting has
+    /// already degraded.
     pub fn cancel_at(
         &mut self,
         task_id: TaskId,
@@ -401,6 +423,12 @@ impl CpuScheduler {
         }
     }
 
+    /// Checks whether the next work unit may run.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task is unknown, no longer running, or the
+    /// scheduler accounting has degraded.
     pub fn work_unit_boundary(
         &mut self,
         task_id: TaskId,
@@ -431,6 +459,12 @@ impl CpuScheduler {
         Ok(WorkUnitBoundary::Continue)
     }
 
+    /// Runs each unit of a task while honoring cancellation and failure state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task cannot run, a work unit fails, or
+    /// scheduler accounting rejects completion.
     pub fn run_task<F>(
         &mut self,
         task_id: TaskId,
@@ -456,12 +490,18 @@ impl CpuScheduler {
                 if matches!(failure, TaskFailure::PanicIsolated) {
                     self.degraded = true;
                 }
-                return self.complete_failure(task_id, now, failure);
+                return self.complete_failure(task_id, now, &failure);
             }
         }
         self.complete_success(task_id, now)
     }
 
+    /// Completes a running task successfully when cancellation has not won.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task is unknown, not running, or accounting
+    /// cannot release its resources.
     pub fn complete_success(
         &mut self,
         task_id: TaskId,
@@ -478,6 +518,12 @@ impl CpuScheduler {
         self.finish_running(task_id, TaskState::Passed, None, now)
     }
 
+    /// Completes a running task as cancelled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task is unknown, not running, or accounting
+    /// cannot release its resources.
     pub fn complete_cancelled(
         &mut self,
         task_id: TaskId,
@@ -486,15 +532,27 @@ impl CpuScheduler {
         self.finish_running(task_id, TaskState::Cancelled, None, now)
     }
 
+    /// Completes a running task with a typed failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task is unknown, not running, or accounting
+    /// cannot release its resources.
     pub fn complete_failure(
         &mut self,
         task_id: TaskId,
         now: Instant,
-        failure: TaskFailure,
+        failure: &TaskFailure,
     ) -> Result<TaskState, SchedulerError> {
         self.finish_running(task_id, TaskState::Failed, Some(failure), now)
     }
 
+    /// Confirms the actual allocation against the admitted lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the task is unknown, not running, or the actual
+    /// allocation does not match its planned lease.
     pub fn confirm_leases(
         &mut self,
         task_id: TaskId,
@@ -524,7 +582,7 @@ impl CpuScheduler {
             self.complete_failure(
                 task_id,
                 now,
-                TaskFailure::MemoryEstimateMismatch {
+                &TaskFailure::MemoryEstimateMismatch {
                     planned_bytes: planned,
                     actual_bytes,
                 },
@@ -544,7 +602,7 @@ impl CpuScheduler {
         &mut self,
         task_id: TaskId,
         state: TaskState,
-        failure: Option<TaskFailure>,
+        failure: Option<&TaskFailure>,
         now: Instant,
     ) -> Result<(), SchedulerError> {
         let record = self
@@ -564,7 +622,7 @@ impl CpuScheduler {
         &mut self,
         task_id: TaskId,
         state: TaskState,
-        failure: Option<TaskFailure>,
+        failure: Option<&TaskFailure>,
         now: Instant,
     ) -> Result<TaskState, SchedulerError> {
         let record = self
@@ -603,7 +661,7 @@ impl CpuScheduler {
         &mut self,
         task_id: TaskId,
         state: TaskState,
-        failure: Option<TaskFailure>,
+        failure: Option<&TaskFailure>,
         now: Instant,
         started_at: Option<Instant>,
     ) -> Result<(), SchedulerError> {
@@ -635,11 +693,11 @@ impl CpuScheduler {
             dependency_count: u16::try_from(record.spec.dependencies().len()).unwrap_or(u16::MAX),
             publication_allowed: state == TaskState::Passed
                 && record.spec.publication_target().kind() != crate::PublicationTargetKind::None,
-            failure: failure.clone(),
+            failure: failure.cloned(),
         };
         self.push_receipt(receipt);
         MetricsMut::record_outcome(&mut self.metrics, state);
-        if let Some(failure) = failure.as_ref() {
+        if let Some(failure) = failure {
             MetricsMut::record_failure(&mut self.metrics, failure);
         }
         self.metrics.admitted_memory_bytes = self.admitted_memory_bytes;
@@ -709,7 +767,7 @@ impl CpuScheduler {
             let _ = self.finish_queued(
                 *task_id,
                 TaskState::Cancelled,
-                Some(TaskFailure::Shutdown),
+                Some(&TaskFailure::Shutdown),
                 now,
             );
         }

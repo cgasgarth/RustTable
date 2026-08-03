@@ -14,7 +14,7 @@ const SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-scheduler-source-map.
 const SCHEMA: &str = "rusttable.pixelpipe-scheduler-source-map.v1";
 
 #[derive(Debug, Args)]
-pub(crate) struct SchedulerMatrixArgs {
+pub struct SchedulerMatrixArgs {
     #[arg(long)]
     pub interactive_under_load: bool,
     #[arg(long)]
@@ -25,7 +25,7 @@ pub(crate) struct SchedulerMatrixArgs {
     pub verify_bounds: bool,
 }
 
-pub(crate) fn run(root: &Path, args: &SchedulerMatrixArgs) -> Result {
+pub fn run(root: &Path, args: &SchedulerMatrixArgs) -> Result {
     if !args.interactive_under_load
         || !args.memory_pressure
         || args.failures != "all"
@@ -85,7 +85,7 @@ fn task(id: u64, priority: CpuPriority, memory: u64) -> Result<TaskSpec> {
     .map_err(|error| format!("task: {error:?}"))
 }
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     if issue != 273 {
         return Err(format!("scheduler source map: unsupported issue {issue}"));
     }

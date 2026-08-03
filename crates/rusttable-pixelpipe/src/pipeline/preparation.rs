@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::fmt;
 
 use rusttable_color::ColorEncoding;
@@ -114,7 +112,7 @@ impl PreparedOperation {
     }
 
     #[must_use]
-    pub fn roi_contract(&self) -> &crate::NodeRoiContract {
+    pub const fn roi_contract(&self) -> &crate::NodeRoiContract {
         &self.roi_contract
     }
 }
@@ -288,7 +286,7 @@ impl PreparedNode {
     }
 
     #[must_use]
-    pub fn roi_contract(&self) -> &crate::NodeRoiContract {
+    pub const fn roi_contract(&self) -> &crate::NodeRoiContract {
         &self.roi_contract
     }
 }
@@ -424,6 +422,11 @@ impl PreparedPipeline {
     }
 
     /// Plans a final output request against this immutable prepared snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a planning error when the source or any prepared ROI contract
+    /// cannot map the requested output.
     pub fn plan_roi(
         &self,
         request: crate::RoiRequest,
@@ -724,7 +727,7 @@ fn prepared_node(
     }
 }
 
-fn channel_compatible(required: u8, actual: ChannelLayout) -> bool {
+const fn channel_compatible(required: u8, actual: ChannelLayout) -> bool {
     matches!(
         (required, actual),
         (

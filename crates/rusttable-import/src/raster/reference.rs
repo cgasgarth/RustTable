@@ -172,7 +172,7 @@ fn decode_hex(encoded: &str) -> Result<Vec<u8>, ReferenceSourceError> {
         .collect()
 }
 
-fn digit(byte: u8) -> Result<u8, ReferenceSourceError> {
+const fn digit(byte: u8) -> Result<u8, ReferenceSourceError> {
     match byte {
         b'0'..=b'9' => Ok(byte - b'0'),
         b'a'..=b'f' => Ok(byte - b'a' + 10),

@@ -27,6 +27,10 @@
     unused_imports,
     reason = "this leaf preserves the native fixed-layout and f32 arithmetic boundaries"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Basecurve equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt;
 use std::mem::size_of;
@@ -108,7 +112,7 @@ const _: () = assert!(size_of::<BasecurveParameters>() == BASECURVE_V6_PARAMETER
 impl BasecurveParameters {
     /// Native `init()` plus `dt_iop_default_init()` state.
     #[must_use]
-    pub fn defaults() -> Self {
+    pub const fn defaults() -> Self {
         let mut basecurve = [[BasecurveNode::new(0.0, 0.0); MAX_NODES]; MAX_CURVES];
         basecurve[0][1] = BasecurveNode::new(1.0, 1.0);
         Self {
@@ -198,7 +202,7 @@ pub struct BasecurveDefaultState {
 }
 
 #[must_use]
-pub fn default_state() -> BasecurveDefaultState {
+pub const fn default_state() -> BasecurveDefaultState {
     BasecurveDefaultState {
         parameters: BasecurveParameters::defaults(),
         enabled: false,
@@ -258,7 +262,7 @@ impl BasecurveCurveState {
         }
     }
 
-    fn into_current(
+    const fn into_current(
         self,
         exposure_fusion: i32,
         exposure_stops: f32,
@@ -451,7 +455,7 @@ pub fn migrate_v1_to_v6(value: BasecurveParametersV1) -> BasecurveParameters {
     current
 }
 
-pub fn migrate_v2_to_v6(value: BasecurveParametersV2) -> BasecurveParameters {
+pub const fn migrate_v2_to_v6(value: BasecurveParametersV2) -> BasecurveParameters {
     value.state.into_current(0, 1.0, 1.0, DT_RGB_NORM_NONE)
 }
 
@@ -466,7 +470,7 @@ pub fn migrate_v3_to_v6(value: BasecurveParametersV3) -> BasecurveParameters {
         .into_current(value.exposure_fusion, stops, 1.0, DT_RGB_NORM_NONE)
 }
 
-pub fn migrate_v4_to_v6(value: BasecurveParametersV4) -> BasecurveParameters {
+pub const fn migrate_v4_to_v6(value: BasecurveParametersV4) -> BasecurveParameters {
     value.state.into_current(
         value.exposure_fusion,
         value.exposure_stops,
@@ -475,7 +479,7 @@ pub fn migrate_v4_to_v6(value: BasecurveParametersV4) -> BasecurveParameters {
     )
 }
 
-pub fn migrate_v5_to_v6(value: BasecurveParametersV5) -> BasecurveParameters {
+pub const fn migrate_v5_to_v6(value: BasecurveParametersV5) -> BasecurveParameters {
     value.state.into_current(
         value.exposure_fusion,
         value.exposure_stops,
@@ -541,7 +545,11 @@ fn decode_v5(bytes: &[u8]) -> Result<BasecurveParametersV5, BasecurveCodecError>
     })
 }
 
-fn check_length(version: u16, bytes: &[u8], expected: usize) -> Result<(), BasecurveCodecError> {
+const fn check_length(
+    version: u16,
+    bytes: &[u8],
+    expected: usize,
+) -> Result<(), BasecurveCodecError> {
     if bytes.len() == expected {
         Ok(())
     } else {
@@ -684,25 +692,25 @@ impl BasecurveCapabilities {
         }
     }
 
-    pub fn require_gpu(self) -> Result<(), BasecurveExecutionError> {
+    pub const fn require_gpu(self) -> Result<(), BasecurveExecutionError> {
         Err(BasecurveExecutionError::UnsupportedCapability(
             "GPU Basecurve execution is not ported",
         ))
     }
 
-    pub fn require_gtk(self) -> Result<(), BasecurveExecutionError> {
+    pub const fn require_gtk(self) -> Result<(), BasecurveExecutionError> {
         Err(BasecurveExecutionError::UnsupportedCapability(
             "GTK Basecurve controls are not ported",
         ))
     }
 
-    pub fn require_masks(self) -> Result<(), BasecurveExecutionError> {
+    pub const fn require_masks(self) -> Result<(), BasecurveExecutionError> {
         Err(BasecurveExecutionError::UnsupportedCapability(
             "Basecurve mask consumption is not ported",
         ))
     }
 
-    pub fn require_production_routing(self) -> Result<(), BasecurveExecutionError> {
+    pub const fn require_production_routing(self) -> Result<(), BasecurveExecutionError> {
         Err(BasecurveExecutionError::UnsupportedCapability(
             "Basecurve production routing is deferred",
         ))
@@ -832,7 +840,7 @@ impl BasecurvePlan {
     }
 }
 
-fn native_curve_type(value: i32) -> Result<CurveType, BasecurveCompileError> {
+const fn native_curve_type(value: i32) -> Result<CurveType, BasecurveCompileError> {
     match value {
         CUBIC_SPLINE => Ok(CurveType::CubicSpline),
         CATMULL_ROM => Ok(CurveType::CatmullRom),
@@ -1154,8 +1162,8 @@ impl BasecurveProfileEvidence {
 }
 
 /// Explicitly rejects the tempting but incorrect profile inference boundary.
-pub fn unsupported_working_frame_profile() -> Result<BasecurveProfileEvidence, BasecurveProfileError>
-{
+pub const fn unsupported_working_frame_profile()
+-> Result<BasecurveProfileEvidence, BasecurveProfileError> {
     Err(BasecurveProfileError::UnsupportedCapability(
         "WorkingFrameDescriptor does not carry native ICC LUT evidence",
     ))

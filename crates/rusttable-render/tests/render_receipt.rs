@@ -19,7 +19,7 @@ fn source() -> RenderSourceProvenance {
     source_for(ImageDimensions::new(1, 1).unwrap())
 }
 
-fn source_for(dimensions: ImageDimensions) -> RenderSourceProvenance {
+const fn source_for(dimensions: ImageDimensions) -> RenderSourceProvenance {
     RenderSourceProvenance::new(
         PhotoId::new(2).unwrap(),
         AssetId::new(3).unwrap(),

@@ -77,7 +77,10 @@ pub enum DiagnosticPath {
     CpuFallback,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "preserve the native diagnostic descriptor flags as named fields"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticDescriptor {
     compatibility_id: &'static str,
@@ -223,13 +226,13 @@ impl DiagnosticGeometry {
     }
 }
 
-pub(crate) fn check_cancelled(token: &CancellationToken) -> Result<(), DiagnosticFinding> {
+pub fn check_cancelled(token: &CancellationToken) -> Result<(), DiagnosticFinding> {
     (!token.is_cancelled())
         .then_some(())
         .ok_or(DiagnosticFinding::Cancelled)
 }
 
-pub(crate) fn profile_plan(
+pub fn profile_plan(
     current: ColorEncoding,
     histogram: ColorEncoding,
 ) -> Result<TransformPlan, DiagnosticFinding> {
@@ -257,7 +260,7 @@ pub(crate) fn profile_plan(
         })
 }
 
-pub(crate) fn apply_profile(
+pub fn apply_profile(
     plan: &TransformPlan,
     mut rgb: [f32; 3],
 ) -> Result<[f32; 3], DiagnosticFinding> {
@@ -306,10 +309,7 @@ fn apply_step(step: &TransformStep, rgb: &mut [f32; 3]) -> Result<(), Diagnostic
     Ok(())
 }
 
-pub(crate) fn profile_luminance(
-    profile: ColorEncoding,
-    rgb: [f32; 3],
-) -> Result<f32, DiagnosticFinding> {
+pub fn profile_luminance(profile: ColorEncoding, rgb: [f32; 3]) -> Result<f32, DiagnosticFinding> {
     let linear = if profile.is_linear() {
         rgb
     } else {

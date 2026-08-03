@@ -83,7 +83,10 @@ impl HistoryCommand {
     }
 
     #[must_use]
-    pub fn evidence(revision: HistoryRevisionId, kind: HistoryEvidenceKind) -> HistoryEvidence {
+    pub const fn evidence(
+        revision: HistoryRevisionId,
+        kind: HistoryEvidenceKind,
+    ) -> HistoryEvidence {
         HistoryEvidence::new(revision, kind)
     }
 }

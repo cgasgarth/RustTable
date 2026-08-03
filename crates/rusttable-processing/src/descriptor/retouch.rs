@@ -1,4 +1,7 @@
-#![allow(clippy::missing_panics_doc)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "Descriptor tables are static contract data; their invariant-only unwraps cannot fail for valid entries."
+)]
 
 use rusttable_color::ColorEncoding;
 

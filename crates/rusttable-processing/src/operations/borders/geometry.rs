@@ -447,6 +447,6 @@ fn transform(points: &mut [f32], x: f32, y: f32, forward: bool) -> Result<(), Bo
     clippy::cast_precision_loss,
     reason = "the public transform API is f32-based"
 )]
-fn coordinate_f32(value: u32) -> f32 {
+const fn coordinate_f32(value: u32) -> f32 {
     value as f32
 }

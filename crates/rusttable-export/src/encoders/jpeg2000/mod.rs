@@ -1,8 +1,15 @@
 //! Safe JPEG 2000 Part 1 export with an independently checked J2K/JP2 boundary.
-#![allow(
+#![expect(
     clippy::missing_errors_doc,
+    reason = "the JPEG 2000 encoder reports failures through its shared typed encoder error"
+)]
+#![expect(
     clippy::struct_excessive_bools,
-    clippy::too_many_lines
+    reason = "JPEG 2000 settings expose independent container, transform, and progress switches"
+)]
+#![expect(
+    clippy::too_many_lines,
+    reason = "the bounded JPEG 2000 parser and writer keep box ordering auditable"
 )]
 
 mod boxes;

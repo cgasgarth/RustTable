@@ -140,7 +140,10 @@ impl LimitEnvelope {
     }
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "GPU capability fields are independent serialized feature and probe contract bits"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AdvertisedFeatures {
     pub f16: bool,
@@ -391,7 +394,10 @@ fn bounded_reason(reason: &str) -> String {
     reason.chars().take(MAX_REJECTION_REASON).collect()
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "GPU capability fields are independent serialized feature and probe contract bits"
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProbeLedger {
     pub compute_storage_buffers: bool,
@@ -489,7 +495,7 @@ pub enum KernelPlanError {
 }
 
 impl GpuFeaturePlan {
-    pub fn for_kernel(
+    pub const fn for_kernel(
         snapshot: &GpuCapabilitySnapshot,
         prefer_optional: bool,
     ) -> Result<Self, KernelPlanError> {
@@ -538,7 +544,7 @@ impl Default for FaultTracker {
 }
 
 impl FaultTracker {
-    pub fn record(&mut self, fault: FaultKind, _now: Instant) -> GpuFaultSnapshot {
+    pub const fn record(&mut self, fault: FaultKind, _now: Instant) -> GpuFaultSnapshot {
         self.generation = self.generation.saturating_add(1);
         self.resource_epoch = self.resource_epoch.saturating_add(1);
         self.last_fault = Some(fault);
@@ -570,7 +576,7 @@ impl FaultTracker {
         true
     }
 
-    pub fn disable_for_session(&mut self) {
+    pub const fn disable_for_session(&mut self) {
         self.state = FaultState::DisabledForSession;
         self.generation = self.generation.saturating_add(1);
         self.resource_epoch = self.resource_epoch.saturating_add(1);

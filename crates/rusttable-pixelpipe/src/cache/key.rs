@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -74,7 +72,7 @@ pub struct NodeBoundary {
 
 impl NodeBoundary {
     #[must_use]
-    pub fn whole(implementation: ImplementationIdentity) -> Self {
+    pub const fn whole(implementation: ImplementationIdentity) -> Self {
         Self {
             boundary: None,
             first: 0,
@@ -84,7 +82,7 @@ impl NodeBoundary {
     }
 
     #[must_use]
-    pub fn range(
+    pub const fn range(
         boundary: [u8; 32],
         first: u32,
         last: u32,
@@ -128,7 +126,7 @@ pub struct OutputIdentity {
 
 impl OutputIdentity {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         dimensions: ImageDimensions,
         roi: Roi,
         format: PixelFormat,
@@ -456,7 +454,7 @@ impl CacheKey {
         &self.node
     }
     #[must_use]
-    pub fn output(&self) -> &OutputIdentity {
+    pub const fn output(&self) -> &OutputIdentity {
         &self.output
     }
     #[must_use]
@@ -523,7 +521,7 @@ impl CacheKey {
     }
 
     #[must_use]
-    pub fn components(&self) -> &'static [CacheKeyComponent] {
+    pub const fn components(&self) -> &'static [CacheKeyComponent] {
         &[
             CacheKeyComponent::Source,
             CacheKeyComponent::SourceDescriptor,
@@ -611,7 +609,7 @@ impl Default for CacheKeyBuilder {
 
 impl CacheKeyBuilder {
     #[must_use]
-    pub fn source(mut self, value: SourceIdentity) -> Self {
+    pub const fn source(mut self, value: SourceIdentity) -> Self {
         self.source = Some(value);
         self
     }
@@ -621,27 +619,27 @@ impl CacheKeyBuilder {
         self
     }
     #[must_use]
-    pub fn snapshot(mut self, value: PipelineSnapshotIdentity) -> Self {
+    pub const fn snapshot(mut self, value: PipelineSnapshotIdentity) -> Self {
         self.snapshot = Some(value);
         self
     }
     #[must_use]
-    pub fn generation(mut self, value: PipelineGeneration) -> Self {
+    pub const fn generation(mut self, value: PipelineGeneration) -> Self {
         self.generation = Some(value);
         self
     }
     #[must_use]
-    pub fn purpose(mut self, value: PipelinePurpose) -> Self {
+    pub const fn purpose(mut self, value: PipelinePurpose) -> Self {
         self.purpose = Some(value);
         self
     }
     #[must_use]
-    pub fn quality(mut self, value: CacheQuality) -> Self {
+    pub const fn quality(mut self, value: CacheQuality) -> Self {
         self.quality = Some(value);
         self
     }
     #[must_use]
-    pub fn precision(mut self, value: CachePrecision) -> Self {
+    pub const fn precision(mut self, value: CachePrecision) -> Self {
         self.precision = Some(value);
         self
     }
@@ -656,7 +654,7 @@ impl CacheKeyBuilder {
         self
     }
     #[must_use]
-    pub fn output(mut self, value: OutputIdentity) -> Self {
+    pub const fn output(mut self, value: OutputIdentity) -> Self {
         self.output = Some(value);
         self
     }
@@ -718,6 +716,11 @@ impl CacheKeyBuilder {
     }
 
     /// Builds a complete key and rejects incomplete or malformed identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CacheKeyError`] when a required identity component is missing
+    /// or the node/version fields are invalid.
     pub fn build(self) -> Result<CacheKey, CacheKeyError> {
         let key = CacheKey {
             schema_version: CACHE_KEY_SCHEMA_VERSION,

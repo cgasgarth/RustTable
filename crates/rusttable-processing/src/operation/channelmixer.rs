@@ -7,7 +7,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const CHANNEL_MIXER_PARAMETERS: [&str; 4] = ["red", "green", "blue", "algorithm_version"];
 
-pub(crate) fn compile_channelmixer(
+pub fn compile_channelmixer(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &CHANNEL_MIXER_PARAMETERS)?;
@@ -71,9 +71,9 @@ fn parameter_array(
         .into_iter()
         .enumerate()
         .map(|(index, value)| {
-            #[allow(
+            #[expect(
                 clippy::cast_possible_truncation,
-                reason = "native Channel Mixer parameters are committed as f32"
+                reason = "Native Channel Mixer parameters are committed as f32."
             )]
             let value = value as f32;
             if !value.is_finite() {

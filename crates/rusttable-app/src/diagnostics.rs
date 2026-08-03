@@ -20,13 +20,20 @@ use crate::{CatalogPreviewError, PreviewError};
 
 /// The application-owned handle keeps the diagnostics guard alive for GTK callbacks and workers.
 #[derive(Clone, Default)]
-pub(crate) struct AppDiagnostics {
+pub struct AppDiagnostics {
     guard: Option<Arc<DiagnosticsGuard>>,
     #[cfg(test)]
     recorded_events: Arc<Mutex<Vec<DiagnosticEvent>>>,
 }
 
 impl AppDiagnostics {
+    #[cfg_attr(
+        not(test),
+        expect(
+            clippy::missing_const_for_fn,
+            reason = "test-only event recording initializes a non-const Arc mutex"
+        )
+    )]
     pub(crate) fn from_guard(guard: Option<Arc<DiagnosticsGuard>>) -> Self {
         Self {
             guard,
@@ -494,7 +501,7 @@ fn fields(
     fields
 }
 
-fn format_label(format: InputFormat) -> &'static str {
+const fn format_label(format: InputFormat) -> &'static str {
     match format {
         InputFormat::Jpeg => "jpeg",
         InputFormat::JpegXl => "jpeg-xl",

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Defringe test vectors preserve source evaluation order and IEEE-754 parity."
+)]
+
 use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,

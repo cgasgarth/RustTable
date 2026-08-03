@@ -44,7 +44,7 @@ struct StoredReceipt {
     status: u8,
 }
 
-pub(crate) fn encode(details: &ImportDetails) -> Result<Vec<u8>, ()> {
+pub fn encode(details: &ImportDetails) -> Result<Vec<u8>, ()> {
     let summary = details.summary();
     let receipt = details.receipt();
     if summary.version() != IMPORT_DETAILS_VERSION || receipt.version() != IMPORT_DETAILS_VERSION {
@@ -81,7 +81,7 @@ pub(crate) fn encode(details: &ImportDetails) -> Result<Vec<u8>, ()> {
     to_allocvec(&stored).map_err(|_| ())
 }
 
-pub(crate) fn decode(bytes: &[u8]) -> Result<ImportDetails, ()> {
+pub fn decode(bytes: &[u8]) -> Result<ImportDetails, ()> {
     let stored: StoredDetails = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != DETAILS_FORMAT_VERSION
         || stored.summary.version != IMPORT_DETAILS_VERSION
@@ -141,7 +141,7 @@ const fn encode_format(format: InputFormat) -> u8 {
     }
 }
 
-fn decode_format(value: u8) -> Result<InputFormat, ()> {
+const fn decode_format(value: u8) -> Result<InputFormat, ()> {
     match value {
         1 => Ok(InputFormat::Jpeg),
         2 => Ok(InputFormat::Png),
@@ -160,7 +160,7 @@ const fn encode_status(status: ImportRegistrationStatus) -> u8 {
     }
 }
 
-fn decode_status(value: u8) -> Result<ImportRegistrationStatus, ()> {
+const fn decode_status(value: u8) -> Result<ImportRegistrationStatus, ()> {
     match value {
         1 => Ok(ImportRegistrationStatus::Registered),
         _ => Err(()),
@@ -174,7 +174,7 @@ const fn encode_metadata_status(status: ImportMetadataStatus) -> u8 {
     }
 }
 
-fn decode_metadata_status(value: u8) -> Result<ImportMetadataStatus, ()> {
+const fn decode_metadata_status(value: u8) -> Result<ImportMetadataStatus, ()> {
     match value {
         1 => Ok(ImportMetadataStatus::Available),
         2 => Ok(ImportMetadataStatus::Unavailable),

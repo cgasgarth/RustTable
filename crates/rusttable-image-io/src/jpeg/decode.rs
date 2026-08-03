@@ -548,7 +548,7 @@ fn malformed(message: &str) -> ImageInputError {
     }
 }
 
-fn unsupported(reason: UnsupportedImageFeature) -> ImageInputError {
+const fn unsupported(reason: UnsupportedImageFeature) -> ImageInputError {
     ImageInputError::UnsupportedFeature {
         format: InputFormat::Jpeg,
         reason,

@@ -170,7 +170,6 @@ pub struct TileResourceSpec {
 }
 
 impl TileResourceSpec {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: impl Into<String>,
         class: ResourceClass,

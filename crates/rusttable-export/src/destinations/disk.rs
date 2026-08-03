@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_lines)]
-
 use std::collections::BTreeSet;
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
@@ -36,8 +34,11 @@ impl Default for DiskSettings {
     }
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "preserve the native disk capability probe's independent feature flags"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct DiskCapabilities {
     pub case_sensitive: bool,
     pub unicode_normalization_stable: bool,

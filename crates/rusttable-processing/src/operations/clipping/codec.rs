@@ -1,4 +1,11 @@
-#![allow(clippy::ignored_unit_patterns, clippy::missing_errors_doc)]
+#![expect(
+    clippy::ignored_unit_patterns,
+    reason = "Unit-valued clipping ABI fields are matched explicitly to preserve versioned history layout."
+)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Clipping codec errors are documented by the typed history contract."
+)]
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -312,11 +319,11 @@ fn read_i32(bytes: &[u8]) -> i32 {
     i32::from_le_bytes(bytes.try_into().expect("checked i32 slice"))
 }
 
-fn write_f32(bytes: &mut [u8], value: f32) {
+const fn write_f32(bytes: &mut [u8], value: f32) {
     bytes.copy_from_slice(&value.to_le_bytes());
 }
 
-fn write_i32(bytes: &mut [u8], value: i32) {
+const fn write_i32(bytes: &mut [u8], value: i32) {
     bytes.copy_from_slice(&value.to_le_bytes());
 }
 

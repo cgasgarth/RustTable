@@ -244,7 +244,7 @@ impl ColorContrastParametersV2 {
     }
 }
 
-fn require_length(bytes: &[u8], expected: usize) -> Result<(), ColorContrastCodecError> {
+const fn require_length(bytes: &[u8], expected: usize) -> Result<(), ColorContrastCodecError> {
     if bytes.len() == expected {
         Ok(())
     } else {
@@ -319,7 +319,7 @@ impl ColorContrastHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ColorContrastParametersV2, ColorContrastCodecError> {
+    pub const fn current(&self) -> Result<ColorContrastParametersV2, ColorContrastCodecError> {
         match self {
             Self::V1(parameters) => Ok(migrate_v1_to_v2(*parameters)),
             Self::V2(parameters) => Ok(*parameters),
@@ -488,7 +488,7 @@ impl std::error::Error for ColorContrastParameterError {}
 struct PreservedFiniteF32(u32);
 
 impl PreservedFiniteF32 {
-    fn new(field: &'static str, value: f32) -> Result<Self, ColorContrastParameterError> {
+    const fn new(field: &'static str, value: f32) -> Result<Self, ColorContrastParameterError> {
         if value.is_finite() {
             Ok(Self(value.to_bits()))
         } else {
@@ -929,9 +929,9 @@ impl fmt::Display for ColorContrastCapabilityError {
 impl std::error::Error for ColorContrastCapabilityError {}
 
 /// Capability facts kept separate from native metadata and shared production routing.
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
-    reason = "independent leaf capabilities must remain independently fail-closed"
+    reason = "Independent leaf capabilities must remain independently fail-closed."
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorContrastCapabilities {
@@ -1022,6 +1022,10 @@ pub const fn capabilities() -> ColorContrastCapabilities {
 
 /// Operation-local descriptor evidence; this function does not register the leaf.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The descriptor keeps the source operation identity, capability, IO, and tiling contract together."
+)]
 pub fn colorcontrast_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new(

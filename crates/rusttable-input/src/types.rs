@@ -108,7 +108,7 @@ impl DeviceToken {
     }
 
     #[must_use]
-    pub fn source(&self) -> InputSource {
+    pub const fn source(&self) -> InputSource {
         self.source
     }
 
@@ -402,7 +402,7 @@ pub enum Scope {
 
 impl Scope {
     #[must_use]
-    pub fn specificity(&self) -> u8 {
+    pub const fn specificity(&self) -> u8 {
         match self {
             Self::Global => 0,
             Self::View(_) => 1,
@@ -437,7 +437,7 @@ pub struct ActionMapping {
 
 impl ActionMapping {
     #[must_use]
-    pub fn new(action: ActionId, binding: Binding) -> Self {
+    pub const fn new(action: ActionId, binding: Binding) -> Self {
         Self {
             action,
             binding,

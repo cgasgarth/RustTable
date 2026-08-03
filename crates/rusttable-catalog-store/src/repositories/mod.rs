@@ -5,14 +5,14 @@ use redb::{Database, ReadableDatabase, ReadableTable};
 use rusttable_catalog::{ImportRecord, ImportRepository, RepositoryError, SourcePath};
 use rusttable_core::{AssetId, PhotoId};
 
-pub(crate) mod catalog;
-pub(crate) mod collection;
-pub(crate) mod edit;
-pub(crate) mod history;
-pub(crate) mod metadata;
-pub(crate) mod recipe;
-pub(crate) mod tags;
-pub(crate) mod virtual_copies;
+pub mod catalog;
+pub mod collection;
+pub mod edit;
+pub mod history;
+pub mod metadata;
+pub mod recipe;
+pub mod tags;
+pub mod virtual_copies;
 
 use crate::codecs as codec;
 use crate::schema::{self, ASSET_INDEX_TABLE, PHOTO_INDEX_TABLE, RECORDS_TABLE};
@@ -33,7 +33,8 @@ impl RedbImportRepository {
         })
     }
 
-    pub(crate) const fn from_database(database: Arc<Database>) -> Self {
+    #[must_use]
+    pub const fn from_database(database: Arc<Database>) -> Self {
         Self { database }
     }
 }

@@ -163,7 +163,7 @@ impl SettledChange {
 /// frameless `MenuButton` is therefore overlaid on the scale and owns the
 /// popover through GTK's supported `MenuButton::set_popover` API.
 #[derive(Clone, Debug)]
-pub(crate) struct BauhausSlider {
+pub struct BauhausSlider {
     root: gtk4::Overlay,
     scale: gtk4::Scale,
     model: Rc<RefCell<BauhausSliderModel>>,
@@ -176,11 +176,11 @@ pub(crate) struct BauhausSlider {
 }
 
 impl BauhausSlider {
-    pub(crate) fn widget(&self) -> &gtk4::Overlay {
+    pub(crate) const fn widget(&self) -> &gtk4::Overlay {
         &self.root
     }
 
-    pub(crate) fn scale(&self) -> &gtk4::Scale {
+    pub(crate) const fn scale(&self) -> &gtk4::Scale {
         &self.scale
     }
 
@@ -231,7 +231,7 @@ impl BauhausSlider {
 
 /// Source metadata for a reusable full-width slider composite.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct FullWidthSliderSpec<'a> {
+pub struct FullWidthSliderSpec<'a> {
     pub(crate) widget_name: &'a str,
     pub(crate) label: &'a str,
     pub(crate) tooltip: &'a str,
@@ -248,7 +248,7 @@ pub(crate) struct FullWidthSliderSpec<'a> {
 /// inside the control. The supplied GTK step remains a valid native increment;
 /// `SliderInputSpec::with_automatic_step` independently selects Darktable's
 /// effective-step calculation for Bauhaus input.
-pub(crate) fn full_width_slider(spec: FullWidthSliderSpec<'_>) -> BauhausSlider {
+pub fn full_width_slider(spec: FullWidthSliderSpec<'_>) -> BauhausSlider {
     let scale = gtk4::Scale::with_range(
         gtk4::Orientation::Horizontal,
         spec.minimum,
@@ -272,7 +272,7 @@ pub(crate) fn full_width_slider(spec: FullWidthSliderSpec<'_>) -> BauhausSlider 
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct SliderInputSpec {
+pub struct SliderInputSpec {
     pub(crate) factor: f64,
     pub(crate) offset: f64,
     pub(crate) suffix: &'static str,
@@ -469,11 +469,15 @@ fn install_scale_model_sync(
     });
 }
 
-pub(crate) fn attach(scale: gtk4::Scale, spec: SliderInputSpec) -> BauhausSlider {
+pub fn attach(scale: gtk4::Scale, spec: SliderInputSpec) -> BauhausSlider {
     let model = model_from_scale(&scale, spec);
     attach_model(scale, model)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The GTK slider attachment keeps model synchronization, controllers, and popup lifecycle wiring together."
+)]
 fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider {
     scale.set_focusable(true);
     let input = Rc::new(RefCell::new(NumericInputBuffer::new()));
@@ -760,7 +764,11 @@ fn install_popup_presentation_sync(
     });
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "The GTK controller keeps the source widget arguments and popup event-wiring order explicit."
+)]
 fn install_popup_pointer_input(
     content: &gtk4::Overlay,
     popup: &gtk4::Popover,
@@ -1026,7 +1034,10 @@ fn request_source_focus(scale: &gtk4::Scale) {
     scale.grab_focus();
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The GTK controller keeps the source widget arguments explicit to preserve event-wiring order."
+)]
 fn source_popup_motion(
     scale: &gtk4::Scale,
     fine_tune_surface: &gtk4::DrawingArea,
@@ -1073,7 +1084,10 @@ fn source_popup_motion(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The GTK controller keeps the source widget arguments explicit to preserve event-wiring order."
+)]
 fn source_zoom_range(
     scale: &gtk4::Scale,
     fine_tune_surface: &gtk4::DrawingArea,
@@ -1175,6 +1189,10 @@ struct FineTuneMetrics {
 }
 
 impl FineTuneMetrics {
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source fine-tune geometry preserves the original padding/line-height order."
+    )]
     fn for_surface(surface: &gtk4::DrawingArea) -> Self {
         let line_height = f64::from(source_line_height(surface));
         let inner_padding = f64::from(INNER_PADDING);
@@ -1183,7 +1201,7 @@ impl FineTuneMetrics {
             baseline_top: line_height + inner_padding,
             baseline_thickness: (baseline_size - SOURCE_BORDER_WIDTH).max(0.0),
             marker_size: (baseline_size + SOURCE_BORDER_WIDTH) * 0.95,
-            header_height: line_height + inner_padding * 2.0,
+            header_height: inner_padding * 2.0 + line_height,
         }
     }
 }
@@ -1208,7 +1226,10 @@ fn install_fine_tune_drawing(
     });
 }
 
-#[allow(clippy::float_cmp)]
+#[expect(
+    clippy::while_float,
+    reason = "The guideline loop follows the source floating-point count and preserves its drawing order."
+)]
 fn draw_fine_tune_surface(
     surface: &gtk4::DrawingArea,
     context: &gtk4::cairo::Context,
@@ -1286,7 +1307,10 @@ fn draw_fine_tune_surface(
     draw_source_indicator(context, width, model, metrics);
 }
 
-#[allow(clippy::float_cmp)]
+#[expect(
+    clippy::float_cmp,
+    reason = "Exact zero and range comparisons preserve the source slider drawing sentinels."
+)]
 fn draw_source_baseline(
     context: &gtk4::cairo::Context,
     width: f64,
@@ -1351,6 +1375,10 @@ fn draw_source_baseline(
         .expect("Bauhaus baseline context can be restored");
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The source guideline keeps its original floating-point geometry evaluation order."
+)]
 fn draw_source_guideline(
     context: &gtk4::cairo::Context,
     position: f64,
@@ -1437,7 +1465,11 @@ fn set_source_shaded_token(context: &gtk4::cairo::Context, rgba: [u8; 4], shade:
     );
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "The GTK slider boundary keeps bounded drag geometry and closed-popup event wiring in source order."
+)]
 fn install_closed_slider_input(
     scale: &gtk4::Scale,
     popup: &gtk4::Popover,
@@ -1752,7 +1784,10 @@ fn install_closed_slider_input(
     scale.add_controller(scroll);
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The GTK controller keeps the source widget arguments explicit to preserve event-wiring order."
+)]
 fn install_scale_keyboard(
     scale: &gtk4::Scale,
     anchor: &gtk4::MenuButton,
@@ -1868,7 +1903,10 @@ fn install_scale_keyboard(
     scale_widget.add_controller(key);
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The GTK controller keeps the source widget arguments explicit to preserve event-wiring order."
+)]
 fn install_secondary_click(
     scale: &gtk4::Scale,
     anchor: &gtk4::MenuButton,
@@ -1939,7 +1977,10 @@ fn install_secondary_click(
     scale_widget.add_controller(click);
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The GTK controller keeps the source widget arguments explicit to preserve event-wiring order."
+)]
 fn install_popup_keyboard(
     scale: &gtk4::Scale,
     popup: &gtk4::Popover,
@@ -2036,7 +2077,10 @@ fn install_popup_keyboard(
     popup_widget.add_controller(key);
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The GTK controller keeps the source widget arguments explicit to preserve event-wiring order."
+)]
 fn install_rejection(
     scale: &gtk4::Scale,
     expression: &gtk4::Label,
@@ -2073,7 +2117,10 @@ fn install_rejection(
     });
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The GTK controller keeps the source widget arguments explicit to preserve event-wiring order."
+)]
 fn show_popup(
     scale: &gtk4::Scale,
     anchor: &gtk4::MenuButton,
@@ -2107,7 +2154,10 @@ fn update_current_value(model: &RefCell<BauhausSliderModel>, current_value: &gtk
     current_value.set_text(&model.value_text(model.value()));
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The source drag transition performs its bounded geometry in native f32 coordinates."
+)]
 fn source_relative_drag_transition(
     width: f64,
     visible_width: f64,
@@ -2202,7 +2252,7 @@ fn modifier_speed_multiplier(modifiers: gdk::ModifierType) -> f64 {
     }
 }
 
-fn primary_accelerator_mask() -> gdk::ModifierType {
+const fn primary_accelerator_mask() -> gdk::ModifierType {
     #[cfg(target_os = "macos")]
     {
         gdk::ModifierType::META_MASK

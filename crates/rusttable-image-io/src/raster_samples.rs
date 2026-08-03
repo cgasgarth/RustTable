@@ -38,7 +38,10 @@ impl DecodedRgbSamples {
 ///
 /// Returns a typed error when the PNG is malformed, unsupported, or exceeds
 /// the supplied source, dimension, pixel, or decoded-byte limits.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "PNG source validation, bounded backend decoding, and sample-count invariants stay in one transaction"
+)]
 pub fn decode_png_rgb_samples(
     bytes: &[u8],
     limits: DecodeLimits,
@@ -227,7 +230,7 @@ fn malformed(message: impl Into<String>) -> ImageInputError {
     }
 }
 
-fn unsupported(reason: UnsupportedImageFeature) -> ImageInputError {
+const fn unsupported(reason: UnsupportedImageFeature) -> ImageInputError {
     ImageInputError::UnsupportedFeature {
         format: rusttable_image::InputFormat::Png,
         reason,

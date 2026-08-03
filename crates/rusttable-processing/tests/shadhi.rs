@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Shadhi test vectors preserve IEEE-754 parity order."
+)]
 #![allow(
     clippy::float_cmp,
     reason = "compatibility tests assert stable scalar values"

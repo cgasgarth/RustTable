@@ -1,3 +1,10 @@
+#![expect(
+    clippy::imprecise_flops,
+    clippy::suboptimal_flops,
+    clippy::while_float,
+    reason = "Native Diffuse wavelet equations preserve source evaluation order and bounded f32 stepping."
+)]
+
 //! Direct CPU helpers from `src/common/bspline.h` and `src/common/dwt.h`.
 
 #![allow(
@@ -46,7 +53,7 @@ pub fn num_steps_to_reach_equivalent_sigma(sigma_filter: f32, sigma_final: f32) 
 
 /// Native row interleaving used for cache locality in wavelet and PDE passes.
 #[must_use]
-pub fn dwt_interleave_rows(row_id: usize, height: usize, stride: usize) -> usize {
+pub const fn dwt_interleave_rows(row_id: usize, height: usize, stride: usize) -> usize {
     if height <= stride {
         return row_id;
     }

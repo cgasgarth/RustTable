@@ -15,7 +15,7 @@ const BASICADJ_V1_NATIVE_LE: &[u8; BASICADJ_V1_PARAMETER_BYTES] =
 const BASICADJ_V2_NATIVE_LE: &[u8; BASICADJ_V2_PARAMETER_BYTES] =
     include_bytes!("../../../fixtures/corpus/assets/operation-basicadj-params-v2.bin");
 
-fn v1_parameters() -> BasicAdjParametersV1 {
+const fn v1_parameters() -> BasicAdjParametersV1 {
     BasicAdjParametersV1 {
         black_point: -0.125,
         exposure: 1.25,
@@ -30,7 +30,7 @@ fn v1_parameters() -> BasicAdjParametersV1 {
     }
 }
 
-fn v2_parameters() -> BasicAdjParametersV2 {
+const fn v2_parameters() -> BasicAdjParametersV2 {
     BasicAdjParametersV2 {
         black_point: -0.125,
         exposure: 1.25,
@@ -46,7 +46,7 @@ fn v2_parameters() -> BasicAdjParametersV2 {
     }
 }
 
-fn v1_defaults() -> BasicAdjParametersV1 {
+const fn v1_defaults() -> BasicAdjParametersV1 {
     BasicAdjParametersV1 {
         black_point: 0.0,
         exposure: 0.0,
@@ -61,7 +61,7 @@ fn v1_defaults() -> BasicAdjParametersV1 {
     }
 }
 
-fn v2_defaults() -> BasicAdjParametersV2 {
+const fn v2_defaults() -> BasicAdjParametersV2 {
     BasicAdjParametersV2 {
         black_point: 0.0,
         exposure: 0.0,

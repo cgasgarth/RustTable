@@ -25,7 +25,7 @@ pub struct DispatchReport {
 }
 
 impl DispatchReport {
-    fn ignored(reason: InputIgnoreReason) -> Self {
+    const fn ignored(reason: InputIgnoreReason) -> Self {
         Self {
             events: Vec::new(),
             ignored: Some(reason),
@@ -156,7 +156,7 @@ impl ActionInputService {
 
     /// Marks the current window as modal. Modal mappings are then the only
     /// mappings eligible for dispatch.
-    pub fn set_modal(&mut self, modal: bool) {
+    pub const fn set_modal(&mut self, modal: bool) {
         self.context.modal = modal;
     }
 
@@ -246,7 +246,7 @@ impl ActionInputService {
             DeviceStatus::Connected => {}
         }
 
-        let candidates = self
+        let Some((_, _, index, matched)) = self
             .mappings
             .iter()
             .enumerate()
@@ -265,14 +265,14 @@ impl ActionInputService {
                     matched,
                 ))
             })
-            .collect::<Vec<_>>();
-        let Some((_, _, index, matched)) = candidates.into_iter().max_by(|left, right| {
-            (left.0, left.1, std::cmp::Reverse(left.2)).cmp(&(
-                right.0,
-                right.1,
-                std::cmp::Reverse(right.2),
-            ))
-        }) else {
+            .max_by(|left, right| {
+                (left.0, left.1, std::cmp::Reverse(left.2)).cmp(&(
+                    right.0,
+                    right.1,
+                    std::cmp::Reverse(right.2),
+                ))
+            })
+        else {
             return DispatchReport::ignored(InputIgnoreReason::NoMapping);
         };
         let mapping = &self.mappings[index];
@@ -344,7 +344,7 @@ struct MatchedInput {
     repeat: bool,
 }
 
-fn input_identity(input: &InputEvent) -> (&DeviceToken, u64, InputSource) {
+const fn input_identity(input: &InputEvent) -> (&DeviceToken, u64, InputSource) {
     match input {
         InputEvent::Keyboard(event) => (&event.device, event.timestamp, InputSource::Keyboard),
         InputEvent::Midi(event) => (&event.device, event.timestamp, InputSource::Midi),
@@ -472,7 +472,7 @@ fn normalize_axis(value: f32, deadzone: f32) -> Option<f32> {
     Some(value.signum() * ((magnitude - deadzone) / (1.0 - deadzone)))
 }
 
-fn action_phase(mode: ActionMode, phase: ActionPhase) -> Option<ActionPhase> {
+const fn action_phase(mode: ActionMode, phase: ActionPhase) -> Option<ActionPhase> {
     match (mode, phase) {
         (ActionMode::Activate, ActionPhase::Pressed | ActionPhase::Changed)
         | (ActionMode::Value | ActionMode::Relative, ActionPhase::Pressed) => {
@@ -558,7 +558,7 @@ mod tests {
         };
         service.add_mapping(ActionMapping::new(action("global"), binding.clone()));
         service.add_mapping(
-            ActionMapping::new(action("darkroom"), binding.clone())
+            ActionMapping::new(action("darkroom"), binding)
                 .with_scope(Scope::View("darkroom".to_owned())),
         );
         service.set_context(InputContext {

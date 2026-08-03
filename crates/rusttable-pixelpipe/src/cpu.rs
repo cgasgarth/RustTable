@@ -1,5 +1,7 @@
-#![allow(clippy::missing_errors_doc, clippy::match_same_arms)]
-
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "CPU pipeline errors are documented by the shared typed execution contract."
+)]
 use rusttable_color::{
     AdaptationMethod, AlphaTransform, BlackPointCompensation, BuiltinColorTransformPlanner,
     BuiltinSpace, ColorRole, ColorTransformPlanner, ColorTransformRequest, ExtendedRange, Pcs,
@@ -604,7 +606,7 @@ fn working_profile(request: &CpuPixelpipeSnapshot) -> rusttable_processing::Work
         .unwrap_or_else(rusttable_processing::WorkingFrameDescriptor::srgb)
 }
 
-pub(crate) fn operation_is_semantically_active(operation: &ProcessingOperation) -> bool {
+pub const fn operation_is_semantically_active(operation: &ProcessingOperation) -> bool {
     operation.is_enabled() && operation.opacity().get().to_bits() != 0.0_f32.to_bits()
 }
 
@@ -695,7 +697,7 @@ fn has_active_basicadj(request: &CpuPixelpipeSnapshot) -> bool {
     })
 }
 
-fn operation_uses_lab_stage(kind: &rusttable_processing::ProcessingOperationKind) -> bool {
+const fn operation_uses_lab_stage(kind: &rusttable_processing::ProcessingOperationKind) -> bool {
     matches!(
         kind,
         rusttable_processing::ProcessingOperationKind::ColorCorrection { .. }
@@ -775,66 +777,8 @@ fn execute_lab_point_chain(
     masks: Option<&OperationMaskSet>,
     scope: Option<&CancellationScope>,
 ) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
-    let first_active_lab_node = request
-        .graph()
-        .nodes()
-        .find(|node| {
-            operation_is_semantically_active(node.operation())
-                && operation_uses_lab_stage(node.operation().kind())
-        })
-        .map(rusttable_processing::OperationGraphNode::index);
-    let has_leading_rgb_stage = first_active_lab_node.is_some_and(|first_lab| {
-        request.graph().nodes().any(|node| {
-            node.index().get() < first_lab.get()
-                && operation_is_semantically_active(node.operation())
-        })
-    });
-
-    let mut rgb_boundary;
-    let mut output = if has_leading_rgb_stage {
-        let first_lab = first_active_lab_node.expect("a leading stage requires a later Lab node");
-        let mut working = to_linear_working(input)?;
-        for node in request
-            .graph()
-            .nodes()
-            .take_while(|node| node.index().get() < first_lab.get())
-        {
-            if !operation_is_semantically_active(node.operation()) {
-                continue;
-            }
-            working = evaluate_graph_node_with_context_and_cancellation(
-                node,
-                &working,
-                Some(plans),
-                masks,
-                || scope.is_some_and(|scope| scope.check().is_err()),
-            )
-            .map_err(|source| cancellable_evaluation_error(source, scope))?;
-        }
-        let lab = working_to_lab_channels(&working, input, scope, "RGB-to-Lab stage ingress")?;
-        rgb_boundary = Some((
-            color_transform(
-                rusttable_color::ColorEncoding::LabD50,
-                working.frame().encoding(),
-            )?,
-            working.frame(),
-        ));
-        lab
-    } else if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
-        rgb_boundary = None;
-        lab_input_channels(input, scope)?
-    } else {
-        let working = to_linear_working(input)?;
-        let lab = working_to_lab_channels(&working, input, scope, "RGB-to-Lab ingress")?;
-        rgb_boundary = Some((
-            color_transform(
-                rusttable_color::ColorEncoding::LabD50,
-                working.frame().encoding(),
-            )?,
-            working.frame(),
-        ));
-        lab
-    };
+    let (mut output, mut rgb_boundary, first_active_lab_node, has_leading_rgb_stage) =
+        prepare_lab_point_chain(request, input, plans, masks, scope)?;
     let mut diagnostics = Vec::new();
     for node in request.graph().nodes() {
         if has_leading_rgb_stage
@@ -852,10 +796,11 @@ fn execute_lab_point_chain(
         }
         let mask = masks.and_then(|set| set.mask_for(operation.operation_id()));
         let dimensions = input.descriptor().dimensions();
+        let input_pixel_count = input.pixels().len();
         if mask.is_some_and(|raster| {
             raster.width() != dimensions.width()
                 || raster.height() != dimensions.height()
-                || raster.values().len() != input.pixels().len()
+                || raster.values().len() != input_pixel_count
         }) {
             return Err(CpuPixelpipeError::Evaluation {
                 source: EvaluationError::OperationExecution {
@@ -911,148 +856,116 @@ fn execute_lab_point_chain(
             )?;
             continue;
         }
-        output = match operation.kind() {
-            rusttable_processing::ProcessingOperationKind::ColorCorrection { config } => {
-                let input = output
-                    .iter()
-                    .copied()
-                    .map(ColorCorrectionPixel::from_channels)
-                    .collect::<Vec<_>>();
-                let plan = ColorCorrectionPlan::new(*config);
-                let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
-                    plan.execute_lab(&input)
-                } else {
-                    plan.execute_lab_normal_blend(&input, mask, opacity)
-                };
-                result
-                    .into_iter()
-                    .map(ColorCorrectionPixel::channels)
-                    .collect()
-            }
-            rusttable_processing::ProcessingOperationKind::ColorContrast { config } => {
-                let input = output
-                    .iter()
-                    .copied()
-                    .map(ColorContrastPixel::from_channels)
-                    .collect::<Vec<_>>();
-                let plan = ColorContrastPlan::new(*config);
-                let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
-                    plan.execute_lab(&input)
-                } else {
-                    plan.execute_lab_normal_blend(&input, mask, opacity)
-                };
-                result
-                    .into_iter()
-                    .map(ColorContrastPixel::channels)
-                    .collect()
-            }
-            rusttable_processing::ProcessingOperationKind::Levels { config } => {
-                if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
-                    return Err(CpuPixelpipeError::Evaluation {
-                        source: EvaluationError::OperationExecution {
-                            step_index: node.pipeline_step_index(),
-                            operation_id: operation.operation_id(),
-                            reason: "Levels imported masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
-                        },
-                    });
-                }
-                let input = output
-                    .iter()
-                    .copied()
-                    .map(rusttable_processing::LevelsPixel::from_channels)
-                    .collect::<Vec<_>>();
-                let plan = rusttable_processing::LevelsPlan::new(*config, dimensions, None)
-                    .map_err(|error| levels_evaluation_error(node, error, scope))?;
-                plan.execute_with_cancel(&input, || {
-                    scope.is_some_and(|scope| scope.check().is_err())
-                })
-                .map_err(|error| levels_evaluation_error(node, error, scope))?
-                .into_iter()
-                .map(rusttable_processing::LevelsPixel::channels)
-                .collect()
-            }
-            rusttable_processing::ProcessingOperationKind::ColorTransfer { parameters } => {
-                if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
-                    return Err(CpuPixelpipeError::Evaluation {
-                        source: EvaluationError::OperationExecution {
-                            step_index: node.pipeline_step_index(),
-                            operation_id: operation.operation_id(),
-                            reason: "Color Transfer masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
-                        },
-                    });
-                }
-                let input = output
-                    .iter()
-                    .copied()
-                    .map(rusttable_processing::ColorTransferPixel::from_channels)
-                    .collect::<Vec<_>>();
-                parameters
-                    .plan(dimensions)
-                    .map_err(|error| sharpen_evaluation_error(node, error, scope))?
-                    .execute_with_cancel(&input, || {
-                        scope.is_some_and(|scope| scope.check().is_err())
-                    })
-                    .map_err(|error| sharpen_evaluation_error(node, error, scope))?
-                    .into_iter()
-                    .map(rusttable_processing::ColorTransferPixel::channels)
-                    .collect()
-            }
-            rusttable_processing::ProcessingOperationKind::ColorMapping { config } => {
-                if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
-                    return Err(CpuPixelpipeError::Evaluation {
-                        source: EvaluationError::OperationExecution {
-                            step_index: node.pipeline_step_index(),
-                            operation_id: operation.operation_id(),
-                            reason: "Color Mapping masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
-                        },
-                    });
-                }
-                let scale =
-                    request.scale_context().piece_iscale() / request.scale_context().roi_scale();
-                let plan = rusttable_processing::ColorMappingPlan::new_with_scale(
-                    (**config).clone(),
-                    dimensions,
-                    scale,
-                )
-                .map_err(|error| colormapping_plan_evaluation_error(node, error))?;
-                plan.execute_with_cancel(&output, || {
-                    scope.is_some_and(|scope| scope.check().is_err())
-                })
-                .map_err(|error| colormapping_evaluation_error(node, error, scope))?
-            }
-            rusttable_processing::ProcessingOperationKind::Vibrance { config } => {
-                let input = output
-                    .iter()
-                    .copied()
-                    .map(VibrancePixel::from_channels)
-                    .collect::<Vec<_>>();
-                let plan = VibrancePlan::new(*config);
-                let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
-                    plan.execute_lab(&input)
-                } else {
-                    plan.execute_lab_normal_blend(&input, mask, opacity)
-                };
-                result.into_iter().map(VibrancePixel::channels).collect()
-            }
-            _ => {
-                let frame = rgb_boundary.as_ref().map_or_else(
-                    rusttable_processing::WorkingFrameDescriptor::srgb,
-                    |(_, frame)| *frame,
-                );
-                let (pixels, frame) = execute_registered_rgb_stage(
-                    node, &output, dimensions, frame, plans, masks, scope,
-                )?;
-                rgb_boundary = Some((
-                    color_transform(rusttable_color::ColorEncoding::LabD50, frame.encoding())?,
-                    frame,
-                ));
-                pixels
-            }
-        };
+        output = execute_lab_point_operation(
+            &output,
+            mask,
+            opacity,
+            &mut LabPointOperationContext {
+                node,
+                dimensions,
+                plans,
+                masks,
+                scope,
+                scale: request.scale_context(),
+                rgb_boundary: &mut rgb_boundary,
+            },
+        )?;
     }
     if let Some(scope) = scope {
         scope.check().map_err(CpuPixelpipeError::Cancelled)?;
     }
+    finish_lab_point_chain(request, input, scope, &output, rgb_boundary, diagnostics)
+}
+
+type LabPointChainPreparation = (
+    Vec<[f32; 4]>,
+    Option<LabPointBoundary>,
+    Option<rusttable_processing::OperationGraphNodeIndex>,
+    bool,
+);
+
+fn prepare_lab_point_chain(
+    request: &CpuPixelpipeSnapshot,
+    input: &RgbaF32Image,
+    plans: &BasicAdjPlanSet,
+    masks: Option<&OperationMaskSet>,
+    scope: Option<&CancellationScope>,
+) -> Result<LabPointChainPreparation, CpuPixelpipeError> {
+    let first_active_lab_node = request
+        .graph()
+        .nodes()
+        .find(|node| {
+            operation_is_semantically_active(node.operation())
+                && operation_uses_lab_stage(node.operation().kind())
+        })
+        .map(rusttable_processing::OperationGraphNode::index);
+    let has_leading_rgb_stage = first_active_lab_node.is_some_and(|first_lab| {
+        request.graph().nodes().any(|node| {
+            node.index().get() < first_lab.get()
+                && operation_is_semantically_active(node.operation())
+        })
+    });
+    let rgb_boundary;
+    let output = if has_leading_rgb_stage {
+        let first_lab = first_active_lab_node.expect("a leading stage requires a later Lab node");
+        let mut working = to_linear_working(input)?;
+        for node in request
+            .graph()
+            .nodes()
+            .take_while(|node| node.index().get() < first_lab.get())
+        {
+            if !operation_is_semantically_active(node.operation()) {
+                continue;
+            }
+            working = evaluate_graph_node_with_context_and_cancellation(
+                node,
+                &working,
+                Some(plans),
+                masks,
+                || scope.is_some_and(|scope| scope.check().is_err()),
+            )
+            .map_err(|source| cancellable_evaluation_error(source, scope))?;
+        }
+        let lab = working_to_lab_channels(&working, input, scope, "RGB-to-Lab stage ingress")?;
+        rgb_boundary = Some((
+            color_transform(
+                rusttable_color::ColorEncoding::LabD50,
+                working.frame().encoding(),
+            )?,
+            working.frame(),
+        ));
+        lab
+    } else if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
+        rgb_boundary = None;
+        lab_input_channels(input, scope)?
+    } else {
+        let working = to_linear_working(input)?;
+        let lab = working_to_lab_channels(&working, input, scope, "RGB-to-Lab ingress")?;
+        rgb_boundary = Some((
+            color_transform(
+                rusttable_color::ColorEncoding::LabD50,
+                working.frame().encoding(),
+            )?,
+            working.frame(),
+        ));
+        lab
+    };
+    Ok((
+        output,
+        rgb_boundary,
+        first_active_lab_node,
+        has_leading_rgb_stage,
+    ))
+}
+
+fn finish_lab_point_chain(
+    request: &CpuPixelpipeSnapshot,
+    input: &RgbaF32Image,
+    scope: Option<&CancellationScope>,
+    output: &[[f32; 4]],
+    rgb_boundary: Option<LabPointBoundary>,
+    diagnostics: Vec<CpuPixelpipeDiagnostic>,
+) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
     if let Some((from_lab, frame)) = rgb_boundary {
         let pixels = output
             .iter()
@@ -1112,7 +1025,235 @@ fn execute_lab_point_chain(
         .map(|image| (image, diagnostics))
 }
 
-#[allow(clippy::too_many_arguments)]
+type LabPointBoundary = (TransformPlan, rusttable_processing::WorkingFrameDescriptor);
+
+struct LabPointOperationContext<'a> {
+    node: &'a rusttable_processing::OperationGraphNode,
+    dimensions: RasterDimensions,
+    plans: &'a BasicAdjPlanSet,
+    masks: Option<&'a OperationMaskSet>,
+    scope: Option<&'a CancellationScope>,
+    scale: crate::CpuPixelpipeScaleContext,
+    rgb_boundary: &'a mut Option<LabPointBoundary>,
+}
+
+fn execute_lab_point_operation(
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+    context: &mut LabPointOperationContext<'_>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    let operation = context.node.operation();
+    match operation.kind() {
+        rusttable_processing::ProcessingOperationKind::ColorCorrection { config } => {
+            Ok(execute_lab_color_correction(*config, output, mask, opacity))
+        }
+        rusttable_processing::ProcessingOperationKind::ColorContrast { config } => {
+            Ok(execute_lab_color_contrast(*config, output, mask, opacity))
+        }
+        rusttable_processing::ProcessingOperationKind::Levels { config } => {
+            execute_lab_levels(*config, output, mask, opacity, context)
+        }
+        rusttable_processing::ProcessingOperationKind::ColorTransfer { parameters } => {
+            execute_lab_color_transfer(parameters, output, mask, opacity, context)
+        }
+        rusttable_processing::ProcessingOperationKind::ColorMapping { config } => {
+            execute_lab_color_mapping(config.as_ref(), output, mask, opacity, context)
+        }
+        rusttable_processing::ProcessingOperationKind::Vibrance { config } => {
+            Ok(execute_lab_vibrance(*config, output, mask, opacity))
+        }
+        _ => execute_lab_registered_rgb_stage(output, context),
+    }
+}
+
+fn execute_lab_color_correction(
+    config: rusttable_processing::ColorCorrectionConfig,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+) -> Vec<[f32; 4]> {
+    let input = output
+        .iter()
+        .copied()
+        .map(ColorCorrectionPixel::from_channels)
+        .collect::<Vec<_>>();
+    let plan = ColorCorrectionPlan::new(config);
+    let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+        plan.execute_lab(&input)
+    } else {
+        plan.execute_lab_normal_blend(&input, mask, opacity)
+    };
+    result
+        .into_iter()
+        .map(ColorCorrectionPixel::channels)
+        .collect()
+}
+
+fn execute_lab_color_contrast(
+    config: rusttable_processing::ColorContrastConfig,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+) -> Vec<[f32; 4]> {
+    let input = output
+        .iter()
+        .copied()
+        .map(ColorContrastPixel::from_channels)
+        .collect::<Vec<_>>();
+    let plan = ColorContrastPlan::new(config);
+    let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+        plan.execute_lab(&input)
+    } else {
+        plan.execute_lab_normal_blend(&input, mask, opacity)
+    };
+    result
+        .into_iter()
+        .map(ColorContrastPixel::channels)
+        .collect()
+}
+
+fn execute_lab_levels(
+    config: rusttable_processing::LevelsConfig,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+    context: &LabPointOperationContext<'_>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: context.node.pipeline_step_index(),
+                operation_id: context.node.operation().operation_id(),
+                reason: "Levels imported masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+            },
+        });
+    }
+    let input = output
+        .iter()
+        .copied()
+        .map(rusttable_processing::LevelsPixel::from_channels)
+        .collect::<Vec<_>>();
+    let plan = rusttable_processing::LevelsPlan::new(config, context.dimensions, None)
+        .map_err(|error| levels_evaluation_error(context.node, error, context.scope))?;
+    let result = plan
+        .execute_with_cancel(&input, || {
+            context.scope.is_some_and(|scope| scope.check().is_err())
+        })
+        .map_err(|error| levels_evaluation_error(context.node, error, context.scope))?;
+    Ok(result
+        .into_iter()
+        .map(rusttable_processing::LevelsPixel::channels)
+        .collect())
+}
+
+fn execute_lab_color_transfer(
+    parameters: &rusttable_processing::ColorTransferParameters,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+    context: &LabPointOperationContext<'_>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: context.node.pipeline_step_index(),
+                operation_id: context.node.operation().operation_id(),
+                reason: "Color Transfer masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+            },
+        });
+    }
+    let input = output
+        .iter()
+        .copied()
+        .map(rusttable_processing::ColorTransferPixel::from_channels)
+        .collect::<Vec<_>>();
+    let result = parameters
+        .plan(context.dimensions)
+        .map_err(|error| sharpen_evaluation_error(context.node, error, context.scope))?
+        .execute_with_cancel(&input, || {
+            context.scope.is_some_and(|scope| scope.check().is_err())
+        })
+        .map_err(|error| sharpen_evaluation_error(context.node, error, context.scope))?;
+    Ok(result
+        .into_iter()
+        .map(rusttable_processing::ColorTransferPixel::channels)
+        .collect())
+}
+
+fn execute_lab_color_mapping(
+    config: &rusttable_processing::ColorMappingConfig,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+    context: &LabPointOperationContext<'_>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: context.node.pipeline_step_index(),
+                operation_id: context.node.operation().operation_id(),
+                reason: "Color Mapping masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+            },
+        });
+    }
+    let scale = context.scale.piece_iscale() / context.scale.roi_scale();
+    let plan = rusttable_processing::ColorMappingPlan::new_with_scale(
+        config.clone(),
+        context.dimensions,
+        scale,
+    )
+    .map_err(|error| colormapping_plan_evaluation_error(context.node, error))?;
+    plan.execute_with_cancel(output, || {
+        context.scope.is_some_and(|scope| scope.check().is_err())
+    })
+    .map_err(|error| colormapping_evaluation_error(context.node, error, context.scope))
+}
+
+fn execute_lab_vibrance(
+    config: rusttable_processing::VibranceConfig,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+) -> Vec<[f32; 4]> {
+    let input = output
+        .iter()
+        .copied()
+        .map(VibrancePixel::from_channels)
+        .collect::<Vec<_>>();
+    let plan = VibrancePlan::new(config);
+    let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+        plan.execute_lab(&input)
+    } else {
+        plan.execute_lab_normal_blend(&input, mask, opacity)
+    };
+    result.into_iter().map(VibrancePixel::channels).collect()
+}
+
+fn execute_lab_registered_rgb_stage(
+    output: &[[f32; 4]],
+    context: &mut LabPointOperationContext<'_>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    let frame = context.rgb_boundary.as_ref().map_or_else(
+        rusttable_processing::WorkingFrameDescriptor::srgb,
+        |(_, frame)| *frame,
+    );
+    let (pixels, frame) = execute_registered_rgb_stage(
+        context.node,
+        output,
+        context.dimensions,
+        frame,
+        context.plans,
+        context.masks,
+        context.scope,
+    )?;
+    *context.rgb_boundary = Some((
+        color_transform(rusttable_color::ColorEncoding::LabD50, frame.encoding())?,
+        frame,
+    ));
+    Ok(pixels)
+}
+
 fn execute_registered_rgb_stage(
     node: &rusttable_processing::OperationGraphNode,
     lab: &[[f32; 4]],
@@ -1213,7 +1354,10 @@ fn registered_stage_allocation_error(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the sharpen boundary carries mutable pixels, scale, mask, node identity, and cancellation"
+)]
 fn execute_sharpen_lab(
     config: rusttable_processing::operations::sharpen::SharpenConfig,
     output: &mut [[f32; 4]],
@@ -1275,7 +1419,9 @@ fn execute_sharpen_lab(
             let index = start + column;
             let coverage = mask.map_or(opacity, |values| values[index] * opacity);
             let source_lightness = destination[0];
-            destination[0] = source_lightness * (1.0 - coverage) + candidate.lightness() * coverage;
+            destination[0] = candidate
+                .lightness()
+                .mul_add(coverage, source_lightness * (1.0 - coverage));
         }
     }
     if let Some(scope) = scope {
@@ -1456,11 +1602,18 @@ fn execute_colorreconstruction_chunks_with_budget(
             poll_cancellation()?;
         }
         let coverage = mask.map_or(opacity, |values| values[index] * opacity);
-        output[index][0] = source.red().get() * (1.0 - coverage) + candidate.red().get() * coverage;
-        output[index][1] =
-            source.green().get() * (1.0 - coverage) + candidate.green().get() * coverage;
-        output[index][2] =
-            source.blue().get() * (1.0 - coverage) + candidate.blue().get() * coverage;
+        output[index][0] = candidate
+            .red()
+            .get()
+            .mul_add(coverage, source.red().get() * (1.0 - coverage));
+        output[index][1] = candidate
+            .green()
+            .get()
+            .mul_add(coverage, source.green().get() * (1.0 - coverage));
+        output[index][2] = candidate
+            .blue()
+            .get()
+            .mul_add(coverage, source.blue().get() * (1.0 - coverage));
     }
     Ok(None)
 }
@@ -1853,15 +2006,24 @@ fn execute_soften_working(
         let source = source.channels();
         let processed = processed.channels();
         output.push([
-            source[0] + (processed[0] - source[0]) * coverage,
-            source[1] + (processed[1] - source[1]) * coverage,
-            source[2] + (processed[2] - source[2]) * coverage,
-            source[3] + (processed[3] - source[3]) * coverage,
+            (processed[0] - source[0]).mul_add(coverage, source[0]),
+            (processed[1] - source[1]).mul_add(coverage, source[1]),
+            (processed[2] - source[2]).mul_add(coverage, source[2]),
+            (processed[3] - source[3]).mul_add(coverage, source[3]),
         ]);
     }
     if let Some(scope) = scope {
         scope.check().map_err(CpuPixelpipeError::Cancelled)?;
     }
+    finish_soften_working(output, dimensions, input.frame(), node)
+}
+
+fn finish_soften_working(
+    output: Vec<[f32; 4]>,
+    dimensions: RasterDimensions,
+    frame: rusttable_processing::WorkingFrameDescriptor,
+    node: &rusttable_processing::OperationGraphNode,
+) -> Result<(WorkingRgbImage, Vec<f32>), CpuPixelpipeError> {
     let mut working_pixels = Vec::new();
     let mut output_alpha = Vec::new();
     working_pixels
@@ -1907,13 +2069,15 @@ fn execute_soften_working(
         working_pixels.push(LinearRgb::new(red, green, blue));
         output_alpha.push(channels[3]);
     }
-    let working = WorkingRgbImage::new_with_frame(dimensions, working_pixels, input.frame())
-        .map_err(|error| CpuPixelpipeError::Evaluation {
-            source: EvaluationError::OperationExecution {
-                step_index: node.pipeline_step_index(),
-                operation_id: node.operation().operation_id(),
-                reason: error.to_string(),
-            },
+    let working =
+        WorkingRgbImage::new_with_frame(dimensions, working_pixels, frame).map_err(|error| {
+            CpuPixelpipeError::Evaluation {
+                source: EvaluationError::OperationExecution {
+                    step_index: node.pipeline_step_index(),
+                    operation_id: node.operation().operation_id(),
+                    reason: error.to_string(),
+                },
+            }
         })?;
     Ok((working, output_alpha))
 }
@@ -2218,7 +2382,7 @@ fn expand_tile(
     })
 }
 
-pub(crate) fn requires_full_frame_execution(request: &CpuPixelpipeSnapshot) -> bool {
+pub fn requires_full_frame_execution(request: &CpuPixelpipeSnapshot) -> bool {
     request.graph().nodes().any(|node| {
         let operation = node.operation();
         // The shared effect descriptor carries conservative full-image flags,
@@ -2289,7 +2453,7 @@ fn clahe_evaluation_error(
     cancellable_evaluation_error(source, scope)
 }
 
-pub(crate) fn validate_input_encoding(input: &RgbaF32Image) -> Result<(), CpuPixelpipeError> {
+pub const fn validate_input_encoding(input: &RgbaF32Image) -> Result<(), CpuPixelpipeError> {
     let actual = input.descriptor().color_encoding();
     if matches!(
         actual,
@@ -2394,7 +2558,7 @@ fn output_encoding(mode: CpuPixelpipeOutputMode, input: RgbaF32Descriptor) -> Rg
     }
 }
 
-pub(crate) fn color_transform(
+pub fn color_transform(
     source: rusttable_color::ColorEncoding,
     target: rusttable_color::ColorEncoding,
 ) -> Result<TransformPlan, CpuPixelpipeError> {
@@ -2442,9 +2606,7 @@ fn to_processing_source(input: &RgbaF32Image) -> Result<SourceRgbImage, CpuPixel
     })
 }
 
-pub(crate) fn to_linear_working(
-    input: &RgbaF32Image,
-) -> Result<WorkingRgbImage, CpuPixelpipeError> {
+pub fn to_linear_working(input: &RgbaF32Image) -> Result<WorkingRgbImage, CpuPixelpipeError> {
     validate_input_encoding(input)?;
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         let to_rgb = color_transform(
@@ -2517,13 +2679,11 @@ pub(crate) fn to_linear_working(
             return to_colorin_working(input, source_color);
         }
         RgbaF32ColorEncoding::External(_) => {
-            let source_color =
-                input
-                    .descriptor()
-                    .source_color()
-                    .ok_or(CpuPixelpipeError::MissingSourceColor {
-                        actual: input.descriptor().color_encoding(),
-                    })?;
+            let source_color = input.descriptor().source_color().ok_or_else(|| {
+                CpuPixelpipeError::MissingSourceColor {
+                    actual: input.descriptor().color_encoding(),
+                }
+            })?;
             return to_colorin_working(input, source_color);
         }
         _ => {}
@@ -2532,7 +2692,7 @@ pub(crate) fn to_linear_working(
     Ok(to_linear_srgb(&source))
 }
 
-pub(crate) fn output_from_working(
+pub fn output_from_working(
     mode: CpuPixelpipeOutputMode,
     input: &RgbaF32Image,
     evaluated: &WorkingRgbImage,
@@ -2557,7 +2717,7 @@ fn output_from_working_with_alpha(
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
 }
 
-pub(crate) fn output_descriptor(
+pub fn output_descriptor(
     mode: CpuPixelpipeOutputMode,
     source: RgbaF32Descriptor,
     dimensions: RasterDimensions,
@@ -2832,15 +2992,17 @@ mod tests {
         assert_eq!(rgba_bits(&zero), rgba_bits(&input));
         assert_eq!(
             blended.red().to_bits(),
-            ((source.red() / 100.0 * 0.5 + candidate.red() / 100.0 * 0.5) * 100.0).to_bits()
+            ((candidate.red() / 100.0).mul_add(0.5, source.red() / 100.0 * 0.5) * 100.0).to_bits()
         );
         assert_eq!(
             blended.green().to_bits(),
-            ((source.green() / 128.0 * 0.5 + candidate.green() / 128.0 * 0.5) * 128.0).to_bits()
+            ((candidate.green() / 128.0).mul_add(0.5, source.green() / 128.0 * 0.5) * 128.0)
+                .to_bits()
         );
         assert_eq!(
             blended.blue().to_bits(),
-            ((source.blue() / 128.0 * 0.5 + candidate.blue() / 128.0 * 0.5) * 128.0).to_bits()
+            ((candidate.blue() / 128.0).mul_add(0.5, source.blue() / 128.0 * 0.5) * 128.0)
+                .to_bits()
         );
         for output in [&zero, &partial, &full] {
             assert_eq!(

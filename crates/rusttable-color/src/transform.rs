@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Color transform interpolation and accumulation retain explicit f32 operation order for native parity; FMA would change results."
+)]
+
 use crate::conversions::{ColorMathError, lab_to_xyz, xyz_to_lab};
 use crate::{
     AdaptationMethod, ColorEncoding, ColorRole, FiniteF32, FiniteF32Error, Matrix3,
@@ -162,8 +167,11 @@ pub enum ColorTransformRequestError {
 }
 
 impl ColorTransformRequest {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The public transform request preserves the complete native color ABI field order."
+    )]
+    pub const fn new(
         source: ColorEncoding,
         target: ColorEncoding,
         role: ColorRole,
@@ -342,7 +350,7 @@ impl Lut1D {
     }
 
     #[must_use]
-    pub fn sample_count(&self) -> usize {
+    pub const fn sample_count(&self) -> usize {
         self.samples.len()
     }
 }

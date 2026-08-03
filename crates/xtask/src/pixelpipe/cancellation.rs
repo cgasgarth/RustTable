@@ -21,8 +21,11 @@ const SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-cancellation-source-m
 const SOURCE_MAP_SCHEMA: &str = "rusttable.pixelpipe-cancellation-source-map.v1";
 
 #[derive(Debug, Args)]
-#[allow(clippy::struct_excessive_bools)]
-pub(crate) struct CancellationMatrixArgs {
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "preserve the source-map verification command's independent flags"
+)]
+pub struct CancellationMatrixArgs {
     #[arg(long)]
     pub rapid_generations: bool,
     #[arg(long)]
@@ -33,7 +36,7 @@ pub(crate) struct CancellationMatrixArgs {
     pub verify_no_stale_publication: bool,
 }
 
-pub(crate) fn run(root: &Path, args: &CancellationMatrixArgs) -> Result {
+pub fn run(root: &Path, args: &CancellationMatrixArgs) -> Result {
     if !args.rapid_generations
         || !args.shared_builds
         || !args.late_completions
@@ -70,7 +73,7 @@ fn shared_builds() -> Result {
     let cache = Arc::new(Cache::new(CacheConfig::new(1024)));
     let key = fixture_key(3)?;
     let builds = Arc::new(AtomicUsize::new(0));
-    let worker_cache = cache.clone();
+    let worker_cache = cache;
     let worker_builds = builds.clone();
     let worker = thread::spawn(move || {
         let token = CancellationToken::new();
@@ -135,8 +138,11 @@ fn fixture_key(seed: u8) -> Result<CacheKey> {
         .map_err(|error| error.to_string())
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-derived pixelpipe cancellation source-map validation together"
+)]
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     if issue != 272 {
         return Err(format!(
             "pixelpipe cancellation source map: unsupported issue {issue}"

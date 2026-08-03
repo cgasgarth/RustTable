@@ -38,7 +38,7 @@ pub struct DarkroomPanelProjections {
 
 impl DarkroomPanelProjections {
     #[must_use]
-    pub fn loading(target: DarkroomPanelTarget, revision: Revision) -> Self {
+    pub const fn loading(target: DarkroomPanelTarget, revision: Revision) -> Self {
         Self {
             history: DarkroomPanelProjection::loading(target, revision),
             snapshots: DarkroomPanelProjection::loading(target, revision),
@@ -205,7 +205,10 @@ impl GtkDarkroomPanelController {
     /// # Errors
     ///
     /// Returns a stale, domain, persistence, or projection error without publishing UI state.
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the source-ordered panel action transaction and projection together"
+    )]
     pub fn apply(
         &mut self,
         action: &DarkroomPanelAction,
@@ -280,7 +283,7 @@ impl GtkDarkroomPanelController {
                 let snapshot = state
                     .snapshots()
                     .find(|snapshot| snapshot.id() == id)
-                    .ok_or(DarkroomPanelControllerError::UnknownSnapshot(id.get()))?;
+                    .ok_or_else(|| DarkroomPanelControllerError::UnknownSnapshot(id.get()))?;
                 selected_snapshot = Some(snapshot.id());
                 if comparison.is_some() {
                     comparison = comparison_for_snapshot(&state, selected_snapshot);
@@ -415,7 +418,7 @@ fn persistence(message: impl Into<String>) -> DarkroomPanelControllerError {
     DarkroomPanelControllerError::Persistence(message.into())
 }
 
-fn action_target(action: &DarkroomPanelAction) -> DarkroomPanelTarget {
+const fn action_target(action: &DarkroomPanelAction) -> DarkroomPanelTarget {
     match action {
         DarkroomPanelAction::SelectHistory { target, .. }
         | DarkroomPanelAction::NavigateHistory { target, .. }

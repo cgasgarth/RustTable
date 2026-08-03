@@ -236,6 +236,10 @@ fn install_histogram_draw(chart: &gtk4::DrawingArea, data: &Rc<RefCell<Option<Hi
             for (index, bin) in data.bins().iter().enumerate() {
                 let index = u32::try_from(index).expect("histogram bin index is bounded");
                 let x = (f64::from(index) + 0.5) * bin_width;
+                #[expect(
+                    clippy::suboptimal_flops,
+                    reason = "Histogram display geometry preserves the source multiply/divide evaluation order."
+                )]
                 let y = height - (f64::from(bin.channel(channel)) / f64::from(maximum) * height);
                 if first {
                     context.move_to(x, height);
@@ -257,6 +261,10 @@ fn install_histogram_draw(chart: &gtk4::DrawingArea, data: &Rc<RefCell<Option<Hi
             for (index, bin) in data.bins().iter().enumerate() {
                 let index = u32::try_from(index).expect("histogram bin index is bounded");
                 let x = (f64::from(index) + 0.5) * bin_width;
+                #[expect(
+                    clippy::suboptimal_flops,
+                    reason = "Histogram display geometry preserves the source multiply/divide evaluation order."
+                )]
                 let y = height - (f64::from(bin.channel(channel)) / f64::from(maximum) * height);
                 if index == 0 {
                     context.move_to(x, y);
@@ -279,10 +287,11 @@ fn install_histogram_sample_selection(
     chart.set_tooltip_text(Some("Click the histogram to select a luminance/RGB range"));
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
-    clippy::cast_sign_loss
+    clippy::cast_sign_loss,
+    reason = "Histogram coordinates are clamped to the finite bin domain before the usize index conversion."
 )]
 fn histogram_bin_for_x(x: f64, width: f64) -> usize {
     ((x / width) * DARKROOM_HISTOGRAM_BINS as f64)
@@ -340,19 +349,19 @@ impl FilmstripState {
         self.generation = generation;
     }
 
-    pub(super) fn selected(&self) -> Option<PhotoId> {
+    pub(super) const fn selected(&self) -> Option<PhotoId> {
         self.selected
     }
 
-    pub(super) fn generation(&self) -> ViewportGeneration {
+    pub(super) const fn generation(&self) -> ViewportGeneration {
         self.generation
     }
 
-    pub(super) fn set_generation(&mut self, generation: ViewportGeneration) {
+    pub(super) const fn set_generation(&mut self, generation: ViewportGeneration) {
         self.generation = generation;
     }
 
-    pub(super) fn clear_selection(&mut self) {
+    pub(super) const fn clear_selection(&mut self) {
         self.selected = None;
     }
 

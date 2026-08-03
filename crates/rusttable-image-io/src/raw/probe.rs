@@ -238,7 +238,7 @@ fn probe_bigtiff_raw(bytes: &[u8]) -> RawProbeOutcome {
             raw_tags,
             camera: RawCameraEvidence {
                 maker: metadata.make.clone(),
-                model: metadata.model.clone(),
+                model: metadata.model,
             },
             compression: RawCompressionEvidence {
                 compression: tiff_compression(page.compression),
@@ -249,7 +249,7 @@ fn probe_bigtiff_raw(bytes: &[u8]) -> RawProbeOutcome {
     })
 }
 
-fn tiff_compression(compression: TiffCompression) -> RawCompression {
+const fn tiff_compression(compression: TiffCompression) -> RawCompression {
     match compression {
         TiffCompression::None => RawCompression::Uncompressed,
         TiffCompression::Jpeg => RawCompression::LosslessJpeg,
@@ -423,7 +423,7 @@ fn inspect_tiff_at(bytes: &[u8], base: usize) -> Result<TiffRawSummary, ()> {
     Ok(summary)
 }
 
-fn is_raw_evidence_tag(tag: u16) -> bool {
+const fn is_raw_evidence_tag(tag: u16) -> bool {
     matches!(
         tag,
         33421 | 33422 | 50706 | 50710 | 50711 | 50713 | 50714 | 50717 | 50829 | 50830
@@ -534,7 +534,7 @@ fn read_u32(bytes: &[u8], offset: usize, order: Endian) -> Option<u32> {
     })
 }
 
-fn compression_from_code(code: Option<u32>) -> RawCompression {
+const fn compression_from_code(code: Option<u32>) -> RawCompression {
     match code {
         Some(1) => RawCompression::Uncompressed,
         Some(7 | 34_792) => RawCompression::LosslessJpeg,

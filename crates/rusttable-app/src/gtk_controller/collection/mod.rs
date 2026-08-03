@@ -240,7 +240,7 @@ impl CollectionController {
         self.reconcile_selection();
     }
 
-    pub fn accept_generation(&mut self, generation: u64) -> bool {
+    pub const fn accept_generation(&mut self, generation: u64) -> bool {
         if generation < self.generation {
             return false;
         }
@@ -248,11 +248,11 @@ impl CollectionController {
         true
     }
 
-    pub fn set_sort(&mut self, sort: LighttableSort) {
+    pub const fn set_sort(&mut self, sort: LighttableSort) {
         self.sort = sort;
     }
 
-    pub fn set_sort_direction(&mut self, direction: LighttableSortDirection) {
+    pub const fn set_sort_direction(&mut self, direction: LighttableSortDirection) {
         self.sort_direction = direction;
     }
 

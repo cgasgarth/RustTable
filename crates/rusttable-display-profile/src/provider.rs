@@ -27,7 +27,7 @@ pub struct ProviderMonitor {
 
 impl ProviderMonitor {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         descriptor: MonitorDescriptor,
         provider: DisplayProvider,
         probe: ProfileProbe,
@@ -41,7 +41,7 @@ impl ProviderMonitor {
     }
 
     #[must_use]
-    pub fn unavailable(descriptor: MonitorDescriptor, provider: DisplayProvider) -> Self {
+    pub const fn unavailable(descriptor: MonitorDescriptor, provider: DisplayProvider) -> Self {
         Self {
             descriptor,
             provider,
@@ -115,8 +115,20 @@ impl SystemProfileAdapter {
         Self { provider }
     }
 
+    #[cfg(not(target_os = "linux"))]
     #[must_use]
-    pub fn current() -> Self {
+    pub const fn current() -> Self {
+        Self::new(current_provider())
+    }
+
+    /// Selects the current provider, probing Linux desktop environment variables.
+    #[cfg(target_os = "linux")]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Linux provider selection reads runtime WAYLAND_DISPLAY and DISPLAY variables"
+    )]
+    #[must_use]
+    pub const fn current() -> Self {
         Self::new(current_provider())
     }
 
@@ -184,7 +196,7 @@ fn current_provider() -> DisplayProvider {
 }
 
 #[cfg(target_os = "macos")]
-fn current_provider() -> DisplayProvider {
+const fn current_provider() -> DisplayProvider {
     DisplayProvider::ColorSync
 }
 
@@ -203,7 +215,10 @@ fn current_provider() -> DisplayProvider {
 /// # Errors
 ///
 /// Returns an error when the supplied geometry or UI-local alias is invalid.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "preserve the native display evidence fields at the GTK adapter boundary"
+)]
 pub fn descriptor_from_gdk_evidence(
     platform: &str,
     connector: Option<&str>,

@@ -104,7 +104,13 @@ impl RedbCatalogRepository {
         Ok(event)
     }
 
-    pub(crate) fn prepare_import_photo_group(
+    /// Prepares a durable group update for importing a new photo.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict when the group or photo cannot be updated without
+    /// violating catalog identity constraints, or a storage error on lookup.
+    pub fn prepare_import_photo_group(
         &self,
         group_id: PhotoGroupId,
         photo_id: PhotoId,
@@ -125,7 +131,13 @@ impl RedbCatalogRepository {
             .map_err(|_| super::AtomicCatalogStoreError::Conflict)
     }
 
-    pub(crate) fn stage_photo_group_membership(
+    /// Stages one photo-group membership row inside an open transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage or encoding error when the membership cannot be
+    /// written to the transaction.
+    pub fn stage_photo_group_membership(
         transaction: &WriteTransaction,
         group: &PhotoGroup,
         photo_id: PhotoId,

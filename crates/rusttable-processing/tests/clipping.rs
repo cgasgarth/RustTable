@@ -1,4 +1,11 @@
-#![allow(clippy::cast_precision_loss, clippy::float_cmp)]
+#![expect(
+    clippy::cast_precision_loss,
+    reason = "Clipping fixtures intentionally compare native f32 coordinate conversions."
+)]
+#![expect(
+    clippy::float_cmp,
+    reason = "Clipping compatibility tests assert exact native parameter values."
+)]
 
 use rusttable_processing::RasterDimensions;
 use rusttable_processing::operations::clipping::{

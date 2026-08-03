@@ -468,7 +468,7 @@ fn profile_parts(
     }
 }
 
-fn profile_primaries(profile: &ColorInProfile) -> Option<rusttable_color::Primaries> {
+const fn profile_primaries(profile: &ColorInProfile) -> Option<rusttable_color::Primaries> {
     match profile {
         ColorInProfile::Builtin(space) => space.primaries(),
         ColorInProfile::Matrix { primaries, .. } => Some(*primaries),
@@ -520,7 +520,7 @@ fn normalize(mut value: [f32; 3], mode: ColorInNormalization) -> [f32; 3] {
     value
 }
 
-fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
+const fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
     (value.0.get(), value.1.get())
 }
 fn plan_identity(

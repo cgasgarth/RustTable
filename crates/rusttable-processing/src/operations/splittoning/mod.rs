@@ -183,7 +183,7 @@ impl SplitToningHistory {
         }
     }
 
-    pub fn current(&self) -> Result<SplitToningParametersV1, SplitToningError> {
+    pub const fn current(&self) -> Result<SplitToningParametersV1, SplitToningError> {
         match self {
             Self::V1(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(SplitToningError::OpaqueVersion(*version)),
@@ -449,6 +449,10 @@ fn hsl_to_rgba(mut hue: f32, saturation: f32, lightness: f32) -> [f32; 4] {
     } else {
         (-lightness).mul_add(saturation, lightness + saturation)
     };
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "preserve the native hsl2rgb subtraction order and rounding"
+    )]
     let first = (2.0_f64 * f64::from(lightness) - f64::from(second)) as f32;
     hue *= 6.0_f32;
     [
@@ -515,7 +519,7 @@ fn fallible_copy(bytes: &[u8]) -> Result<Vec<u8>, SplitToningError> {
     Ok(copied)
 }
 
-fn require_length(bytes: &[u8], expected: usize) -> Result<(), SplitToningError> {
+const fn require_length(bytes: &[u8], expected: usize) -> Result<(), SplitToningError> {
     if bytes.len() == expected {
         Ok(())
     } else {

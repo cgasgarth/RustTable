@@ -42,7 +42,7 @@ pub struct OrganizationRows {
 
 impl OrganizationRows {
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.tags.is_empty()
             && self.assignments.is_empty()
             && self.labels.is_empty()

@@ -1,8 +1,4 @@
 //! RustTable-owned, deterministic RGB↔YUV conversion shared by AVIF and HEIF.
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::enum_variant_names)]
-#![allow(clippy::similar_names)]
 
 use rusttable_image::{ByteOrder, ChannelLayout, SampleType};
 
@@ -23,6 +19,10 @@ impl BitDepth {
     }
 }
 
+#[expect(
+    clippy::enum_variant_names,
+    reason = "retain the native 4:4:4, 4:2:2, and 4:2:0 subsampling names"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subsampling {
     FourFourFour,
@@ -86,6 +86,11 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+#[expect(
+    clippy::similar_names,
+    clippy::suboptimal_flops,
+    reason = "preserve native YUV plane, coefficient, and matrix arithmetic names/order"
+)]
 pub fn convert(
     input: Input<'_>,
     width: u32,
@@ -182,6 +187,10 @@ pub fn convert(
     })
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve native YUV coefficient and matrix arithmetic order"
+)]
 pub fn roundtrip_rgb(frame: &Frame, matrix: Matrix, range: Range) -> Vec<[u16; 3]> {
     let (kr, kb) = coefficients(matrix);
     let kg = 1.0 - kr - kb;
@@ -238,6 +247,12 @@ fn read_sample(
     Ok(value)
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::suboptimal_flops,
+    reason = "preserve native range arithmetic; clamping proves the integer conversion bounds"
+)]
 fn code(value: f32, depth: BitDepth, range: Range, luma: bool) -> u16 {
     let max = depth.max();
     let scaled = match (range, luma) {
@@ -248,6 +263,10 @@ fn code(value: f32, depth: BitDepth, range: Range, luma: bool) -> u16 {
     scaled.clamp(0.0, max).round() as u16
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve native inverse range arithmetic and operation order"
+)]
 fn uncode(value: u16, depth: BitDepth, range: Range, luma: bool) -> f32 {
     let max = depth.max();
     let value = f32::from(value) / max;
@@ -258,6 +277,11 @@ fn uncode(value: u16, depth: BitDepth, range: Range, luma: bool) -> f32 {
     }
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamping proves the native normalized sample conversion bounds"
+)]
 fn scale(value: f32, max: f32) -> u16 {
     (value.clamp(0.0, 1.0) * max).round() as u16
 }
@@ -279,6 +303,10 @@ const fn chroma_dimensions(width: u32, height: u32, subsampling: Subsampling) ->
     }
 }
 
+#[expect(
+    clippy::similar_names,
+    reason = "retain native Cb/Cr plane and accumulator names"
+)]
 fn downsample(
     cb: &[u16],
     cr: &[u16],
@@ -291,8 +319,8 @@ fn downsample(
     if subsampling == Subsampling::FourFourFour {
         return (cb.to_vec(), cr.to_vec());
     }
-    let cw = chroma_width as usize;
-    let ch = chroma_height as usize;
+    let cw = usize::try_from(chroma_width).expect("chroma width fits host index");
+    let ch = usize::try_from(chroma_height).expect("chroma height fits host index");
     let block_y = if subsampling == Subsampling::FourTwoZero {
         2
     } else {

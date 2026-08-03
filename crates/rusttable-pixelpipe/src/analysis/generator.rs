@@ -518,6 +518,10 @@ fn accumulate(
         AnalysisKind::Vectorscope => {
             let (kr, kb) = request.graticule().luma_coefficients();
             let kg = 1.0 - kr - kb;
+            #[expect(
+                clippy::suboptimal_flops,
+                reason = "Preserve Darktable's vectorscope luminance operation order"
+            )]
             let y = kr * rgb[0] + kg * rgb[1] + kb * rgb[2];
             let cb = (rgb[2] - y) / (2.0 * (1.0 - kb));
             let cr = (rgb[0] - y) / (2.0 * (1.0 - kr));
@@ -682,7 +686,11 @@ fn fixed_intensity(
             let value = (f64::from(alpha.clamp(0.0, 1.0))
                 * f64::from(u32::try_from(quantum).expect("analysis quantum is at most 2^16")))
             .round_ties_even();
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "The alpha and quantum bounds keep the rounded analysis weight in u64 range"
+            )]
             let fixed = value as u64;
             fixed
         }

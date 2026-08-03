@@ -2,9 +2,9 @@ mod ai_ui;
 mod collection_bridge;
 mod darkroom;
 mod import_bridge;
-pub(crate) mod selected_preview;
+pub mod selected_preview;
 mod selection_restore;
-pub(crate) mod services;
+pub mod services;
 mod thumbnails;
 
 pub use services::catalog_preview::smoke::{
@@ -189,7 +189,10 @@ fn connect_application_signals(
     });
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-ordered application activation wiring together"
+)]
 fn activate_application(
     application: &gtk4::Application,
     active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
@@ -369,7 +372,7 @@ fn activate_application(
             &thumbnail_refresh_lifecycle,
         );
     }));
-    let export_selection = export_panel.clone();
+    let export_selection = export_panel;
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
     let darkroom_selection_controller = Rc::clone(&darkroom_bridge.controller);
     let darkroom_selection_shell = shell.clone();
@@ -788,7 +791,7 @@ impl ExportLifecycle {
         self.generation
     }
 
-    fn is_current(&self, token: u64) -> bool {
+    const fn is_current(&self, token: u64) -> bool {
         self.generation == token
     }
 }

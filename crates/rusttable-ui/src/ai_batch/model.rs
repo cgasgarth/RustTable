@@ -1,6 +1,10 @@
 //! Side-effect-free batch state and typed service port.
 
-#![allow(clippy::derivable_impls, clippy::missing_errors_doc)]
+#![expect(
+    clippy::derivable_impls,
+    clippy::missing_errors_doc,
+    reason = "The AI batch model keeps explicit source defaults and documents its typed service errors at the public boundary."
+)]
 
 use std::fmt;
 
@@ -153,7 +157,7 @@ impl AiBatchRecipe {
         self.task
     }
     #[must_use]
-    pub fn model(&self) -> Option<&ModelHash> {
+    pub const fn model(&self) -> Option<&ModelHash> {
         self.model.as_ref()
     }
     #[must_use]
@@ -188,13 +192,13 @@ impl AiBatchRecipe {
     pub const fn group_with_source(&self) -> bool {
         self.group_with_source
     }
-    pub fn set_task(&mut self, value: AiBatchTask) {
+    pub const fn set_task(&mut self, value: AiBatchTask) {
         self.task = value;
     }
     pub fn set_model(&mut self, value: Option<ModelHash>) {
         self.model = value;
     }
-    pub fn set_provider(&mut self, value: Option<AiProvider>) {
+    pub const fn set_provider(&mut self, value: Option<AiProvider>) {
         self.provider = value;
     }
     pub fn set_strength(&mut self, value: u8) {
@@ -221,7 +225,7 @@ pub struct AiBatchItem {
 }
 impl AiBatchItem {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         selection: AiBatchSelection,
         eligibility: AiBatchEligibility,
         reason: Option<String>,
@@ -269,7 +273,7 @@ pub struct AiBatchReview {
 }
 impl AiBatchReview {
     #[must_use]
-    pub fn new(recipe: AiBatchRecipe, items: Vec<AiBatchItem>) -> Self {
+    pub const fn new(recipe: AiBatchRecipe, items: Vec<AiBatchItem>) -> Self {
         Self {
             recipe,
             items,
@@ -288,7 +292,7 @@ impl AiBatchReview {
     pub const fn policy(&self) -> AiBatchEnqueuePolicy {
         self.policy
     }
-    pub fn set_policy(&mut self, policy: AiBatchEnqueuePolicy) {
+    pub const fn set_policy(&mut self, policy: AiBatchEnqueuePolicy) {
         self.policy = policy;
     }
     #[must_use]

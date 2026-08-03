@@ -70,7 +70,7 @@ pub struct PhotoOrganizationState {
 
 impl PhotoOrganizationState {
     #[must_use]
-    pub fn new(photo_id: PhotoId) -> Self {
+    pub const fn new(photo_id: PhotoId) -> Self {
         Self {
             photo_id,
             rating: Rating::Zero,

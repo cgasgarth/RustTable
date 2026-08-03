@@ -4,7 +4,10 @@
 //! per attempt, permits at most two strictly smaller OOM retries, and exposes a
 //! single exact CPU fallback/publication boundary.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Recovery errors are documented by the shared publication contract and typed failure variants."
+)]
 
 mod assembly;
 mod model;

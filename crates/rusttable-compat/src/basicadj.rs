@@ -41,7 +41,7 @@ pub enum BasicAdjPreserveColors {
 }
 
 impl BasicAdjPreserveColors {
-    fn from_native(raw: i32) -> Result<Self, BasicAdjCodecError> {
+    const fn from_native(raw: i32) -> Result<Self, BasicAdjCodecError> {
         match raw {
             0 => Ok(Self::None),
             1 => Ok(Self::Luminance),
@@ -328,7 +328,7 @@ impl BasicAdjHistory {
 
     /// Resolves either known version to canonical v2, leaving opaque versions unavailable.
     #[must_use]
-    pub fn migrate_v1(&self) -> Option<BasicAdjParametersV2> {
+    pub const fn migrate_v1(&self) -> Option<BasicAdjParametersV2> {
         match self {
             Self::V1(parameters) => Some(migrate_v1_to_v2(*parameters)),
             Self::V2(parameters) => Some(*parameters),
@@ -396,8 +396,10 @@ pub enum BasicAdjHistoryStepDecode {
 }
 
 /// Decodes one Basic Adjustments row's core without editing exhaustive import
-/// dispatch. The owning import integrator must retain `source` as authoritative
-/// until blend/mask and multi-instance behavior are proven.
+/// dispatch.
+///
+/// The owning import integrator must retain `source` as authoritative until
+/// blend/mask and multi-instance behavior are proven.
 #[must_use]
 pub fn decode_basicadj_history_step(step: &CompatHistoryStep) -> BasicAdjHistoryStepDecode {
     let Some(raw_version) = step.module else {

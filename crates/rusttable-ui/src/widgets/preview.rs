@@ -154,7 +154,7 @@ impl PhotoPreview {
 
     /// Returns the root GTK widget for insertion into a darkroom workspace.
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -293,13 +293,13 @@ impl PhotoPreview {
 
     /// Returns the title label used by the darkroom surface.
     #[must_use]
-    pub fn title_label(&self) -> &gtk4::Label {
+    pub const fn title_label(&self) -> &gtk4::Label {
         &self.title
     }
 
     /// Returns the status label used by the darkroom surface.
     #[must_use]
-    pub fn status_label(&self) -> &gtk4::Label {
+    pub const fn status_label(&self) -> &gtk4::Label {
         &self.status
     }
 

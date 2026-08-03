@@ -162,7 +162,7 @@ pub struct FairnessReceipt {
     pub deficit: i64,
 }
 
-pub(crate) struct MetricsMut;
+pub struct MetricsMut;
 
 impl MetricsMut {
     pub(crate) const fn record_outcome(metrics: &mut SchedulerMetrics, outcome: TaskState) {

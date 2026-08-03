@@ -1,4 +1,11 @@
-#![allow(clippy::cast_precision_loss, clippy::default_trait_access)]
+#![expect(
+    clippy::cast_precision_loss,
+    reason = "Perspective fixtures intentionally compare native coordinate precision boundaries."
+)]
+#![expect(
+    clippy::default_trait_access,
+    reason = "Perspective fixtures use default contract values to mirror native initialization."
+)]
 
 use rusttable_image::Roi;
 use rusttable_processing::operations::perspective;

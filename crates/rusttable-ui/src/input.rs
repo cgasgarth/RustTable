@@ -120,7 +120,7 @@ impl GtkInputAdapter {
     /// Keeps the controllers available for callers that need to adjust GTK
     /// propagation or inspect ownership in diagnostics.
     #[must_use]
-    pub fn controllers(&self) -> (&gtk4::EventControllerKey, &gtk4::GestureStylus) {
+    pub const fn controllers(&self) -> (&gtk4::EventControllerKey, &gtk4::GestureStylus) {
         (&self.key_controller, &self.stylus)
     }
 }
@@ -195,7 +195,10 @@ fn elapsed_millis(started: &Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX)
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The input value is clamped to the f32 presentation range before narrowing."
+)]
 fn narrow_f64(value: f64) -> f32 {
     value.clamp(f64::from(f32::MIN), f64::from(f32::MAX)) as f32
 }
@@ -207,7 +210,7 @@ fn key_code(key: gdk::Key) -> KeyCode {
     )
 }
 
-fn modifiers(state: ModifierType) -> Modifiers {
+const fn modifiers(state: ModifierType) -> Modifiers {
     let mut modifiers = Modifiers::empty();
     if state.contains(ModifierType::SHIFT_MASK) {
         modifiers = modifiers.union(Modifiers::SHIFT);

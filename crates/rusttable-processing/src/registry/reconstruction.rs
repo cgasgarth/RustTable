@@ -6,7 +6,11 @@ use crate::registry::{
 };
 use rusttable_core::Operation;
 
-pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
+#[expect(
+    clippy::too_many_lines,
+    reason = "The exhaustive operation-to-descriptor mapping stays together so new operations cannot be omitted silently."
+)]
+pub fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     match operation.kind() {
         crate::ProcessingOperationKind::Agx { .. } => crate::descriptor::agx_descriptor().id,
         crate::ProcessingOperationKind::BasicAdj { .. } => {
@@ -129,7 +133,7 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
     }
 }
 
-pub(crate) fn prepare_highlights(
+pub fn prepare_highlights(
     operation: &Operation,
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
@@ -140,7 +144,7 @@ pub(crate) fn prepare_highlights(
     )
 }
 
-pub(crate) fn prepare_color_reconstruction(
+pub fn prepare_color_reconstruction(
     operation: &Operation,
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
@@ -152,7 +156,7 @@ pub(crate) fn prepare_color_reconstruction(
     )
 }
 
-pub(crate) fn highlights_definition() -> OperationDefinition {
+pub fn highlights_definition() -> OperationDefinition {
     reconstruction_definition(
         crate::descriptor::highlights_descriptor(),
         prepare_highlights,
@@ -166,7 +170,7 @@ pub(crate) fn highlights_definition() -> OperationDefinition {
     )
 }
 
-pub(crate) fn color_reconstruction_definition() -> OperationDefinition {
+pub fn color_reconstruction_definition() -> OperationDefinition {
     reconstruction_definition(
         crate::descriptor::color_reconstruction_descriptor(),
         prepare_color_reconstruction,

@@ -16,6 +16,10 @@
     clippy::missing_panics_doc,
     reason = "the source contract fixes native f32-to-integer and raster arithmetic"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Highpass Lab blend arithmetic preserves source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt;
 
@@ -292,7 +296,7 @@ pub struct HighpassTiling {
     pub align: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighpassPlan {
     config: HighpassConfig,
     dimensions: RasterDimensions,
@@ -510,7 +514,7 @@ fn check_budget(
         .checked_mul(std::mem::size_of::<HighpassPixel>())
         .and_then(|bytes| bytes.checked_add(pixel_count.checked_mul(std::mem::size_of::<f32>())?))
         .and_then(|bytes| bytes.checked_add(scratch_bytes))
-        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+        .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: ReconstructionBudget::default().maximum_bytes(),
         })?;
@@ -576,9 +580,9 @@ fn overlap_for_radius(radius: u32) -> u32 {
     (3.0_f32 * sigma).ceil() as u32
 }
 
-#[allow(
+#[expect(
     clippy::manual_clamp,
-    reason = "native LCLIP preserves the bounded comparison ordering"
+    reason = "Native LCLIP preserves the bounded comparison ordering."
 )]
 fn lclip(value: f32) -> f32 {
     if value < 0.0_f32 {
@@ -590,10 +594,6 @@ fn lclip(value: f32) -> f32 {
     }
 }
 
-#[allow(
-    clippy::manual_clamp,
-    reason = "native CLAMPS maps NaN to the low bound instead of returning NaN"
-)]
 fn clamp_lab(value: f64) -> f32 {
     if value >= 0.0_f64 {
         if value <= 100.0_f64 {

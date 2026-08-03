@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Scale Pixels arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use super::{
     OperationExecutionError, ScalePixelsExecution, ScalePixelsKernel, ScalePixelsMaskError,
     ScalePixelsPlan,

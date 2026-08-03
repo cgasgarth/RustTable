@@ -5,12 +5,6 @@
 //! with the source. Its tiling callback supplies neighborhood overlap, which
 //! the production Rust path must honor without dropping the native RGBA layout.
 
-#![allow(
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss
-)]
-
 use std::time::Duration;
 
 use rusttable_core::{
@@ -89,6 +83,10 @@ fn graph(operations: Vec<Operation>) -> CompiledOperationGraph {
     CompiledOperationGraph::compile(&edit).expect("registered Soften graph")
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived Soften fixture arithmetic order"
+)]
 fn input(width: u32, height: u32) -> RgbaF32Image {
     let dimensions = RasterDimensions::new(width, height).expect("nonzero dimensions");
     let pixels = (0..dimensions.pixel_count())
@@ -111,7 +109,10 @@ fn input(width: u32, height: u32) -> RgbaF32Image {
     .expect("valid linear RGBA input")
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The source Soften fixture includes each native scale and parameter field"
+)]
 fn soften_snapshot(
     width: u32,
     height: u32,
@@ -178,6 +179,12 @@ fn impulse_input(width: u32, height: u32) -> RgbaF32Image {
     .expect("valid impulse input")
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Preserve native Soften's checked-width and integer-radius conversions"
+)]
 fn native_radius(width: u32, height: u32, size: f32, roi_scale: f32, piece_iscale: f32) -> usize {
     // soften.c: mrad = hypotf(iwidth * iscale, iheight * iscale) * .01f;
     // rad is converted to int before the ROI scale is applied and ceiled.
@@ -191,6 +198,10 @@ fn native_radius(width: u32, height: u32, size: f32, roi_scale: f32, piece_iscal
     usize::try_from(maximum_radius.min(radius)).expect("native radius fits usize")
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "Preserve native Soften's sample-count division order in the parity oracle"
+)]
 fn box_mean_gray(mut values: Vec<f32>, width: usize, height: usize, radius: usize) -> Vec<f32> {
     for _ in 0..BOX_ITERATIONS {
         let mut horizontal = vec![0.0; values.len()];
@@ -260,6 +271,10 @@ fn disabled_single_node_soften_is_an_exact_pass_through() {
 }
 
 #[test]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Soften alpha blend arithmetic order"
+)]
 fn mixed_soften_graph_preserves_rgba_and_uses_snapshot_scale() {
     let source = input(137, 113);
     let scale = CpuPixelpipeScaleContext::new(0.5, 2.0).expect("native scale context");
@@ -412,6 +427,10 @@ fn four_channel_native_blend_scales_alpha_by_the_soften_amount() {
 }
 
 #[test]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Soften masked blend arithmetic order"
+)]
 fn mask_and_operation_opacity_scale_the_soften_candidate_and_alpha() {
     const WIDTH: u32 = 137;
     const HEIGHT: u32 = 113;

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Channel Mixer arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible legacy channel mixer processing leaf.
 //!
 //! This module is a direct port of `src/iop/channelmixer.c` and its
@@ -48,9 +53,9 @@ const BLUE: usize = 5;
 const GRAY: usize = 6;
 const HSL_OUTPUTS: std::ops::RangeInclusive<usize> = HUE..=LIGHTNESS;
 const RGB_OUTPUTS: std::ops::RangeInclusive<usize> = RED..=BLUE;
-#[allow(
+#[expect(
     clippy::excessive_precision,
-    reason = "the native colorspaces.h constant is ported exactly"
+    reason = "The native colorspaces.h constant is ported exactly."
 )]
 const MIN_HSL_DENOMINATOR: f32 = 1.525_878_906_25e-5_f32;
 
@@ -451,9 +456,11 @@ fn finite_array(
     Ok(output)
 }
 
-/// Four-channel native float sample. RGB is processed and channel four is
-/// copied bit-for-bit; the separate normal-blend entry point replaces it with
-/// local blend coverage just as Darktable's RGB blend helper does.
+/// Four-channel native float sample.
+///
+/// RGB is processed and channel four is copied bit-for-bit; the separate
+/// normal-blend entry point replaces it with local blend coverage just as
+/// Darktable's RGB blend helper does.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChannelMixerPixel {
     channels: [f32; 4],
@@ -863,10 +870,10 @@ fn c_fmin(first: f32, second: f32) -> f32 {
 }
 
 /// Port of `src/common/colorspaces.h::rgb2hsl` in source operation order.
-#[allow(
+#[expect(
     clippy::float_cmp,
     clippy::manual_midpoint,
-    reason = "the native colorspaces.h conversion uses exact comparisons and its overflow-visible grouping"
+    reason = "The native colorspaces.h conversion uses exact comparisons and its overflow-visible grouping."
 )]
 fn rgb_to_hsl(rgb: [f32; 3]) -> (f32, f32, f32) {
     let pmax = c_fmax(c_fmax(rgb[0], rgb[1]), rgb[2]);

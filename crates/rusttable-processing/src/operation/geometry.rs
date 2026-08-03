@@ -42,7 +42,7 @@ const CLIPPING_PARAMETERS: [&str; 21] = [
 ];
 const RASTERFILE_PARAMETERS: [&str; 3] = ["mode", "filename", "filename2"];
 
-pub(crate) fn compile_scalepixels(
+pub fn compile_scalepixels(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &SCALEPIXELS_PARAMETERS)?;
@@ -105,7 +105,7 @@ const LENSCORRECTION_PARAMETERS: [&str; 8] = [
     "distance",
 ];
 
-pub(crate) fn compile_clipping(
+pub fn compile_clipping(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &CLIPPING_PARAMETERS)?;
@@ -142,7 +142,7 @@ pub(crate) fn compile_clipping(
     })
 }
 
-pub(crate) fn compile_rasterfile(
+pub fn compile_rasterfile(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &RASTERFILE_PARAMETERS)?;
@@ -166,7 +166,7 @@ pub(crate) fn compile_rasterfile(
     })
 }
 
-pub(crate) fn compile_finalscale(
+pub fn compile_finalscale(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &FINALSCALE_PARAMETERS)?;
@@ -231,7 +231,7 @@ pub(crate) fn compile_finalscale(
     })
 }
 
-pub(crate) fn compile_enlargecanvas(
+pub fn compile_enlargecanvas(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &ENLARGECANVAS_PARAMETERS)?;
@@ -252,7 +252,7 @@ pub(crate) fn compile_enlargecanvas(
     })
 }
 
-pub(crate) fn compile_perspective(
+pub fn compile_perspective(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &PERSPECTIVE_PARAMETERS)?;
@@ -283,7 +283,7 @@ pub(crate) fn compile_perspective(
     })
 }
 
-pub(crate) fn compile_lenscorrection(
+pub fn compile_lenscorrection(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &LENSCORRECTION_PARAMETERS)?;

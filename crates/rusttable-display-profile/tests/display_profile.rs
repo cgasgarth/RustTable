@@ -15,19 +15,21 @@ fn profile(seed: u8, device_class: [u8; 4]) -> Vec<u8> {
     bytes
 }
 
-#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 fn matrix_profile() -> Vec<u8> {
     let tag_count = 4_usize;
     let table_size = 4 + tag_count * 12;
     let profile_size = 128 + table_size + 4 * 20;
+    let profile_size_u32 =
+        u32::try_from(profile_size).expect("synthetic ICC fixture size fits u32");
+    let tag_count_u32 = u32::try_from(tag_count).expect("synthetic ICC fixture tag count fits u32");
     let mut bytes = vec![0_u8; profile_size];
-    bytes[0..4].copy_from_slice(&(profile_size as u32).to_be_bytes());
+    bytes[0..4].copy_from_slice(&profile_size_u32.to_be_bytes());
     bytes[8..12].copy_from_slice(b"mntr");
     bytes[12..16].copy_from_slice(b"RGB ");
     bytes[16..20].copy_from_slice(b"RGB ");
     bytes[20..24].copy_from_slice(b"XYZ ");
     bytes[36..40].copy_from_slice(b"acsp");
-    bytes[128..132].copy_from_slice(&(tag_count as u32).to_be_bytes());
+    bytes[128..132].copy_from_slice(&tag_count_u32.to_be_bytes());
     for (index, (name, values)) in [
         (b"rXYZ", [0.48657, 0.22897, 0.0]),
         (b"gXYZ", [0.26567, 0.69174, 0.04511]),
@@ -39,13 +41,23 @@ fn matrix_profile() -> Vec<u8> {
     {
         let table = 132 + index * 12;
         let offset = 128 + table_size + index * 20;
+        let offset_u32 = u32::try_from(offset).expect("synthetic ICC fixture offset fits u32");
         bytes[table..table + 4].copy_from_slice(name);
-        bytes[table + 4..table + 8].copy_from_slice(&(offset as u32).to_be_bytes());
+        bytes[table + 4..table + 8].copy_from_slice(&offset_u32.to_be_bytes());
         bytes[table + 8..table + 12].copy_from_slice(&20_u32.to_be_bytes());
         bytes[offset..offset + 4].copy_from_slice(b"XYZ ");
         for (channel, value) in values.into_iter().enumerate() {
+            let fixed = {
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "synthetic ICC XYZ fixture values are bounded before s15Fixed16 encoding"
+                )]
+                {
+                    (value * 65_536.0) as i32
+                }
+            };
             bytes[offset + 8 + channel * 4..offset + 12 + channel * 4]
-                .copy_from_slice(&((value * 65_536.0) as i32).to_be_bytes());
+                .copy_from_slice(&fixed.to_be_bytes());
         }
     }
     bytes
@@ -65,7 +77,7 @@ fn monitor(seed: &str) -> MonitorDescriptor {
     .expect("descriptor")
 }
 
-fn provider_monitor(descriptor: MonitorDescriptor, probe: ProfileProbe) -> ProviderMonitor {
+const fn provider_monitor(descriptor: MonitorDescriptor, probe: ProfileProbe) -> ProviderMonitor {
     ProviderMonitor::new(descriptor, DisplayProvider::Synthetic, probe)
 }
 
@@ -155,7 +167,7 @@ fn selection_precedence_has_no_implicit_srgb() {
     let id = descriptor.id();
     let mut service = DisplayProfileService::new();
     service
-        .reconcile([provider_monitor(descriptor.clone(), ProfileProbe::Absent)])
+        .reconcile([provider_monitor(descriptor, ProfileProbe::Absent)])
         .expect("inventory");
     assert_eq!(
         service.snapshot(id).expect("snapshot").selection(),
@@ -227,7 +239,7 @@ fn profile_hash_hotplug_and_window_generation_events_are_safe() {
     service
         .reconcile([
             provider_monitor(first.clone(), ProfileProbe::Current(profile(1, *b"mntr"))),
-            provider_monitor(second.clone(), ProfileProbe::Current(profile(2, *b"mntr"))),
+            provider_monitor(second, ProfileProbe::Current(profile(2, *b"mntr"))),
         ])
         .expect("initial");
     let _ = service.events();

@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Perspective execution arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_lossless,
     clippy::cast_possible_truncation,
@@ -419,7 +423,7 @@ impl PerspectivePlan {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PerspectiveExecution {
     pixels: Vec<LinearRgb>,
     dimensions: RasterDimensions,

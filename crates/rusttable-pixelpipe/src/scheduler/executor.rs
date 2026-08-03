@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::{RunningTask, TaskFailure, TaskId, WorkUnitBoundary};
@@ -8,11 +6,23 @@ use crate::{RunningTask, TaskFailure, TaskId, WorkUnitBoundary};
 /// dedicated bounded Rayon pool; this crate supplies no executor or runtime.
 pub trait CpuWorkerPoolBoundary: Send + Sync {
     fn worker_limit(&self) -> u16;
+
+    /// Dispatches a running task to the bounded worker pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns the task failure when the pool cannot accept or execute the
+    /// work.
     fn dispatch(&self, task: RunningTask) -> Result<(), TaskFailure>;
 }
 
 /// A work-unit callback is deliberately run only at a scheduler boundary. A
 /// panic becomes a task failure and cannot unwind through pool coordination.
+///
+/// # Errors
+///
+/// Returns [`TaskFailure::WorkUnitFailed`] for a callback error or
+/// [`TaskFailure::PanicIsolated`] when the callback panics.
 pub fn isolate_work_unit<F>(work: F) -> Result<(), TaskFailure>
 where
     F: FnOnce() -> Result<(), ()>,

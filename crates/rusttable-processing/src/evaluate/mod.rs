@@ -18,7 +18,7 @@ mod liquify;
 mod mask;
 mod output;
 mod spots;
-pub(super) use arithmetic::{apply_channels, apply_reconstruction, blend};
+pub use arithmetic::{apply_channels, apply_reconstruction, blend};
 pub use basicadj::BasicAdjPlanSet;
 pub use frame::{
     DistortionBorderMode, DistortionInterpolation, DistortionPlan, DistortionSamplingPolicy,
@@ -26,7 +26,7 @@ pub use frame::{
     evaluate_graph_at_frame_boundaries, evaluate_graph_at_frame_boundaries_with_masks,
     graph_has_discrete_geometry, graph_has_frame_geometry,
 };
-pub(crate) use frame::{
+pub use frame::{
     evaluate_graph_at_frame_boundaries_with_plans,
     evaluate_graph_at_frame_boundaries_with_plans_and_masks,
 };
@@ -141,7 +141,7 @@ pub fn evaluate_output(
         EvaluationOutput::Terminal,
     ))
 }
-pub(crate) fn evaluate_steps<'a, I>(
+pub fn evaluate_steps<'a, I>(
     steps: I,
     input: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -152,7 +152,7 @@ where
 {
     evaluate_steps_with_plans(steps, input, dimensions, pixel_index_offset, None)
 }
-pub(crate) fn evaluate_steps_with_plans<'a, I>(
+pub fn evaluate_steps_with_plans<'a, I>(
     steps: I,
     input: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -177,7 +177,7 @@ where
     }
     Ok(pixels)
 }
-pub(crate) fn evaluate_steps_with_frame<'a, I>(
+pub fn evaluate_steps_with_frame<'a, I>(
     steps: I,
     input: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -206,7 +206,7 @@ where
     )
 }
 
-pub(crate) fn evaluate_steps_with_frame_and_masks<'a, I>(
+pub fn evaluate_steps_with_frame_and_masks<'a, I>(
     steps: I,
     input: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -237,11 +237,11 @@ where
     )
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "the canonical graph boundary carries explicit frame, mask, plan, and cancellation evidence"
 )]
-pub(crate) fn evaluate_steps_with_frame_and_masks_with_cancellation<'a, I, C>(
+pub fn evaluate_steps_with_frame_and_masks_with_cancellation<'a, I, C>(
     steps: I,
     input: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -288,7 +288,7 @@ where
 ///
 /// Returns the first graph-operation or automatic-analysis failure.
 pub use basicadj_runtime::{prepare_basicadj_plans, prepare_basicadj_plans_with_cancellation};
-pub(crate) fn execute_prepared_operation(
+pub fn execute_prepared_operation(
     operation: &PreparedCpuOperation,
     step_index: PipelineStepIndex,
     pixels: &mut [LinearRgb],
@@ -304,7 +304,6 @@ pub(crate) fn execute_prepared_operation(
         None,
     )
 }
-#[allow(clippy::too_many_lines)]
 fn apply_operation_with_plans(
     step_index: PipelineStepIndex,
     operation: &ProcessingOperation,
@@ -326,12 +325,11 @@ fn apply_operation_with_plans(
         None,
     )
 }
-#[allow(
-    clippy::too_many_lines,
+#[expect(
     clippy::too_many_arguments,
     reason = "the operation dispatcher keeps typed graph semantics centralized"
 )]
-pub(crate) fn apply_operation_with_profile(
+pub fn apply_operation_with_profile(
     step_index: PipelineStepIndex,
     operation: &ProcessingOperation,
     pixels: &mut [LinearRgb],
@@ -356,12 +354,12 @@ pub(crate) fn apply_operation_with_profile(
     )
 }
 
-#[allow(
-    clippy::too_many_lines,
+#[expect(
     clippy::too_many_arguments,
-    reason = "the operation dispatcher keeps typed graph semantics centralized"
+    clippy::too_many_lines,
+    reason = "The operation dispatcher keeps typed graph semantics and cancellation routing centralized."
 )]
-pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
+pub fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
     step_index: PipelineStepIndex,
     operation: &ProcessingOperation,
     pixels: &mut [LinearRgb],

@@ -1,7 +1,8 @@
 #![expect(
     clippy::missing_errors_doc,
     clippy::struct_excessive_bools,
-    reason = "the workflow contract documents external ICC/model terms and explicit state flags"
+    clippy::suboptimal_flops,
+    reason = "the workflow contract documents external ICC/model terms, explicit state flags, and source equation order"
 )]
 
 use std::{fmt, path::PathBuf};
@@ -444,12 +445,12 @@ impl RgbDenoiseRequest {
     }
 
     #[must_use]
-    pub fn working_profile(&self) -> &RgbProfile {
+    pub const fn working_profile(&self) -> &RgbProfile {
         &self.working_profile
     }
 
     #[must_use]
-    pub fn output_profile(&self) -> &RgbProfile {
+    pub const fn output_profile(&self) -> &RgbProfile {
         &self.output_profile
     }
 
@@ -494,7 +495,7 @@ impl RgbDenoiseRequest {
     }
 
     #[must_use]
-    pub fn with_strength(mut self, strength: Strength) -> Self {
+    pub const fn with_strength(mut self, strength: Strength) -> Self {
         self.strength = strength;
         self
     }
@@ -512,7 +513,7 @@ impl RgbDenoiseRequest {
     }
 
     #[must_use]
-    pub fn with_tiff(mut self, tiff: TiffRecipe) -> Self {
+    pub const fn with_tiff(mut self, tiff: TiffRecipe) -> Self {
         self.tiff = tiff;
         self
     }

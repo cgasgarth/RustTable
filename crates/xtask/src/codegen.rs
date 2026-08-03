@@ -6,13 +6,13 @@ use clap::{Args, Subcommand};
 use crate::{PINNED_DARKTABLE_COMMIT, Result};
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum CodegenCommand {
+pub enum CodegenCommand {
     /// Generate or verify the darktable operation compatibility manifest.
     Operations(OperationsArgs),
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct OperationsArgs {
+pub struct OperationsArgs {
     /// Verify committed output instead of writing it.
     #[arg(long)]
     check: bool,
@@ -25,7 +25,7 @@ pub(crate) struct OperationsArgs {
     output: PathBuf,
 }
 
-pub(crate) fn run(root: &Path, command: CodegenCommand) -> Result {
+pub fn run(root: &Path, command: CodegenCommand) -> Result {
     match command {
         CodegenCommand::Operations(arguments) => operations(root, &arguments),
     }
@@ -39,7 +39,7 @@ fn validate_architecture_provenance(
         .map_err(|error| error.to_string())
 }
 
-pub(crate) fn verify_committed(root: &Path) -> Result {
+pub fn verify_committed(root: &Path) -> Result {
     let path = root.join("architecture/darktable-operations.toml");
     let source =
         fs::read_to_string(&path).map_err(|error| format!("read {}: {error}", path.display()))?;

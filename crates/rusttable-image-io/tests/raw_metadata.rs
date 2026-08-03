@@ -74,7 +74,10 @@ fn xpro2_decode_publishes_canonical_14_bit_xtrans_metadata_without_changing_raw(
 }
 
 #[test]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the integration fixture exercises source precedence, invalid override findings, and canonical provenance in one scenario"
+)]
 fn standardized_dng_beats_maker_note_and_invalid_override_falls_back_with_provenance() {
     let decoded = decode_fixture();
     let context = RawMetadataContext {
@@ -170,7 +173,7 @@ fn standardized_dng_beats_maker_note_and_invalid_override_falls_back_with_proven
         },
     };
 
-    let forward = vec![maker_note.clone(), dng.clone(), invalid_override.clone()];
+    let forward = vec![maker_note, dng, invalid_override];
     let mut reverse = forward.clone();
     reverse.reverse();
     let first = normalize_raw_metadata(&decoded.frame, &context, &forward).expect("metadata");
@@ -212,7 +215,7 @@ fn standardized_dng_beats_maker_note_and_invalid_override_falls_back_with_proven
 #[test]
 fn mono_linear_and_missing_calibration_remain_explicit() {
     let decoded = decode_fixture();
-    let mut parts = decoded.frame.clone().into_parts();
+    let mut parts = decoded.frame.into_parts();
     parts.planes[0].layout = RawPlaneLayout::Linear {
         channels: vec![RawChannel::Unknown],
     };

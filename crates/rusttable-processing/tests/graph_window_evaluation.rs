@@ -74,7 +74,7 @@ fn graph() -> CompiledOperationGraph {
     ])
 }
 
-fn window(start_row: usize, row_count: usize) -> RasterRowWindow {
+const fn window(start_row: usize, row_count: usize) -> RasterRowWindow {
     RasterRowWindow::new(start_row, row_count)
 }
 

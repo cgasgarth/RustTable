@@ -50,7 +50,10 @@ impl Lut3d {
     }
 
     /// Dispatches only the native text extensions implemented by this leaf.
-    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    #[expect(
+        clippy::case_sensitive_file_extension_comparisons,
+        reason = "The native loader accepts both uppercase and lowercase format extensions."
+    )]
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, Lut3dParseError> {
         let path = path.as_ref();
         let extension = path.to_str().and_then(|value| {
@@ -273,7 +276,7 @@ fn tokenize(line: &str, line_number: usize) -> Result<Vec<&str>, Lut3dParseError
     Ok(tokens)
 }
 
-fn require_token_count(
+const fn require_token_count(
     tokens: &[&str],
     expected: usize,
     line_number: usize,
@@ -295,7 +298,10 @@ fn parse_float(token: &str, line: usize) -> Result<f32, Lut3dParseError> {
         .map_err(|_| Lut3dParseError::MalformedNumber { line })
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Native _dt_atof accumulates in double before narrowing cube samples to f32."
+)]
 fn parse_sample(token: &str, line: usize) -> Result<f32, Lut3dParseError> {
     // Native `_dt_atof` accumulates into a double before the cube value is
     // narrowed to float by the destination buffer.  Keep that intermediate

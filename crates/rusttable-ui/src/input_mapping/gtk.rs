@@ -180,7 +180,7 @@ impl InputMappingEditor {
 
     /// Returns the preferences window for transient-parent integration.
     #[must_use]
-    pub fn window(&self) -> &gtk4::Window {
+    pub const fn window(&self) -> &gtk4::Window {
         &self.widgets.window
     }
 

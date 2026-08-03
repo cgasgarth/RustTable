@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Harmonizer arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Full-frame CPU execution ported from `src/iop/colorharmonizer.c`.
 //!
 //! The leaf accepts only an explicit working-profile RGB↔XYZ D50 matrix pair.
@@ -109,7 +114,7 @@ pub struct FrameDimensions {
 }
 
 impl FrameDimensions {
-    pub fn new(width: usize, height: usize) -> Result<Self, ColorHarmonizerExecutionError> {
+    pub const fn new(width: usize, height: usize) -> Result<Self, ColorHarmonizerExecutionError> {
         if width == 0 || height == 0 || width.checked_mul(height).is_none() {
             return Err(ColorHarmonizerExecutionError::InvalidDimensions { width, height });
         }
@@ -182,7 +187,7 @@ impl ColorHarmonizerConfig {
     }
 
     #[must_use]
-    pub fn defaults() -> Self {
+    pub const fn defaults() -> Self {
         Self {
             parameters: ColorHarmonizerParametersV1::defaults(),
         }
@@ -247,7 +252,7 @@ impl TryFrom<ColorHarmonizerParametersV1> for ColorHarmonizerConfig {
     }
 }
 
-fn validate_finite(name: &'static str, value: f32) -> Result<(), ColorHarmonizerCodecError> {
+const fn validate_finite(name: &'static str, value: f32) -> Result<(), ColorHarmonizerCodecError> {
     if value.is_finite() {
         Ok(())
     } else {
@@ -596,7 +601,7 @@ fn check_memory_budget(
     } else {
         output_bytes
     }
-    .ok_or(ColorHarmonizerExecutionError::MemoryBudgetExceeded {
+    .ok_or_else(|| ColorHarmonizerExecutionError::MemoryBudgetExceeded {
         required: usize::MAX,
         budget: budget.maximum_bytes(),
     })?;
@@ -724,6 +729,10 @@ pub fn smoothing_sigma(
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Native Color Harmonizer Gaussian passes stay together to preserve cancellation and boundary order."
+)]
 fn blur_corrections<F>(
     corrections: &mut [[f32; 2]],
     width: usize,

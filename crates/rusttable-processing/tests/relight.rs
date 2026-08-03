@@ -14,7 +14,7 @@ use rusttable_processing::{
     descriptor, evaluate_graph_at_frame_boundaries,
 };
 
-fn lab_pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> RelightPixel {
+const fn lab_pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> RelightPixel {
     RelightPixel::new(lightness, a, b, alpha)
 }
 

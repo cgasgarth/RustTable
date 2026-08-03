@@ -92,7 +92,7 @@ impl CropAspect {
     ///
     /// Returns an error for ratio pairs that are not valid Darktable fixed,
     /// original-image, freehand, or unresolved values.
-    pub fn decode_native_ratio(
+    pub const fn decode_native_ratio(
         ratio_n: i32,
         ratio_d: i32,
     ) -> Result<Option<Self>, CropAspectDecodeError> {
@@ -123,7 +123,7 @@ impl CropAspect {
     ///
     /// Returns the same checked native-ratio error as
     /// [`Self::decode_native_ratio`].
-    pub fn from_native_ratio(
+    pub const fn from_native_ratio(
         ratio_n: i32,
         ratio_d: i32,
     ) -> Result<Option<Self>, CropAspectDecodeError> {
@@ -232,8 +232,11 @@ impl CropAspect {
         }
     }
 
-    #[allow(clippy::cast_precision_loss)]
-    fn native_ratio_component(value: i32) -> f32 {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "The fixed crop ratio is a small source integer represented in native f32 geometry."
+    )]
+    const fn native_ratio_component(value: i32) -> f32 {
         value as f32
     }
 
@@ -278,7 +281,7 @@ impl CropAspect {
 /// # Errors
 ///
 /// Returns the checked native-ratio error for malformed parameter pairs.
-pub fn decode_native_ratio(
+pub const fn decode_native_ratio(
     ratio_n: i32,
     ratio_d: i32,
 ) -> Result<Option<CropAspect>, CropAspectDecodeError> {
@@ -340,7 +343,7 @@ impl CropBox {
         self.ch - self.cy
     }
 
-    fn is_finite(self) -> bool {
+    const fn is_finite(self) -> bool {
         self.cx.is_finite() && self.cy.is_finite() && self.cw.is_finite() && self.ch.is_finite()
     }
 }
@@ -775,18 +778,23 @@ impl CropEditorState {
         CropBox::new(cx, cy, cx + width, cy + height)
     }
 
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source crop resize preserves its original center-delta floating-point order."
+    )]
     fn resize_from_center(&self, drag: DragState, x: f32, y: f32) -> CropBox {
         let width = drag.origin.width();
         let height = drag.origin.height();
-        let mut ratio = 0.0_f32;
-        if drag.grab.horizontal() {
+        let mut ratio = if drag.grab.horizontal() {
             let delta = if drag.grab.left() {
                 x - drag.start_x
             } else {
                 drag.start_x - x
             };
-            ratio = (width - 2.0 * delta) / width;
-        }
+            (width - 2.0 * delta) / width
+        } else {
+            0.0_f32
+        };
         if drag.grab.vertical() {
             let delta = if drag.grab.top() {
                 y - drag.start_y
@@ -837,7 +845,7 @@ impl CropEditorState {
         CropEditorResult::Committed(self.snapshot())
     }
 
-    fn cancel_drag(&mut self) -> CropEditorResult {
+    const fn cancel_drag(&mut self) -> CropEditorResult {
         if self.drag.take().is_none() {
             return CropEditorResult::Unchanged;
         }
@@ -910,6 +918,10 @@ impl Adjustment {
     }
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The source crop aspect adjustment preserves its original offset arithmetic order."
+)]
 fn apply_aspect(
     crop: CropBox,
     bounds: CropBox,
@@ -1031,7 +1043,7 @@ fn validate_bounds(bounds: CropBox) -> Result<(), CropEditorError> {
     Ok(())
 }
 
-fn validate_point(x: f32, y: f32) -> Result<(), CropEditorError> {
+const fn validate_point(x: f32, y: f32) -> Result<(), CropEditorError> {
     if x.is_finite() && y.is_finite() {
         Ok(())
     } else {

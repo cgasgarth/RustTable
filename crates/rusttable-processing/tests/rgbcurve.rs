@@ -32,7 +32,7 @@ use rusttable_processing::common::curve_tools::CurveAnchor;
 
 const TEST_FIXTURE: &str = include_str!("fixtures/rgbcurve/default_v1.txt");
 
-fn node(x: f32, y: f32) -> RgbCurveNode {
+const fn node(x: f32, y: f32) -> RgbCurveNode {
     RgbCurveNode::new(x, y)
 }
 
@@ -45,7 +45,7 @@ fn params_with_curve(curve: [RgbCurveNode; 2]) -> RgbCurveParametersV1 {
     parameters
 }
 
-fn pixel(channels: [f32; 4]) -> RgbCurvePixel {
+const fn pixel(channels: [f32; 4]) -> RgbCurvePixel {
     RgbCurvePixel::from_channels(channels)
 }
 
@@ -338,7 +338,7 @@ fn middle_grey_uses_profile_when_present_and_native_raw_fallback_when_absent() {
     let uncompensated = compile_parameters(
         &RgbCurveParametersV1 {
             compensate_middle_grey: false,
-            ..parameters.clone()
+            ..parameters
         },
         None,
     )
@@ -445,7 +445,7 @@ fn cancellation_copy_through_and_tile_validation_publish_only_complete_results()
             true,
             || false,
         ),
-        Ok(full.clone())
+        Ok(full)
     );
     assert_eq!(
         plan.execute_tiles_with_cancel(
@@ -479,7 +479,7 @@ fn commit_state_tracks_preview_histogram_type_changes_and_profile_cache() {
     let mut changed = defaults.clone();
     changed.curve_type = [RgbCurveType::CubicSpline; CHANNELS];
     changed.compensate_middle_grey = true;
-    runtime.commit_params(changed.clone(), true);
+    runtime.commit_params(changed, true);
     assert_eq!(runtime.curve_changed(), [true; CHANNELS]);
     assert!(runtime.request_histogram());
     assert!(runtime.histogram_middle_grey());

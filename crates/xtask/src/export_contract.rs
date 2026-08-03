@@ -8,7 +8,7 @@ use crate::Result;
 
 const CONTRACT_PATH: &str = "architecture/rusttable-export-contract.json";
 
-pub(crate) fn run(root: &Path, check: bool) -> Result {
+pub fn run(root: &Path, check: bool) -> Result {
     let path = root.join(CONTRACT_PATH);
     let expected = serde_json::to_string_pretty(&json!({
         "schema": EXPORT_CONTRACT_SCHEMA,

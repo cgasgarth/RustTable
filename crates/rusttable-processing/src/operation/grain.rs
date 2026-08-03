@@ -5,9 +5,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const GRAIN_PARAMETERS: [&str; 4] = ["channel", "scale", "strength", "midtones_bias"];
 
-pub(crate) fn compile_grain(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_grain(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &GRAIN_PARAMETERS)?;
     let channel = channel(operation)?;
     let parameters = GrainParametersV2::new(

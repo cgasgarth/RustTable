@@ -376,7 +376,10 @@ pub struct RawMetadataEvidence {
 /// # Errors
 ///
 /// Returns a typed error when evidence exceeds the bound or has an unsafe source identifier.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "RAW metadata normalization keeps precedence, conflict findings, and canonical receipt selection in one ordered transaction"
+)]
 pub fn normalize_raw_metadata(
     frame: &RawFrame,
     context: &RawMetadataContext,
@@ -716,7 +719,11 @@ pub fn normalize_raw_metadata(
     })
 }
 
-pub(crate) fn normalize_backend_metadata(
+///
+/// # Errors
+///
+/// Returns an error when the frame or capability metadata is not representable.
+pub fn normalize_backend_metadata(
     frame: &RawFrame,
     profile: &RawCapabilityDescriptor,
     content_sha256: [u8; 32],
@@ -736,7 +743,11 @@ pub(crate) fn normalize_backend_metadata(
     )
 }
 
-pub(crate) fn normalize_dng_metadata(
+///
+/// # Errors
+///
+/// Returns an error when the frame metadata is not representable.
+pub fn normalize_dng_metadata(
     frame: &RawFrame,
     content_sha256: [u8; 32],
 ) -> Result<RawMetadataReceipt, RawMetadataError> {
@@ -876,7 +887,10 @@ fn reviewed_camera_key(
     None
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "metadata selection keeps field, provenance, validator, and finding channels explicit for deterministic precedence"
+)]
 pub(super) fn choose_optional<'a, T, I, V>(
     field: RawMetadataField,
     base: Option<(&'a RawMetadataProvenance, T)>,

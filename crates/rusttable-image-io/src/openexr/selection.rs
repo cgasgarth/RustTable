@@ -4,7 +4,7 @@ use super::types::{
     ExrLayerView, ExrPart, ExrSampleType,
 };
 
-pub(crate) struct Selection<'a> {
+pub struct Selection<'a> {
     pub part: &'a ExrPart,
     pub group: ExrLayerView,
     pub mapping: ExrChannelMapping,
@@ -12,7 +12,7 @@ pub(crate) struct Selection<'a> {
     pub sample_type: ExrSampleType,
 }
 
-pub(crate) fn select<'a>(
+pub fn select<'a>(
     header: &'a ExrHeader,
     request: &ExrDecodeRequest,
 ) -> Result<Selection<'a>, ExrDecodeError> {
@@ -157,7 +157,7 @@ fn incomplete() -> ExrDecodeError {
     ExrDecodeError::InvalidSelection("normalized channel group became incomplete".to_owned())
 }
 
-pub(crate) fn mapping_names(mapping: &ExrChannelMapping) -> Vec<String> {
+pub fn mapping_names(mapping: &ExrChannelMapping) -> Vec<String> {
     match mapping {
         ExrChannelMapping::Gray { gray, alpha } => {
             let mut names = vec![gray.clone()];
@@ -177,7 +177,7 @@ pub(crate) fn mapping_names(mapping: &ExrChannelMapping) -> Vec<String> {
     }
 }
 
-pub(crate) fn mapping_alpha(mapping: &ExrChannelMapping) -> Option<&str> {
+pub fn mapping_alpha(mapping: &ExrChannelMapping) -> Option<&str> {
     match mapping {
         ExrChannelMapping::Gray { alpha, .. } | ExrChannelMapping::Rgb { alpha, .. } => {
             alpha.as_deref()

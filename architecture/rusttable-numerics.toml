@@ -94,3 +94,23 @@ policy = "ExplicitFused"
 [[explicit_fma]]
 path = "crates/rusttable-processing/tests/profile_gamma_leaf.rs"
 policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-core/src/numerics/reduction.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-pixelpipe/src/cpu.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-pixelpipe/src/gpu.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-pixelpipe/tests/cpu_executor.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-pixelpipe/tests/spatial.rs"
+policy = "ExplicitFused"

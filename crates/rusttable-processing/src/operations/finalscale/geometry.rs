@@ -5,12 +5,12 @@ use super::{
 use crate::RasterDimensions;
 use rusttable_image::Roi;
 
-pub(crate) struct ResolvedDimensions {
+pub struct ResolvedDimensions {
     pub(crate) output_dimensions: RasterDimensions,
     pub(crate) upscale_suppressed: bool,
 }
 
-pub(crate) fn resolve_dimensions(
+pub fn resolve_dimensions(
     source: RasterDimensions,
     request: &RenderSizeRequest,
     allow_upscale: bool,
@@ -172,7 +172,7 @@ fn validate_dimensions(
     Ok(())
 }
 
-pub(crate) fn roi_in(plan: &FinalScalePlan, output: Roi) -> Result<Roi, FinalScalePlanError> {
+pub fn roi_in(plan: &FinalScalePlan, output: Roi) -> Result<Roi, FinalScalePlanError> {
     validate_roi(output, plan.output_roi())?;
     let x = floor_scaled(output.x(), 1.0 / plan.scale_x())?;
     let y = floor_scaled(output.y(), 1.0 / plan.scale_y())?;
@@ -191,7 +191,7 @@ pub(crate) fn roi_in(plan: &FinalScalePlan, output: Roi) -> Result<Roi, FinalSca
     Roi::new(x, y, width, height).map_err(|_| FinalScalePlanError::InvalidRoi)
 }
 
-pub(crate) fn roi_out(plan: &FinalScalePlan, input: Roi) -> Result<Roi, FinalScalePlanError> {
+pub fn roi_out(plan: &FinalScalePlan, input: Roi) -> Result<Roi, FinalScalePlanError> {
     validate_roi(input, plan.source_roi())?;
     let x = floor_scaled(input.x(), plan.scale_x())?;
     let y = floor_scaled(input.y(), plan.scale_y())?;
@@ -207,7 +207,7 @@ pub(crate) fn roi_out(plan: &FinalScalePlan, input: Roi) -> Result<Roi, FinalSca
     .map_err(|_| FinalScalePlanError::InvalidRoi)
 }
 
-pub(crate) fn transform_points(
+pub fn transform_points(
     points: &mut [f32],
     scale_x: f64,
     scale_y: f64,
@@ -230,7 +230,7 @@ pub(crate) fn transform_points(
     Ok(())
 }
 
-fn validate_roi(roi: Roi, bounds: Roi) -> Result<(), FinalScalePlanError> {
+const fn validate_roi(roi: Roi, bounds: Roi) -> Result<(), FinalScalePlanError> {
     if roi.x() < bounds.x()
         || roi.y() < bounds.y()
         || roi.right() > bounds.right()

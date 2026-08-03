@@ -42,7 +42,7 @@ impl DarkroomEditOutcome {
     }
 
     #[must_use]
-    pub fn modules(&self) -> &DarkroomModulesViewModel {
+    pub const fn modules(&self) -> &DarkroomModulesViewModel {
         &self.modules
     }
 
@@ -73,7 +73,7 @@ impl GtkDarkroomEditController {
     }
 
     #[must_use]
-    pub fn with_colorzones_gui_preferences(
+    pub const fn with_colorzones_gui_preferences(
         mut self,
         preferences: ColorZonesGuiPreferences,
     ) -> Self {
@@ -92,7 +92,7 @@ impl GtkDarkroomEditController {
     }
 
     #[must_use]
-    pub fn modules(&self) -> Option<&DarkroomModulesViewModel> {
+    pub const fn modules(&self) -> Option<&DarkroomModulesViewModel> {
         self.modules.as_ref()
     }
 
@@ -182,6 +182,10 @@ impl GtkDarkroomEditController {
         })
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the atomic darkroom action, revision check, and projection transaction together"
+    )]
     /// Applies one GTK action through the selected edit's atomic repository transaction.
     ///
     /// # Errors
@@ -397,7 +401,7 @@ impl GtkDarkroomEditController {
             .into_iter()
             .filter(|edit| edit.photo_id() == photo_id)
             .max_by_key(|edit| (edit.revision().get(), edit.id().get()))
-            .ok_or(DarkroomModuleError::MissingOperation {
+            .ok_or_else(|| DarkroomModuleError::MissingOperation {
                 module_id: format!("photo {photo_id}"),
             })
     }
@@ -416,6 +420,10 @@ fn project_edit(edit: &Edit) -> Result<DarkroomModulesViewModel, DarkroomModuleE
     project_edit_with_preferences(edit, ColorZonesGuiPreferences::default())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep source-ordered module projection and native operation fallback handling together"
+)]
 fn project_edit_with_preferences(
     edit: &Edit,
     colorzones_preferences: ColorZonesGuiPreferences,
@@ -827,7 +835,10 @@ fn color_correction_parameter(
     }
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "native integer parameter values are presented through f64 controls"
+)]
 fn parameter_value_to_control(
     control: &rusttable_ui::DarkroomControlViewModel,
     value: &ParameterValue,
@@ -973,6 +984,10 @@ fn rewrite_operations(
         .collect()
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "preserve exact-instance validation and canonical multi-instance ordering"
+)]
 fn rewrite_instance_operations(
     edit: &Edit,
     module: &DarkroomModuleViewModel,
@@ -1100,7 +1115,7 @@ fn rewrite_instance_operations(
     Ok(operations)
 }
 
-fn instance_action_name(action: &DarkroomModuleAction) -> &'static str {
+const fn instance_action_name(action: &DarkroomModuleAction) -> &'static str {
     match action {
         DarkroomModuleAction::NewInstance { .. } => "new instance",
         DarkroomModuleAction::DuplicateInstance { .. } => "duplicate instance",
@@ -1154,6 +1169,10 @@ fn complete_operation_defaults(
     )
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "preserve source-derived parameter ordering, defaults, and operation enable semantics"
+)]
 fn rewrite_target_operation(
     operation: &Operation,
     module: &DarkroomModuleViewModel,
@@ -1406,9 +1425,10 @@ pub(super) const DARKROOM_CANONICAL_ORDER: &[&str] = &[
 pub(super) fn canonical_rank(operation: &Operation) -> usize {
     let name = builtin_registry()
         .definition(operation.key().as_str())
-        .map_or(operation.key().as_str(), |definition| {
-            definition.descriptor().id.compatibility_name.as_str()
-        });
+        .map_or_else(
+            || operation.key().as_str(),
+            |definition| definition.descriptor().id.compatibility_name.as_str(),
+        );
     DARKROOM_CANONICAL_ORDER
         .iter()
         .position(|candidate| *candidate == name)
@@ -1422,7 +1442,10 @@ fn materialization_error(module_id: &str, message: String) -> DarkroomModuleErro
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the native slider value is converted to the integer parameter representation"
+)]
 fn parameter_from_control(
     control: &rusttable_ui::DarkroomControlViewModel,
     existing: &ParameterValue,
@@ -1593,6 +1616,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the exact Color Zones instance persistence contract in one regression test"
+    )]
     fn colorzones_action_persists_only_the_exact_mounted_instance() {
         let registry = builtin_registry();
         let first_id = OperationId::new(0xc701).expect("first Color Zones ID");
@@ -1619,7 +1646,7 @@ mod tests {
             PhotoId::new(0xc704).expect("photo ID"),
             Revision::ZERO,
             Revision::from_u64(9),
-            [first.clone(), second.clone()],
+            [first.clone(), second],
         )
         .expect("multi-instance Color Zones edit");
         let catalog = TestCatalog::seed(&original);
@@ -2193,6 +2220,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the native Color Contrast parameter preservation regression together"
+    )]
     fn colorcontrast_rewrite_preserves_hidden_and_out_of_range_native_values() {
         let original = Edit::from_parts(
             EditId::new(321).expect("edit id"),
@@ -2355,6 +2386,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the exact multi-instance lifecycle and projection assertions together"
+    )]
     fn controller_persists_only_truthful_multi_instance_lifecycle_by_exact_id() {
         let registry = builtin_registry();
         let upstream_id = OperationId::new(801).expect("Velvia id");
@@ -2705,6 +2740,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the four-parameter Color Correction atomic persistence test together"
+    )]
     fn colorcorrection_grid_persists_four_parameters_atomically_to_exact_instance() {
         let first_id = OperationId::new(851).expect("first Color Correction id");
         let second_id = OperationId::new(852).expect("second Color Correction id");
@@ -3141,7 +3180,7 @@ mod tests {
             })
             .expect("expand second instance");
         let replacement = original
-            .revised(original.operations().cloned().collect::<Vec<_>>())
+            .revised(original.operations().cloned())
             .expect("replacement edit");
 
         let projected =
@@ -3204,7 +3243,10 @@ mod tests {
         colorcorrection_operation_with_opacity(id, enabled, hia, hib, loa, lob, saturation, 1.0)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the native operation parameter order at the edit boundary"
+    )]
     fn colorcorrection_operation_with_opacity(
         id: OperationId,
         enabled: bool,
@@ -3248,7 +3290,10 @@ mod tests {
         .expect("Vibrance operation")
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the native operation parameter order at the edit boundary"
+    )]
     fn colorcontrast_operation_with_enabled(
         id: OperationId,
         enabled: bool,
@@ -3374,7 +3419,7 @@ mod tests {
             })
             .expect("expand Velvia");
         let replacement = original
-            .revised(original.operations().cloned().collect::<Vec<_>>())
+            .revised(original.operations().cloned())
             .expect("processing replacement");
 
         let projected =

@@ -83,7 +83,7 @@ impl Settings {
     /// # Errors
     ///
     /// Returns an error for an invalid metadata limit or mosaic channel layout.
-    pub fn validate(self) -> Result<(), Error> {
+    pub const fn validate(self) -> Result<(), Error> {
         if self.max_metadata_bytes == 0 || self.max_metadata_bytes > MAX_METADATA_BYTES {
             return Err(Error::InvalidSettings("metadata limit"));
         }
@@ -271,7 +271,6 @@ impl Encoder {
         if self.settings.interlace {
             let raw = full_png_data(&view, format, self.settings)?;
             writer.write_image_data(&raw).map_err(codec)?;
-            writer.finish().map_err(codec)?;
         } else {
             {
                 let mut stream = writer.stream_writer().map_err(codec)?;
@@ -288,8 +287,8 @@ impl Encoder {
                 }
                 stream.finish().map_err(codec)?;
             }
-            writer.finish().map_err(codec)?;
         }
+        writer.finish().map_err(codec)?;
         Ok(())
     }
 }
@@ -370,7 +369,7 @@ fn metadata_len(artifact: &CanonicalArtifact<'_>) -> usize {
             .sum::<usize>()
 }
 
-fn png_color(layout: ChannelLayout) -> png::ColorType {
+const fn png_color(layout: ChannelLayout) -> png::ColorType {
     match layout {
         ChannelLayout::Gray | ChannelLayout::Bayer | ChannelLayout::XTrans => {
             png::ColorType::Grayscale
@@ -447,7 +446,7 @@ fn set_compression(encoder: &mut png::Encoder<'_, impl Write>, compression: Comp
         Compression::Best => png::DeflateCompression::Level(9),
     });
 }
-fn png_filter(filter: Filter) -> png::Filter {
+const fn png_filter(filter: Filter) -> png::Filter {
     match filter {
         Filter::Adaptive => png::Filter::Adaptive,
         Filter::None => png::Filter::NoFilter,
@@ -458,7 +457,7 @@ fn png_filter(filter: Filter) -> png::Filter {
     }
 }
 
-fn cicp(encoding: ColorEncoding) -> Option<[u8; 4]> {
+const fn cicp(encoding: ColorEncoding) -> Option<[u8; 4]> {
     let (p, t) = match encoding {
         ColorEncoding::Rec2020D65 => (9, 14),
         ColorEncoding::LinearRec2020D65 => (9, 8),
@@ -548,7 +547,7 @@ fn full_png_data(
     Ok(raw)
 }
 
-fn read_u16(bytes: &[u8], order: ByteOrder) -> u16 {
+const fn read_u16(bytes: &[u8], order: ByteOrder) -> u16 {
     match order {
         ByteOrder::Big => u16::from_be_bytes([bytes[0], bytes[1]]),
         ByteOrder::Little => u16::from_le_bytes([bytes[0], bytes[1]]),

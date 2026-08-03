@@ -28,9 +28,9 @@ use sha2::{Digest, Sha256};
 
 use crate::Result;
 
-pub(crate) mod cancellation;
-pub(crate) mod mode;
-pub(crate) mod scheduler;
+pub mod cancellation;
+pub mod mode;
+pub mod scheduler;
 
 const SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-source-map.toml";
 const CACHE_SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-cache-source-map.toml";
@@ -41,7 +41,7 @@ const TILING_SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-tiling-source-
 const TILING_SOURCE_MAP_SCHEMA: &str = "rusttable.pixelpipe-tiling-source-map.v1";
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum PixelpipeCommand {
+pub enum PixelpipeCommand {
     /// Prepare deterministic immutable snapshots for the raster fixture.
     Prepare {
         #[arg(long)]
@@ -92,7 +92,7 @@ pub(crate) enum PixelpipeCommand {
     SchedulerMatrix(scheduler::SchedulerMatrixArgs),
 }
 
-pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
+pub fn run(root: &Path, command: PixelpipeCommand) -> Result {
     match command {
         PixelpipeCommand::Prepare {
             fixture,
@@ -482,7 +482,7 @@ fn fixture_snapshot(
     .map_err(|error| error.to_string())?;
     let stack = OperationStackSnapshot::new(OperationStackTemplate::raster_basic())
         .apply(StackCommand::Insert {
-            operation,
+            operation: Box::new(operation),
             position: InsertPosition::End,
         })
         .map_err(|error| error.to_string())?
@@ -522,7 +522,7 @@ fn parse_purpose(value: &str) -> Result<PipelinePurpose> {
     }
 }
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     if issue != 266 {
         return Err(format!("pixelpipe source map: unsupported issue {issue}"));
     }
@@ -595,7 +595,7 @@ pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
     Ok(())
 }
 
-pub(crate) fn verify_cache_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_cache_source_map(root: &Path, issue: i64) -> Result {
     if issue != 270 {
         return Err(format!(
             "pixelpipe cache source map: unsupported issue {issue}"
@@ -651,8 +651,11 @@ pub(crate) fn verify_cache_source_map(root: &Path, issue: i64) -> Result {
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn verify_tiling_source_map(root: &Path, issue: i64) -> Result {
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-derived pixelpipe tiling source-map validation together"
+)]
+pub fn verify_tiling_source_map(root: &Path, issue: i64) -> Result {
     if issue != 268 {
         return Err(format!(
             "pixelpipe tiling source map: unsupported issue {issue}"
@@ -767,7 +770,7 @@ pub(crate) fn verify_tiling_source_map(root: &Path, issue: i64) -> Result {
     Ok(())
 }
 
-pub(crate) fn verify_roi_source_map(root: &Path) -> Result {
+pub fn verify_roi_source_map(root: &Path) -> Result {
     let path = root.join("architecture/rusttable-pixelpipe-roi-source-map.toml");
     let text = fs::read_to_string(&path)
         .map_err(|error| format!("pixelpipe ROI source map: read failed: {error}"))?;

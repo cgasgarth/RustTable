@@ -68,7 +68,7 @@ impl std::error::Error for ResamplingError {
 /// RGB is premultiplied before filtering and restored to straight form after
 /// filtering. The shared `FinalScale` plan owns normalized taps, support,
 /// reflected borders, ROI mapping, and deterministic tiled execution.
-pub(crate) fn resample_working(
+pub fn resample_working(
     input: &WorkingRgbImage,
     alpha: &[f32],
     plan: RenderPlan,

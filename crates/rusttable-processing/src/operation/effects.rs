@@ -7,9 +7,7 @@ use crate::operations::{bloom::BloomConfig, soften::SoftenConfig};
 const BLOOM_PARAMETERS: [&str; 3] = ["size", "threshold", "strength"];
 const SOFTEN_PARAMETERS: [&str; 4] = ["size", "saturation", "brightness", "amount"];
 
-pub(crate) fn compile_bloom(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_bloom(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &BLOOM_PARAMETERS)?;
     let config = BloomConfig::new(
         super::parameter_f32(operation, "size", 20.0)?,
@@ -25,9 +23,7 @@ pub(crate) fn compile_bloom(
     })
 }
 
-pub(crate) fn compile_soften(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_soften(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &SOFTEN_PARAMETERS)?;
     let config = SoftenConfig::new(
         super::parameter_f32(operation, "size", 50.0)?,

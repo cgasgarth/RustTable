@@ -49,6 +49,10 @@ impl std::error::Error for InspectionError {}
 ///
 /// Returns an error for truncated, malformed, oversized, multipart, deep, or
 /// otherwise unsupported data.
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-derived OpenEXR attribute and chunk validation sequence together"
+)]
 pub fn inspect(bytes: &[u8]) -> Result<Inspection, InspectionError> {
     if bytes.len() > MAX_INSPECT_BYTES {
         return Err(InspectionError::TooLarge);
@@ -236,7 +240,7 @@ fn parse_window(value: &[u8]) -> Result<(i32, i32, i32, i32), InspectionError> {
     ))
 }
 
-fn compression_name(value: u8) -> Result<&'static str, InspectionError> {
+const fn compression_name(value: u8) -> Result<&'static str, InspectionError> {
     Ok(match value {
         0 => "none",
         1 => "rle",
@@ -273,7 +277,7 @@ impl<'a> Cursor<'a> {
     const fn new(bytes: &'a [u8]) -> Self {
         Self { bytes, offset: 0 }
     }
-    fn position(&self) -> usize {
+    const fn position(&self) -> usize {
         self.offset
     }
     fn take(&mut self, count: usize) -> Result<&'a [u8], InspectionError> {

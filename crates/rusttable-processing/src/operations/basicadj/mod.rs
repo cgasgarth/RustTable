@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Basic Adjust arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable's legacy `basicadj` composite adjustment operation.
 //!
 //! Source lineage: `src/iop/basicadj.c` and `src/common/rgb_norms.h`.
@@ -156,7 +161,7 @@ impl PreserveColors {
         }
     }
 
-    pub fn from_id(id: i32) -> Result<Self, BasicAdjConfigError> {
+    pub const fn from_id(id: i32) -> Result<Self, BasicAdjConfigError> {
         match id {
             0 => Ok(Self::None),
             1 => Ok(Self::Luminance),
@@ -492,7 +497,7 @@ impl BasicAdjConfig {
         self.auto_controls
     }
 
-    pub(crate) fn with_resolved_analysis(self, result: &BasicAdjAnalysisResult) -> Self {
+    pub(crate) const fn with_resolved_analysis(self, result: &BasicAdjAnalysisResult) -> Self {
         let controls = self.auto_controls;
         let values = result.resolved_values();
         Self {
@@ -1141,7 +1146,10 @@ fn hlcurve(level: f32, hlcomp: f32, hlrange: f32) -> f32 {
     y.ln_1p() * ratio
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the cache identity preserves the native parameter and derived-plan field order"
+)]
 fn plan_identity(
     config: &BasicAdjConfig,
     scale: FiniteF32,

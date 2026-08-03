@@ -5,7 +5,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const PARAMETERS: [&str; 4] = ["radius_1", "pixelate", "radius_2", "noise"];
 
-pub(crate) fn compile_censorize(
+pub fn compile_censorize(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &PARAMETERS)?;

@@ -16,6 +16,10 @@
     clippy::similar_names,
     reason = "the source uses bit-shaped f32 approximations and source naming"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Filmic Lab and transfer equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use super::codec::ParametersV3;
 use super::curve::{CurveBuildError, LUT_SIZE, build_luts};
@@ -66,7 +70,7 @@ pub struct FilmicPlan {
     effective_contrast: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilmicPlanError {
     NonFiniteParameter,
     InvalidDerivedState(&'static str),
@@ -436,7 +440,7 @@ pub fn vector_exp2(value: f32) -> f32 {
 }
 
 #[inline]
-fn round_away_from_zero(value: f32) -> f32 {
+const fn round_away_from_zero(value: f32) -> f32 {
     value.round()
 }
 

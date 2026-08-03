@@ -38,7 +38,7 @@ pub struct MetadataReadResult {
 
 impl MetadataReadResult {
     #[must_use]
-    pub fn available(metadata: ImageMetadata) -> Self {
+    pub const fn available(metadata: ImageMetadata) -> Self {
         Self {
             metadata,
             status: MetadataReadStatus::Available,
@@ -46,7 +46,7 @@ impl MetadataReadResult {
     }
 
     #[must_use]
-    pub fn unavailable(metadata: ImageMetadata, error: MetadataInputError) -> Self {
+    pub const fn unavailable(metadata: ImageMetadata, error: MetadataInputError) -> Self {
         Self {
             metadata,
             status: MetadataReadStatus::Unavailable(error),
@@ -296,7 +296,10 @@ fn canonical_entries(exif: &exif::Exif) -> Result<ImageMetadata, MetadataInputEr
     })
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "preserve source EXIF field extraction order and first-error semantics"
+)]
 fn canonical_entries_tolerant(
     exif: &exif::Exif,
 ) -> (Vec<MetadataEntry>, Option<MetadataInputError>) {
@@ -422,7 +425,7 @@ fn canonical_entries_tolerant(
     (entries, first_error)
 }
 
-fn remember_error(
+const fn remember_error(
     first_error: &mut Option<MetadataInputError>,
     result: Result<(), MetadataInputError>,
 ) {
@@ -644,7 +647,7 @@ fn bounded_value_range(
     Ok(value_offset..value_end)
 }
 
-fn tiff_offset_overflow(offset: u64, length: u64) -> MetadataInputError {
+const fn tiff_offset_overflow(offset: u64, length: u64) -> MetadataInputError {
     MetadataInputError::TiffOffsetOverflow { offset, length }
 }
 
@@ -658,7 +661,7 @@ fn read_tiff_u32(
     let range = tiff_value_range(payload, entry_offset, kind, count, little)?;
     let bytes = payload
         .get(range)
-        .ok_or(MetadataInputError::TiffValueTruncated {
+        .ok_or_else(|| MetadataInputError::TiffValueTruncated {
             kind,
             count: u64::from(count),
             offset: u64::try_from(entry_offset).unwrap_or(u64::MAX),

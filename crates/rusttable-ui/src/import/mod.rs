@@ -157,7 +157,7 @@ pub struct ImportPanelViewModel {
 
 impl ImportPanelViewModel {
     #[must_use]
-    pub fn new(rows: Vec<ImportRowViewModel>, active: bool) -> Self {
+    pub const fn new(rows: Vec<ImportRowViewModel>, active: bool) -> Self {
         Self { rows, active }
     }
 
@@ -172,7 +172,7 @@ impl ImportPanelViewModel {
     }
 
     #[must_use]
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.active || !self.rows.is_empty()
     }
 

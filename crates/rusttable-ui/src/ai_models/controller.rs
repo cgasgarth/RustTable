@@ -1,6 +1,9 @@
 //! Model-settings controller. All mutation is delegated to the registry service.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The AI model controller exposes service failures through its typed action boundary."
+)]
 
 use std::path::PathBuf;
 
@@ -63,7 +66,7 @@ impl<S: AiModelsServicePort> AiModelsController<S> {
                 Ok(())
             }
             Err(error) => {
-                self.state.fail(error.clone().failure());
+                self.state.fail(error.failure());
                 Err(error.into())
             }
         }
@@ -81,7 +84,7 @@ impl<S: AiModelsServicePort> AiModelsController<S> {
                 let snapshot = match result {
                     Ok(snapshot) => snapshot,
                     Err(error) => {
-                        self.state.fail(error.clone().failure());
+                        self.state.fail(error.failure());
                         return Err(error.into());
                     }
                 };
@@ -174,7 +177,7 @@ impl<S: AiModelsServicePort> AiModelsController<S> {
                 Ok(())
             }
             Err(error) => {
-                self.state.fail(error.clone().failure());
+                self.state.fail(error.failure());
                 Err(error.into())
             }
         }
@@ -328,7 +331,7 @@ mod tests {
         );
         let hash = model.hash().clone();
         let snapshots = vec![
-            AiModelsSnapshot::available(vec![model.clone()]).with_generation(8),
+            AiModelsSnapshot::available(vec![model]).with_generation(8),
             AiModelsSnapshot::available(Vec::new()).with_generation(7),
         ];
         let mut controller = AiModelsController::new(RefreshService { snapshots });

@@ -118,7 +118,7 @@ const ENTRY_SPECS: &[EntrySpec] = &[
 ];
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct BindingContract {
+pub struct BindingContract {
     pub binding: u32,
     pub name: &'static str,
     pub storage: bool,
@@ -128,7 +128,7 @@ pub(crate) struct BindingContract {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct BilateralEntryContract {
+pub struct BilateralEntryContract {
     pub entry_point: &'static str,
     pub workgroup_size: [u32; 3],
     pub bindings: &'static [BindingContract],
@@ -217,7 +217,7 @@ const POINT_COLORCORRECTION_BINDINGS: &[BindingContract] = &[
     },
 ];
 
-pub(crate) const BILATERAL_ENTRY_CONTRACTS: &[BilateralEntryContract] = &[
+pub const BILATERAL_ENTRY_CONTRACTS: &[BilateralEntryContract] = &[
     BilateralEntryContract {
         entry_point: "zero",
         workgroup_size: [16, 16, 1],
@@ -709,6 +709,10 @@ pub struct ShaderRegistry {
 }
 
 impl ShaderRegistry {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep checked-in shader table validation together so every entry remains auditable."
+    )]
     pub fn try_checked_in() -> Result<Self, ShaderError> {
         let catalog = SourceCatalog::checked_in();
         let mut entries = Vec::new();
@@ -1416,6 +1420,10 @@ fn digest(source: &str) -> String {
 mod tests {
     use super::*;
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep checked-in shader registry assertions together so the initial contract remains auditable."
+    )]
     #[test]
     fn checked_in_registry_has_stable_initial_entries() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");

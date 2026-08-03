@@ -20,17 +20,14 @@ use super::types::{
     JxlStructuredColor, JxlToneMapping, JxlTransferFunction, JxlWhitePoint,
 };
 
-pub(crate) struct BackendResult {
+pub struct BackendResult {
     pub header: JxlHeader,
     pub pixels: Option<JxlPixelData>,
     pub coding: JxlCodingMode,
     pub roi_behavior: JxlRoiBehavior,
 }
 
-pub(crate) fn probe(
-    bytes: &[u8],
-    limits: JxlDecodeLimits,
-) -> Result<ImageDimensions, JxlDecodeError> {
+pub fn probe(bytes: &[u8], limits: JxlDecodeLimits) -> Result<ImageDimensions, JxlDecodeError> {
     let bounded = bytes
         .get(..bytes.len().min(JXL_PROBE_BUDGET_BYTES))
         .ok_or(JxlDecodeError::ArithmeticOverflow)?;
@@ -57,7 +54,7 @@ pub(crate) fn probe(
     )
 }
 
-pub(crate) fn decode(
+pub fn decode(
     bytes: &[u8],
     mode: JxlDecodeMode,
     limits: JxlDecodeLimits,
@@ -657,7 +654,7 @@ fn output_sample_count(
     usize::try_from(samples).map_err(|_| JxlDecodeError::ArithmeticOverflow)
 }
 
-fn validate_region(region: Roi, dimensions: ImageDimensions) -> Result<(), JxlDecodeError> {
+const fn validate_region(region: Roi, dimensions: ImageDimensions) -> Result<(), JxlDecodeError> {
     if region.is_empty() || region.within(dimensions).is_err() {
         Err(JxlDecodeError::InvalidRegion)
     } else {
@@ -665,7 +662,7 @@ fn validate_region(region: Roi, dimensions: ImageDimensions) -> Result<(), JxlDe
     }
 }
 
-fn color_space(value: ColourSpace) -> Result<JxlColorSpace, JxlDecodeError> {
+const fn color_space(value: ColourSpace) -> Result<JxlColorSpace, JxlDecodeError> {
     match value {
         ColourSpace::Rgb => Ok(JxlColorSpace::Rgb),
         ColourSpace::Grey => Ok(JxlColorSpace::Gray),
@@ -673,7 +670,10 @@ fn color_space(value: ColourSpace) -> Result<JxlColorSpace, JxlDecodeError> {
     }
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "jxl-oxide stores gamma as unsigned fixed 1e-7 units while the transfer contract is f32"
+)]
 fn scaled_gamma(value: u32) -> f32 {
     value as f32 / 10_000_000.0
 }

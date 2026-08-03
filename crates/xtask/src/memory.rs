@@ -12,7 +12,7 @@ const SOURCE_MAP: &str = "architecture/rusttable-host-pool-source-map.toml";
 const SOURCE_MAP_SCHEMA: &str = "rusttable.host-pool-source-map.v1";
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum MemoryCommand {
+pub enum MemoryCommand {
     /// Exercise bounded host buffer allocation, return, and failure paths.
     HostPool {
         #[arg(long)]
@@ -26,7 +26,7 @@ pub(crate) enum MemoryCommand {
     },
 }
 
-pub(crate) fn run(root: &Path, command: MemoryCommand) -> Result {
+pub fn run(root: &Path, command: MemoryCommand) -> Result {
     match command {
         MemoryCommand::HostPool {
             stress,
@@ -126,7 +126,7 @@ fn host_pool(
     Ok(())
 }
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     if issue != 269 {
         return Err(format!("host pool source map: unsupported issue {issue}"));
     }

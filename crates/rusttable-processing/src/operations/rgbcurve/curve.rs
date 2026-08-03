@@ -13,6 +13,10 @@
     clippy::many_single_char_names,
     reason = "the source algorithm uses f32 index and interpolation arithmetic"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native RGB Curve LUT and profile equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt;
 
@@ -391,14 +395,12 @@ pub fn compile_parameters(
         let mut result = [CurveAnchor::new(0.0, 0.0); MAX_NODES];
         for (index, node) in parameters.curve_nodes[channel][..count].iter().enumerate() {
             let (x, y) = if parameters.compensate_middle_grey {
-                if let Some(profile) = profile {
+                profile.map_or((node.x, node.y), |profile| {
                     (
                         profile.uncompensate_middle_grey(node.x),
                         profile.uncompensate_middle_grey(node.y),
                     )
-                } else {
-                    (node.x, node.y)
-                }
+                })
             } else {
                 (node.x, node.y)
             };
@@ -584,7 +586,7 @@ pub const fn native_gpu_extrapolation_mismatch() -> &'static str {
 }
 
 #[allow(dead_code)]
-fn _preserve_mode_name(mode: PreserveColors) -> &'static str {
+const fn _preserve_mode_name(mode: PreserveColors) -> &'static str {
     match mode {
         PreserveColors::None => "none",
         PreserveColors::Luminance => "luminance",

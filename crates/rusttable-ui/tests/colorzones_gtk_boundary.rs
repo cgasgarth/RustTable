@@ -56,7 +56,11 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    clippy::suboptimal_flops,
+    reason = "The GTK boundary fixture keeps source Color Zones hierarchy, reconciliation, allocation, and numeric checks together."
+)]
 fn production_rail_mount_preserves_source_hierarchy_and_reconciles_in_place() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.colorzones-boundary"),
@@ -81,7 +85,7 @@ fn production_rail_mount_preserves_source_hierarchy_and_reconciles_in_place() {
         true,
         true,
     );
-    let module = module_snapshot(state.clone());
+    let module = module_snapshot(state);
     assert_eq!(module.controls().controls().count(), 0);
     let modules = DarkroomModulesViewModel::new(vec![module]).expect("Color Zones module snapshot");
     shell.set_darkroom_module_stack(&modules, None);
@@ -381,7 +385,11 @@ fn production_rail_mount_preserves_source_hierarchy_and_reconciles_in_place() {
     settle_gtk();
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    clippy::suboptimal_flops,
+    reason = "The GTK boundary fixture keeps source graph action order, geometry, and non-activating window checks together."
+)]
 fn production_rail_routes_settled_graph_actions_without_showing_a_window() {
     let operation_id = OperationId::new(9_119).expect("Color Zones action operation ID");
     let initial_revision = Revision::from_u64(41);
@@ -706,6 +714,10 @@ fn fractional_smooth_scroll_units_are_shared_across_distinct_graphs() {
     second.end_graph_scroll_sequence();
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The GTK fixture preserves source graph coordinate evaluation order at the leaf boundary."
+)]
 fn normalized_smooth_scroll_coalesces_at_the_production_leaf_boundary() {
     let operation_id = OperationId::new(9_121).expect("smooth-scroll operation ID");
     let initial_revision = Revision::from_u64(60);
@@ -803,7 +815,10 @@ fn normalized_smooth_scroll_coalesces_at_the_production_leaf_boundary() {
     );
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The GTK boundary fixture keeps source modifier routing, tab edits, and durable graph-height checks together."
+)]
 fn modifier_routing_preserves_tabs_edits_and_durable_graph_height() {
     let operation_id = OperationId::new(9_120).expect("modifier-routing operation ID");
     let actions = Rc::new(Cell::new(0_usize));

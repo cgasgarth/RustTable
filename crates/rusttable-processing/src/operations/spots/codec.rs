@@ -207,7 +207,7 @@ pub struct SpotsParametersV2 {
 
 impl SpotsParametersV2 {
     #[must_use]
-    pub fn defaults() -> Self {
+    pub const fn defaults() -> Self {
         Self {
             form_ids: [0; V2_ENTRIES],
             modes: [SpotsMode::None; V2_ENTRIES],

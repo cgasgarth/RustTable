@@ -48,7 +48,7 @@ impl EditorState {
 
     /// Returns the current draft snapshot for service commit or preview.
     #[must_use]
-    pub fn snapshot(&self) -> &MappingSnapshot {
+    pub const fn snapshot(&self) -> &MappingSnapshot {
         &self.draft
     }
 

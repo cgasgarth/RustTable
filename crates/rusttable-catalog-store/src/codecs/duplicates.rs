@@ -6,7 +6,7 @@ use rusttable_core::PhotoId;
 
 const ENCODED_LENGTH: usize = 147;
 
-pub(crate) fn encode(evidence: DuplicateEvidence) -> [u8; ENCODED_LENGTH] {
+pub fn encode(evidence: DuplicateEvidence) -> [u8; ENCODED_LENGTH] {
     let mut bytes = [0_u8; ENCODED_LENGTH];
     bytes[0] = evidence.version();
     bytes[1..17].copy_from_slice(&evidence.photo_id().get().to_be_bytes());
@@ -27,7 +27,7 @@ pub(crate) fn encode(evidence: DuplicateEvidence) -> [u8; ENCODED_LENGTH] {
     bytes
 }
 
-pub(crate) fn decode(bytes: &[u8]) -> Result<DuplicateEvidence, ()> {
+pub fn decode(bytes: &[u8]) -> Result<DuplicateEvidence, ()> {
     if bytes.len() != ENCODED_LENGTH || bytes[0] != DUPLICATE_EVIDENCE_VERSION {
         return Err(());
     }
@@ -56,24 +56,24 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DuplicateEvidence, ()> {
     ))
 }
 
-pub(crate) fn source_index_key(evidence: DuplicateEvidence) -> [u8; 48] {
+pub fn source_index_key(evidence: DuplicateEvidence) -> [u8; 48] {
     prefixed_photo_key(evidence.source().as_bytes(), evidence.photo_id())
 }
 
-pub(crate) fn exact_index_key(evidence: DuplicateEvidence) -> [u8; 56] {
+pub fn exact_index_key(evidence: DuplicateEvidence) -> [u8; 56] {
     let mut prefix = [0_u8; 40];
     prefix[..32].copy_from_slice(&evidence.exact().sha256());
     prefix[32..].copy_from_slice(&evidence.exact().byte_length().to_be_bytes());
     prefixed_photo_key(prefix, evidence.photo_id())
 }
 
-pub(crate) fn embedded_index_key(evidence: DuplicateEvidence) -> Option<[u8; 48]> {
+pub fn embedded_index_key(evidence: DuplicateEvidence) -> Option<[u8; 48]> {
     evidence
         .embedded()
         .map(|embedded| prefixed_photo_key(embedded.digest(), evidence.photo_id()))
 }
 
-pub(crate) fn visual_index_keys(evidence: DuplicateEvidence) -> Option<[[u8; 19]; 8]> {
+pub fn visual_index_keys(evidence: DuplicateEvidence) -> Option<[[u8; 19]; 8]> {
     let visual = evidence.visual()?;
     Some(std::array::from_fn(|index| {
         let mut key = [0_u8; 19];

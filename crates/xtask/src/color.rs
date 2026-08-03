@@ -12,7 +12,7 @@ const ISSUE: i64 = 257;
 const PINNED_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ColorCommand {
+pub enum ColorCommand {
     /// Validate all built-in color identities and deterministic transform plans.
     Contracts {
         #[arg(long)]
@@ -24,7 +24,7 @@ pub(crate) enum ColorCommand {
     },
 }
 
-pub(crate) fn run(root: &Path, command: &ColorCommand) -> Result {
+pub fn run(root: &Path, command: &ColorCommand) -> Result {
     match command {
         ColorCommand::Contracts {
             all_builtins,
@@ -50,7 +50,7 @@ pub(crate) fn run(root: &Path, command: &ColorCommand) -> Result {
     }
 }
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     let path = root.join(SOURCE_MAP);
     let text = fs::read_to_string(&path)
         .map_err(|error| format!("color source map: read failed: {error}"))?;

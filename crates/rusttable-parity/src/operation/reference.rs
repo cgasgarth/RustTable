@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 
 use super::model::ReferenceIdentity;
 
-pub(crate) fn reference_commit(source: &Path) -> String {
+pub fn reference_commit(source: &Path) -> String {
     if let Ok(commit) = fs::read_to_string(source.join(".rusttable-reference-commit")) {
         let commit = commit.trim();
         if !commit.is_empty() {
@@ -31,7 +31,7 @@ pub(crate) fn reference_commit(source: &Path) -> String {
         .map_or_else(|| "fixture".to_owned(), |value| value.trim().to_owned())
 }
 
-pub(crate) fn reference_identity(source: &Path) -> ReferenceIdentity {
+pub fn reference_identity(source: &Path) -> ReferenceIdentity {
     let commit = reference_commit(source);
     let canonical = commit == "cfe57f3bbf5269bfacf31e832267279caa6938ad";
     ReferenceIdentity {
@@ -121,7 +121,7 @@ pub(crate) fn reference_identity(source: &Path) -> ReferenceIdentity {
     }
 }
 
-pub(crate) fn manifest_reference(
+pub fn manifest_reference(
     identity: &rusttable_testkit::reference::ReferenceIdentity,
 ) -> ReferenceIdentity {
     let receipt = identity.receipt();

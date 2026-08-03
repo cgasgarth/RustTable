@@ -1,4 +1,7 @@
-#![allow(clippy::missing_panics_doc)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "CLAHE descriptor invariants are checked by bounded static contract construction."
+)]
 
 use rusttable_color::ColorEncoding;
 

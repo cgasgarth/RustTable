@@ -1,3 +1,9 @@
+#![expect(
+    clippy::imprecise_flops,
+    clippy::suboptimal_flops,
+    reason = "Native Diffuse PDE equations preserve source evaluation order and IEEE-754 parity."
+)]
+
 //! Direct CPU helpers from `src/iop/diffuse.c` and `data/kernels/diffuse.cl`.
 
 #![allow(
@@ -74,7 +80,7 @@ fn build_matrix(matrix: [[[f32; 4]; 2]; 2]) -> [[f32; 4]; 9] {
     kernel
 }
 
-fn isotropic_laplacian() -> [[f32; 4]; 9] {
+const fn isotropic_laplacian() -> [[f32; 4]; 9] {
     [
         [0.25; 4], [0.5; 4], [0.25; 4], [0.5; 4], [-3.0; 4], [0.5; 4], [0.25; 4], [0.5; 4],
         [0.25; 4],

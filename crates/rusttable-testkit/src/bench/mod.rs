@@ -458,11 +458,11 @@ pub enum MetricValue {
 impl MetricValue {
     fn add_all<'a, I>(values: I) -> Result<Self, BenchmarkError>
     where
-        I: IntoIterator<Item = &'a MetricValue>,
+        I: IntoIterator<Item = &'a Self>,
     {
         let mut total = 0_u64;
         for value in values {
-            let MetricValue::Measured(value) = value else {
+            let Self::Measured(value) = value else {
                 return Ok(Self::Unavailable);
             };
             total = total.checked_add(*value).ok_or(BenchmarkError::Overflow)?;

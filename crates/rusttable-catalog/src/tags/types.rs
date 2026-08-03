@@ -15,9 +15,9 @@ pub const MAX_TAG_ALIASES: usize = 64;
 pub const MAX_ASSIGNMENT_PHOTOS: usize = 4_096;
 pub const MAX_ASSIGNMENT_TAGS: usize = 256;
 pub const MAX_TAGS_PER_PHOTO: usize = 1_024;
-pub(crate) const MAX_TAGS: usize = 65_536;
-pub(crate) const MAX_TAGGED_PHOTOS: usize = 1_000_000;
-pub(crate) const MAX_TAG_DEPTH: usize = 64;
+pub const MAX_TAGS: usize = 65_536;
+pub const MAX_TAGGED_PHOTOS: usize = 1_000_000;
+pub const MAX_TAG_DEPTH: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TagId(u128);
@@ -219,7 +219,7 @@ impl TagDefinition {
     }
 }
 
-pub(crate) fn canonical_lookup(value: &str) -> Result<String, TagError> {
+pub fn canonical_lookup(value: &str) -> Result<String, TagError> {
     TagAlias::new(value).map(|alias| alias.0)
 }
 

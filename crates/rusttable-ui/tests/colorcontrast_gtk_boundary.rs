@@ -39,7 +39,10 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The GTK boundary fixture keeps source Color Contrast controls, hierarchy, and allocation checks together."
+)]
 fn colorcontrast_uses_two_bauhaus_sliders_without_an_invented_icon() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.colorcontrast-boundary"),
@@ -320,6 +323,10 @@ fn assert_default_active_filters_controller_owned_colorcontrast(
     );
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The GTK boundary fixture keeps multi-instance descendant identity and action-target checks together."
+)]
 fn assert_multi_instance_descendant_identity_and_targets(shell: &GtkShell, root: &gtk4::Widget) {
     let first_id = OperationId::new(41).expect("first operation id");
     let second_id = OperationId::new(73).expect("second operation id");

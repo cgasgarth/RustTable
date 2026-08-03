@@ -1,5 +1,3 @@
-#![allow(clippy::all, clippy::pedantic)]
-
 use std::io::{BufReader, Cursor};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -27,6 +25,11 @@ impl PngDecoder {
     }
 
     /// Probes a PNG header and validates every complete chunk available to the probe.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the PNG is malformed, unsupported, cancelled,
+    /// or exceeds the supplied limits.
     pub fn probe_bytes(
         &self,
         bytes: &[u8],
@@ -36,6 +39,11 @@ impl PngDecoder {
     }
 
     /// Fully validates PNG structure, CRCs, ordering, inventories, and limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the PNG is malformed, unsupported, cancelled,
+    /// or exceeds the supplied limits.
     pub fn inspect_bytes(
         &self,
         bytes: &[u8],
@@ -45,6 +53,11 @@ impl PngDecoder {
     }
 
     /// Decodes an immutable byte slice without publishing partial output.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the PNG is malformed, unsupported, cancelled,
+    /// or exceeds the supplied limits.
     pub fn decode_bytes(
         &self,
         bytes: &[u8],
@@ -54,6 +67,11 @@ impl PngDecoder {
     }
 
     /// Copies a bounded random-access source and rejects source mutation before decoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the source changes, the PNG is malformed or
+    /// unsupported, decoding is cancelled, or a limit is exceeded.
     pub fn decode_source<S: RawByteSource + ?Sized>(
         &self,
         source: &S,
@@ -108,14 +126,11 @@ impl PngDecoder {
     }
 }
 
-pub(crate) fn is_png_signature(bytes: &[u8]) -> bool {
+pub fn is_png_signature(bytes: &[u8]) -> bool {
     bytes.starts_with(b"\x89PNG\r\n\x1a\n")
 }
 
-pub(crate) fn decode_png_probe(
-    bytes: &[u8],
-    limits: DecodeLimits,
-) -> Result<ImageProbe, ImageInputError> {
+pub fn decode_png_probe(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
     // The registry's historical bounded probe accepts an IHDR-only prefix.  A
     // complete source always takes the strict CRC/order path below.
     if bytes.len() == 33
@@ -267,6 +282,10 @@ fn packed_data_bytes(
     Ok(total)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "PNG sample conversion keeps each native color-depth branch auditable at the format boundary."
+)]
 fn convert_samples(output: &[u8], parsed: &ParsedPng) -> Result<PngPixelData, PngDecodeError> {
     let dimensions = parsed.dimensions;
     let depth = parsed.header.bit_depth.bits();
@@ -276,10 +295,9 @@ fn convert_samples(output: &[u8], parsed: &ParsedPng) -> Result<PngPixelData, Pn
                 PngDecodeError::Malformed("indexed PNG has no palette".to_owned())
             })?;
             let alpha = parsed.transparency.as_deref();
-            let mut samples = Vec::with_capacity(
-                dimensions.pixel_count().unwrap_or(0) as usize
-                    * if alpha.is_some() { 4 } else { 3 },
-            );
+            let pixel_count = usize::try_from(dimensions.pixel_count().unwrap_or(0)).unwrap_or(0);
+            let mut samples =
+                Vec::with_capacity(pixel_count.saturating_mul(if alpha.is_some() { 4 } else { 3 }));
             let mut index = 0;
             for _ in 0..dimensions.height() {
                 let row_bytes = packed_row_len(dimensions.width(), depth);
@@ -370,9 +388,9 @@ fn convert_samples(output: &[u8], parsed: &ParsedPng) -> Result<PngPixelData, Pn
                 let values = be_u16_samples(output)?;
                 if let Some(trns) = transparent_rgb(parsed.transparency.as_deref()) {
                     let mut samples = Vec::with_capacity(values.len() / 3 * 4);
-                    for pixel in values.chunks_exact(3) {
+                    for pixel in values.as_chunks::<3>().0 {
                         samples.extend_from_slice(pixel);
-                        samples.push(if pixel == trns { 0 } else { u16::MAX });
+                        samples.push(if *pixel == trns { 0 } else { u16::MAX });
                     }
                     Ok(PngPixelData::RgbaU16 {
                         dimensions,
@@ -384,35 +402,23 @@ fn convert_samples(output: &[u8], parsed: &ParsedPng) -> Result<PngPixelData, Pn
                         samples: values,
                     })
                 }
-            } else {
-                if let Some(trns) = transparent_rgb(parsed.transparency.as_deref()) {
-                    let mut samples = Vec::with_capacity(output.len() / 3 * 4);
-                    for pixel in output.chunks_exact(3) {
-                        samples.extend_from_slice(pixel);
-                        samples.push(
-                            if pixel
-                                == trns
-                                    .iter()
-                                    .map(|value| *value as u8)
-                                    .collect::<Vec<_>>()
-                                    .as_slice()
-                            {
-                                0
-                            } else {
-                                255
-                            },
-                        );
-                    }
-                    Ok(PngPixelData::RgbaU8 {
-                        dimensions,
-                        samples,
-                    })
-                } else {
-                    Ok(PngPixelData::RgbU8 {
-                        dimensions,
-                        samples: output.to_vec(),
-                    })
+            } else if let Some(trns) = transparent_rgb(parsed.transparency.as_deref()) {
+                let mut samples = Vec::with_capacity(output.len() / 3 * 4);
+                let transparent = trns
+                    .map(|value| u8::try_from(value).expect("validated 8-bit RGB transparency"));
+                for pixel in output.as_chunks::<3>().0 {
+                    samples.extend_from_slice(pixel);
+                    samples.push(if pixel == &transparent { 0 } else { 255 });
                 }
+                Ok(PngPixelData::RgbaU8 {
+                    dimensions,
+                    samples,
+                })
+            } else {
+                Ok(PngPixelData::RgbU8 {
+                    dimensions,
+                    samples: output.to_vec(),
+                })
             }
         }
         PngColorType::Rgba => {
@@ -432,7 +438,9 @@ fn convert_samples(output: &[u8], parsed: &ParsedPng) -> Result<PngPixelData, Pn
 }
 
 fn packed_row_len(width: u32, depth: u8) -> usize {
-    (usize::try_from(u64::from(width) * u64::from(depth)).unwrap_or(usize::MAX) + 7) / 8
+    usize::try_from(u64::from(width) * u64::from(depth))
+        .unwrap_or(usize::MAX)
+        .div_ceil(8)
 }
 fn packed_sample(row: &[u8], index: usize, depth: u8) -> u8 {
     if depth == 8 {
@@ -447,13 +455,14 @@ fn unpack_gray(output: &[u8], dimensions: rusttable_image::ImageDimensions, dept
     if depth == 8 {
         return output.to_vec();
     }
-    let mut values = Vec::with_capacity(dimensions.pixel_count().unwrap_or(0) as usize);
-    let max = u16::from((1_u16 << depth) - 1);
+    let pixel_count = usize::try_from(dimensions.pixel_count().unwrap_or(0)).unwrap_or(0);
+    let mut values = Vec::with_capacity(pixel_count);
+    let max = (1_u16 << depth) - 1;
     let row_len = packed_row_len(dimensions.width(), depth);
     for row in output.chunks_exact(row_len) {
         for x in 0..dimensions.width() {
             let sample = u16::from(packed_sample(row, x as usize, depth));
-            values.push(((sample * 255) / max) as u8);
+            values.push(u8::try_from((sample * 255) / max).expect("sub-byte sample scales to u8"));
         }
     }
     values
@@ -479,7 +488,8 @@ fn unpack_gray_with_transparency(
         }
         return samples;
     }
-    let mut samples = Vec::with_capacity(dimensions.pixel_count().unwrap_or(0) as usize * 2);
+    let pixel_count = usize::try_from(dimensions.pixel_count().unwrap_or(0)).unwrap_or(0);
+    let mut samples = Vec::with_capacity(pixel_count.saturating_mul(2));
     let max = (1_u16 << depth) - 1;
     let row_len = packed_row_len(dimensions.width(), depth);
     for row in output.chunks_exact(row_len) {
@@ -560,7 +570,7 @@ impl Snapshot {
             let offset = u64::try_from(
                 index
                     .checked_mul(COPY_CHUNK_BYTES)
-                    .ok_or_else(|| PngDecodeError::Source(RawSourceError::LengthConversion))?,
+                    .ok_or(PngDecodeError::Source(RawSourceError::LengthConversion))?,
             )
             .map_err(|_| PngDecodeError::Source(RawSourceError::LengthConversion))?;
             source
@@ -623,6 +633,6 @@ fn malformed(message: &str) -> ImageInputError {
         message: message.to_owned(),
     }
 }
-fn arithmetic() -> PngDecodeError {
+const fn arithmetic() -> PngDecodeError {
     PngDecodeError::Input(ImageInputError::ArithmeticOverflow)
 }

@@ -99,7 +99,7 @@ impl ToneCurveHistory {
         }
     }
 
-    pub fn current(&self) -> &ToneCurveParametersV5 {
+    pub const fn current(&self) -> &ToneCurveParametersV5 {
         match self {
             Self::V5(parameters) => parameters,
         }
@@ -197,7 +197,7 @@ fn decode_curve_prefix(
     (tonecurve, tonecurve_nodes, tonecurve_type)
 }
 
-fn ensure_length(bytes: &[u8], expected: usize) -> Result<(), ToneCurveCodecError> {
+const fn ensure_length(bytes: &[u8], expected: usize) -> Result<(), ToneCurveCodecError> {
     if bytes.len() == expected {
         Ok(())
     } else {

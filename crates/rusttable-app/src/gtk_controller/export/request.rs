@@ -186,7 +186,7 @@ pub struct ExportRequest {
 
 impl ExportRequest {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         catalog_path: PathBuf,
         source_root: PathBuf,
         photo_id: PhotoId,

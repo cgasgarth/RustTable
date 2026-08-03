@@ -634,7 +634,7 @@ mod tests {
             .find(|edit| edit.photo_id() == photo_id)
             .expect("persisted edit");
         let replacement = persisted
-            .revised(persisted.operations().cloned().collect::<Vec<_>>())
+            .revised(persisted.operations().cloned())
             .expect("advance edit revision");
         repository
             .commit_replacement(persisted.revision(), &replacement)

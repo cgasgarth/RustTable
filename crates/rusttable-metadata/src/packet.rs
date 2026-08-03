@@ -60,7 +60,7 @@ pub struct MetadataPacketBuilder {
 
 impl MetadataPacketBuilder {
     #[must_use]
-    pub fn new(policy: CanonicalMetadataPolicy) -> Self {
+    pub const fn new(policy: CanonicalMetadataPolicy) -> Self {
         Self {
             policy,
             candidates: Vec::new(),
@@ -68,7 +68,7 @@ impl MetadataPacketBuilder {
         }
     }
     #[must_use]
-    pub fn policy(mut self, policy: CanonicalMetadataPolicy) -> Self {
+    pub const fn policy(mut self, policy: CanonicalMetadataPolicy) -> Self {
         self.policy = policy;
         self
     }

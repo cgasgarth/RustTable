@@ -229,7 +229,7 @@ impl BivariateMoments {
                 moments.count += 1;
                 moments.sum_x += x;
                 moments.sum_y += y;
-                moments.sum_xy += x * y;
+                moments.sum_xy = x.mul_add(y, moments.sum_xy);
             }
             if !moments.is_finite() {
                 return Err(NumericalError::ReductionOverflow);
@@ -256,7 +256,7 @@ impl BivariateMoments {
             return None;
         }
         let count = f64::from(self.count);
-        Some((self.sum_xy / count) - (self.sum_x / count) * (self.sum_y / count))
+        Some((self.sum_x / count).mul_add(-(self.sum_y / count), self.sum_xy / count))
     }
 
     fn merged(self, right: Self) -> Self {
@@ -268,7 +268,7 @@ impl BivariateMoments {
         }
     }
 
-    fn is_finite(self) -> bool {
+    const fn is_finite(self) -> bool {
         self.sum_x.is_finite() && self.sum_y.is_finite() && self.sum_xy.is_finite()
     }
 }

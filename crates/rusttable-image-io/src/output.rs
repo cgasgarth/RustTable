@@ -264,7 +264,7 @@ fn encode_png(image: &DecodedImage, limits: OutputLimits) -> Result<Vec<u8>, Ima
         .map_err(|error| map_png_encode_error(&error))
 }
 
-fn map_png_encode_error(error: &PngEncodeError) -> ImageOutputError {
+const fn map_png_encode_error(error: &PngEncodeError) -> ImageOutputError {
     match error {
         PngEncodeError::OutputTooLarge { actual, limit } => {
             ImageOutputError::EncodedOutputTooLarge {
@@ -283,7 +283,7 @@ fn map_png_encode_error(error: &PngEncodeError) -> ImageOutputError {
     }
 }
 
-fn image_output_error(source: ImageOutputError) -> MetadataImageOutputError {
+const fn image_output_error(source: ImageOutputError) -> MetadataImageOutputError {
     MetadataImageOutputError::BeforePublication { source }
 }
 
@@ -620,7 +620,7 @@ struct LimitedWriter {
 }
 
 impl LimitedWriter {
-    fn new(limit: u64) -> Self {
+    const fn new(limit: u64) -> Self {
         Self {
             bytes: Vec::new(),
             limit,

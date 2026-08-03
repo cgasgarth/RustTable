@@ -26,7 +26,7 @@ fn fixture_bytes() -> Vec<u8> {
         .collect()
 }
 
-fn nonlinear_parameters() -> BasecurveParameters {
+const fn nonlinear_parameters() -> BasecurveParameters {
     let mut value = BasecurveParameters::defaults();
     value.basecurve[0] = [BasecurveNode::new(0.0, 0.0); MAX_NODES];
     value.basecurve[0][0] = BasecurveNode::new(0.0, 0.0);

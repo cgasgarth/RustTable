@@ -133,7 +133,10 @@ impl GtkShell {
         Self::with_layout_and_i18n(application, layout, I18n::default())
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The source-ordered GTK shell builder keeps application wiring, hierarchy, and handlers together."
+    )]
     fn with_layout_and_i18n(
         application: &gtk4::Application,
         layout: ShellLayout,
@@ -242,8 +245,8 @@ impl GtkShell {
             filmstrip,
             filmstrip_root,
             lighttable_layout_controls,
-            left_panel_stack: left_panel.clone(),
-            right_panel_stack: right_panel.clone(),
+            left_panel_stack: left_panel,
+            right_panel_stack: right_panel,
             left_modules: darkroom_left_modules,
             right_modules: darkroom_right_modules,
             darkroom_workspace,
@@ -441,13 +444,13 @@ impl GtkShell {
 
     /// Exposes the application window for application actions and persistence.
     #[must_use]
-    pub fn window(&self) -> &gtk4::ApplicationWindow {
+    pub const fn window(&self) -> &gtk4::ApplicationWindow {
         &self.window
     }
 
     /// Returns the reusable darkroom preview surface for rendered texture updates.
     #[must_use]
-    pub fn darkroom_preview(&self) -> &PhotoPreview {
+    pub const fn darkroom_preview(&self) -> &PhotoPreview {
         &self.darkroom_preview
     }
 
@@ -537,13 +540,13 @@ impl GtkShell {
 
     /// Returns the Darktable-shaped selected-photo PNG export module.
     #[must_use]
-    pub fn export_panel(&self) -> &ExportPanel {
+    pub const fn export_panel(&self) -> &ExportPanel {
         &self.export_panel
     }
 
     /// Returns the service-safe external-editor workflow module.
     #[must_use]
-    pub fn external_editor_panel(&self) -> &ExternalEditorPanel {
+    pub const fn external_editor_panel(&self) -> &ExternalEditorPanel {
         &self.external_editor_panel
     }
 
@@ -580,13 +583,13 @@ impl GtkShell {
 
     /// Returns the Darktable-shaped collection rule controls in the left panel.
     #[must_use]
-    pub fn collection_controls(&self) -> &CollectionControls {
+    pub const fn collection_controls(&self) -> &CollectionControls {
         &self.collection_controls
     }
 
     /// Returns the GTK4 shortcut/device preferences editor.
     #[must_use]
-    pub fn input_mapping_editor(&self) -> &InputMappingEditor {
+    pub const fn input_mapping_editor(&self) -> &InputMappingEditor {
         &self.input_mapping_editor
     }
 

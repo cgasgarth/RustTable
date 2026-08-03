@@ -10,13 +10,13 @@ use sha2::{Digest, Sha256};
 use crate::workspace::SelectedPreview;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PresentationFallback {
+pub enum PresentationFallback {
     MissingProfile,
     UnusableProfile,
 }
 
 impl PresentationFallback {
-    pub(crate) const fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::MissingProfile => "monitor profile unavailable",
             Self::UnusableProfile => "monitor profile unusable",
@@ -25,7 +25,7 @@ impl PresentationFallback {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PresentationReceipt {
+pub struct PresentationReceipt {
     scene_identity: [u8; 32],
     edit_identity: [u8; 32],
     presentation_identity: [u8; 32],
@@ -37,41 +37,41 @@ pub(crate) struct PresentationReceipt {
 }
 
 impl PresentationReceipt {
-    pub(crate) const fn scene_identity(&self) -> [u8; 32] {
+    pub const fn scene_identity(&self) -> [u8; 32] {
         self.scene_identity
     }
 
-    pub(crate) const fn edit_identity(&self) -> [u8; 32] {
+    pub const fn edit_identity(&self) -> [u8; 32] {
         self.edit_identity
     }
 
-    pub(crate) const fn presentation_identity(&self) -> [u8; 32] {
+    pub const fn presentation_identity(&self) -> [u8; 32] {
         self.presentation_identity
     }
 
-    pub(crate) const fn monitor(&self) -> Option<MonitorId> {
+    pub const fn monitor(&self) -> Option<MonitorId> {
         self.monitor
     }
 
-    pub(crate) const fn profile_id(&self) -> Option<DisplayProfileId> {
+    pub const fn profile_id(&self) -> Option<DisplayProfileId> {
         self.profile_id
     }
 
-    pub(crate) const fn generation(&self) -> u64 {
+    pub const fn generation(&self) -> u64 {
         self.generation
     }
 
-    pub(crate) const fn intent(&self) -> RenderingIntent {
+    pub const fn intent(&self) -> RenderingIntent {
         self.intent
     }
 
-    pub(crate) const fn fallback(&self) -> Option<PresentationFallback> {
+    pub const fn fallback(&self) -> Option<PresentationFallback> {
         self.fallback
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PresentedPreview {
+pub struct PresentedPreview {
     photo_id: PhotoId,
     dimensions: ImageDimensions,
     pixels: Vec<u8>,
@@ -81,32 +81,32 @@ pub(crate) struct PresentedPreview {
 }
 
 impl PresentedPreview {
-    pub(crate) const fn photo_id(&self) -> PhotoId {
+    pub const fn photo_id(&self) -> PhotoId {
         self.photo_id
     }
 
-    pub(crate) const fn dimensions(&self) -> ImageDimensions {
+    pub const fn dimensions(&self) -> ImageDimensions {
         self.dimensions
     }
 
-    pub(crate) fn pixels(&self) -> &[u8] {
+    pub fn pixels(&self) -> &[u8] {
         &self.pixels
     }
 
-    pub(crate) const fn receipt(&self) -> &crate::CatalogPreviewReceipt {
+    pub const fn receipt(&self) -> &crate::CatalogPreviewReceipt {
         &self.receipt
     }
 
-    pub(crate) const fn presentation_receipt(&self) -> &PresentationReceipt {
+    pub const fn presentation_receipt(&self) -> &PresentationReceipt {
         &self.presentation
     }
 
-    pub(crate) const fn status(&self) -> PresentationStatus {
+    pub const fn status(&self) -> PresentationStatus {
         self.status
     }
 }
 
-pub(crate) fn present(
+pub fn present(
     preview: SelectedPreview,
     snapshot: Option<&DisplayProfileSnapshot>,
     intent: RenderingIntent,
@@ -195,8 +195,9 @@ fn transform_pixels(
     plan: &rusttable_color::TransformPlan,
 ) -> Result<Vec<u8>, ProfileTransformError> {
     let mut output = Vec::with_capacity(source.len());
-    #[allow(clippy::chunks_exact_to_as_chunks)]
-    for pixel in source.chunks_exact(4) {
+    let (pixels, remainder) = source.as_chunks::<4>();
+    debug_assert!(remainder.is_empty());
+    for pixel in pixels {
         let rgb = plan
             .apply_rgb(
                 [
@@ -215,7 +216,11 @@ fn transform_pixels(
 
 fn quantize(value: f32) -> u8 {
     let rounded = (value.clamp(0.0, 1.0) * 255.0).round();
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamping and rounding bound the native RGB channel conversion"
+    )]
     u8::try_from(rounded as u32).expect("clamped RGB channel fits u8")
 }
 

@@ -11,7 +11,10 @@ use super::codec::{
 };
 
 /// Explicit history and UI policy for this technical operation.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "history policy booleans are independent serialized/UI compatibility flags"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotatePixelsHistoryPolicy {
     pub hidden: bool,
@@ -38,7 +41,10 @@ pub const fn history_policy() -> RotatePixelsHistoryPolicy {
 ///
 /// Panics only if the compile-time operation identifier violates the descriptor key contract.
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the descriptor preserves Rotate Pixels parameter order and history compatibility metadata"
+)]
 pub fn rotatepixels_descriptor() -> OperationDescriptor {
     let integer = |id: &str| ParameterDescriptor {
         id: id.to_owned(),

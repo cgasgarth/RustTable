@@ -28,7 +28,7 @@ pub struct RgbAiReceipt {
     pub detail: Option<DetailReceipt>,
 }
 
-pub(crate) fn image_identity(
+pub fn image_identity(
     dimensions: ImageDimensions,
     profile: ColorEncoding,
     pixels: &[[f32; 4]],

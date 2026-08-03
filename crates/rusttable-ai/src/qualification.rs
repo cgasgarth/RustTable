@@ -30,6 +30,10 @@ pub struct ProviderQualificationReceipt {
 }
 
 impl ProviderQualificationReceipt {
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "preserve the source-defined absolute-plus-relative tolerance order"
+    )]
     pub fn qualify(
         model: ModelIdentity,
         provider: Provider,

@@ -94,7 +94,7 @@ struct StoredSummary {
     label: Vec<u8>,
 }
 
-pub(crate) fn encode_meta(snapshot: &HistoryStateSnapshot) -> Result<Vec<u8>, ()> {
+pub fn encode_meta(snapshot: &HistoryStateSnapshot) -> Result<Vec<u8>, ()> {
     let branches = snapshot
         .branches()
         .iter()
@@ -174,7 +174,7 @@ pub(crate) fn encode_meta(snapshot: &HistoryStateSnapshot) -> Result<Vec<u8>, ()
     .map_err(|_| ())
 }
 
-pub(crate) fn decode_meta(bytes: &[u8]) -> Result<DecodedMeta, ()> {
+pub fn decode_meta(bytes: &[u8]) -> Result<DecodedMeta, ()> {
     let stored: StoredMeta = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != FORMAT_VERSION {
         return Err(());
@@ -268,7 +268,7 @@ pub(crate) fn decode_meta(bytes: &[u8]) -> Result<DecodedMeta, ()> {
     })
 }
 
-pub(crate) fn encode_revision(revision: &HistoryRevision) -> Result<Vec<u8>, ()> {
+pub fn encode_revision(revision: &HistoryRevision) -> Result<Vec<u8>, ()> {
     let payload = revision.payload();
     let summary = payload.summary();
     to_allocvec(&StoredRevision {
@@ -292,7 +292,7 @@ pub(crate) fn encode_revision(revision: &HistoryRevision) -> Result<Vec<u8>, ()>
     .map_err(|_| ())
 }
 
-pub(crate) fn decode_revision(bytes: &[u8]) -> Result<HistoryRevision, ()> {
+pub fn decode_revision(bytes: &[u8]) -> Result<HistoryRevision, ()> {
     let stored: StoredRevision = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != FORMAT_VERSION {
         return Err(());
@@ -320,19 +320,19 @@ pub(crate) fn decode_revision(bytes: &[u8]) -> Result<HistoryRevision, ()> {
     ))
 }
 
-pub(crate) struct DecodedMeta {
-    pub(crate) photo_id: PhotoId,
-    pub(crate) version: HistoryVersion,
-    pub(crate) next_revision_id: u64,
-    pub(crate) next_branch_id: u64,
-    pub(crate) next_snapshot_id: u64,
-    pub(crate) active_branch: HistoryBranchId,
-    pub(crate) branches: Vec<HistoryBranch>,
-    pub(crate) snapshots: Vec<HistorySnapshot>,
-    pub(crate) evidence: Vec<HistoryEvidence>,
-    pub(crate) commit_sequence: u64,
-    pub(crate) journal: Vec<HistoryJournalEntry>,
-    pub(crate) provenance: std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance>,
+pub struct DecodedMeta {
+    pub photo_id: PhotoId,
+    pub version: HistoryVersion,
+    pub next_revision_id: u64,
+    pub next_branch_id: u64,
+    pub next_snapshot_id: u64,
+    pub active_branch: HistoryBranchId,
+    pub branches: Vec<HistoryBranch>,
+    pub snapshots: Vec<HistorySnapshot>,
+    pub evidence: Vec<HistoryEvidence>,
+    pub commit_sequence: u64,
+    pub journal: Vec<HistoryJournalEntry>,
+    pub provenance: std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -388,7 +388,7 @@ fn decode_provenance(value: &StoredProvenance) -> Result<HistoryProvenance, ()> 
     }
 }
 
-fn encode_operation_kind(kind: HistoryOperationKind) -> u8 {
+const fn encode_operation_kind(kind: HistoryOperationKind) -> u8 {
     match kind {
         HistoryOperationKind::Parameter => 1,
         HistoryOperationKind::Order => 2,
@@ -403,7 +403,7 @@ fn encode_operation_kind(kind: HistoryOperationKind) -> u8 {
     }
 }
 
-fn decode_operation_kind(value: u8) -> Result<HistoryOperationKind, ()> {
+const fn decode_operation_kind(value: u8) -> Result<HistoryOperationKind, ()> {
     match value {
         1 => Ok(HistoryOperationKind::Parameter),
         2 => Ok(HistoryOperationKind::Order),
@@ -419,7 +419,7 @@ fn decode_operation_kind(value: u8) -> Result<HistoryOperationKind, ()> {
     }
 }
 
-fn encode_evidence_kind(kind: HistoryEvidenceKind) -> u8 {
+const fn encode_evidence_kind(kind: HistoryEvidenceKind) -> u8 {
     match kind {
         HistoryEvidenceKind::Export => 1,
         HistoryEvidenceKind::Migration => 2,
@@ -429,7 +429,7 @@ fn encode_evidence_kind(kind: HistoryEvidenceKind) -> u8 {
     }
 }
 
-fn decode_evidence_kind(value: u8) -> Result<HistoryEvidenceKind, ()> {
+const fn decode_evidence_kind(value: u8) -> Result<HistoryEvidenceKind, ()> {
     match value {
         1 => Ok(HistoryEvidenceKind::Export),
         2 => Ok(HistoryEvidenceKind::Migration),

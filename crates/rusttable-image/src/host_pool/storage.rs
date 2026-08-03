@@ -60,7 +60,7 @@ impl AlignedStorage {
         }
     }
 
-    pub(super) fn capacity(&self) -> usize {
+    pub(super) const fn capacity(&self) -> usize {
         match self {
             Self::A64(blocks) => blocks.len() * 64,
             Self::A128(blocks) => blocks.len() * 128,

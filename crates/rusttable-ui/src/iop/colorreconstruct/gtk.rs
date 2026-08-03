@@ -35,7 +35,10 @@ const DEFAULT_STACK_CHILD: &str = "default";
 const MONOCHROME_STACK_CHILD: &str = "monochrome";
 
 /// Complete UI-owned snapshot for one Color Reconstruction leaf.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "The GTK snapshot carries independent enablement, sensitivity, materialization, and mode flags."
+)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ColorReconstructionGtkState {
     operation_id: OperationId,
@@ -178,7 +181,7 @@ pub struct ColorReconstructionGtkLeaf {
 
 impl ColorReconstructionGtkLeaf {
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Stack {
+    pub const fn widget(&self) -> &gtk4::Stack {
         &self.root
     }
 
@@ -381,9 +384,9 @@ fn connect_slider(parameter: ColorReconstructionParameter, shared: &Rc<Shared>) 
             if shared.suppress_updates.get() {
                 return;
             }
-            #[allow(
+            #[expect(
                 clippy::cast_possible_truncation,
-                reason = "the Bauhaus range is finite and bounded to native f32 parameters"
+                reason = "The Bauhaus range is finite and bounded to native f32 parameters."
             )]
             shared.settle_scalar(parameter, value as f32);
         });
@@ -426,7 +429,7 @@ struct Widgets {
 }
 
 impl Widgets {
-    fn slider(&self, parameter: ColorReconstructionParameter) -> &BauhausSlider {
+    const fn slider(&self, parameter: ColorReconstructionParameter) -> &BauhausSlider {
         match parameter {
             ColorReconstructionParameter::Threshold => &self.threshold,
             ColorReconstructionParameter::Spatial => &self.spatial,
@@ -436,7 +439,7 @@ impl Widgets {
     }
 }
 
-fn settled_action(
+const fn settled_action(
     before: ColorReconstructionGtkState,
     candidate: ColorReconstructionEditorState,
 ) -> ColorReconstructionSettledAction {
@@ -449,7 +452,7 @@ fn settled_action(
     }
 }
 
-fn committed_state(
+const fn committed_state(
     before: ColorReconstructionGtkState,
     candidate: ColorReconstructionEditorState,
     revision: Revision,

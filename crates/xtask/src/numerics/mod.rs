@@ -13,7 +13,7 @@ mod receipt;
 use receipt::{CheckReceipt, NumericsReceipt};
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum NumericsCommand {
+pub enum NumericsCommand {
     /// Verify observable compiler/profile/source and implementation registrations.
     Verify {
         #[arg(long)]
@@ -34,7 +34,7 @@ pub(crate) enum NumericsCommand {
     },
 }
 
-pub(crate) fn run(root: &Path, command: &NumericsCommand) -> Result {
+pub fn run(root: &Path, command: &NumericsCommand) -> Result {
     match command {
         NumericsCommand::Verify {
             all_implementations,
@@ -60,7 +60,7 @@ pub(crate) fn run(root: &Path, command: &NumericsCommand) -> Result {
     }
 }
 
-pub(crate) fn verify_registered_choices(root: &Path) -> Result {
+pub fn verify_registered_choices(root: &Path) -> Result {
     let document = policy::load(root)?;
     let mut checks = policy::verify(root, &document, true)?;
     checks.push(verify_shaders(true));

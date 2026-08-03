@@ -118,7 +118,7 @@ impl ImageInput for FileImageInput {
     }
 }
 
-pub(crate) fn enforce_limits(
+pub fn enforce_limits(
     limits: DecodeLimits,
     dimensions: ImageDimensions,
 ) -> Result<(), ImageInputError> {

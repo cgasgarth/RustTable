@@ -84,6 +84,7 @@ impl HostBufferPool {
     pub fn try_acquire(&self, request: BufferRequest) -> Result<BufferLease, HostPoolError> {
         let mut state = lock_state(&self.shared.state);
         let lease = grant(&mut state, request)?;
+        drop(state);
         Ok(BufferLease {
             pool: Arc::clone(&self.shared),
             inner: Some(lease),
@@ -105,7 +106,7 @@ impl HostBufferPool {
         request: BufferRequest,
         options: &AcquireOptions,
     ) -> Result<BufferLease, HostPoolError> {
-        let priority = options.priority().unwrap_or(request.priority());
+        let priority = options.priority().unwrap_or_else(|| request.priority());
         let deadline = options.timeout().map(|timeout| Instant::now() + timeout);
         let mut state = lock_state(&self.shared.state);
         let ticket = state.next_ticket;
@@ -279,7 +280,7 @@ impl HostBufferPool {
 }
 
 impl PoolState {
-    fn new(budgets: PoolBudgets) -> Self {
+    const fn new(budgets: PoolBudgets) -> Self {
         Self {
             budgets,
             allocated_bytes: 0,
@@ -457,6 +458,7 @@ fn return_inner(shared: &Arc<PoolShared>, mut inner: LeaseInner) -> ReturnReceip
     let mut state = lock_state(&shared.state);
     let poisoned = inner.state == LeaseState::Poisoned;
     let Some(storage) = inner.storage.take() else {
+        drop(state);
         return ReturnReceipt {
             lease_id: inner.id,
             pooled: false,
@@ -505,6 +507,7 @@ fn return_inner(shared: &Arc<PoolShared>, mut inner: LeaseInner) -> ReturnReceip
         total_bytes,
     });
     shared.wake.notify_all();
+    drop(state);
     ReturnReceipt {
         lease_id: inner.id,
         pooled: retain,

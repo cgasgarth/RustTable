@@ -45,6 +45,10 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The GTK boundary fixture keeps the production slider hierarchy and source input event sequence together."
+)]
 fn shared_production_slider_has_source_input_boundary() {
     let panel = ExposurePanel::new();
     let actions = Rc::new(RefCell::new(Vec::<ExposureAction>::new()));
@@ -407,7 +411,7 @@ fn negative_factor_uses_mapped_production_controller_route() {
         "reverse-factor fixture must not activate or steal focus"
     );
 
-    let fixture_root: gtk4::Widget = fixture.clone().upcast();
+    let fixture_root: gtk4::Widget = fixture.upcast();
     let scale = find_widget(&fixture_root, "reverse-factor-scale")
         .expect("mapped reverse-factor scale")
         .downcast::<gtk4::Scale>()
@@ -446,6 +450,10 @@ fn negative_factor_uses_mapped_production_controller_route() {
     settle_gtk();
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The generic GTK fixture keeps descriptor-backed popup setup, event routing, and deferred commit checks together."
+)]
 fn generic_descriptor_slider_defers_source_popup() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.generic-slider-boundary"),
@@ -627,6 +635,10 @@ fn assert_secondary_opening_focus(
     settle_gtk();
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The GTK fixture keeps every closed-slider controller and source event assertion in order."
+)]
 fn assert_closed_source_controllers(
     scale: &gtk4::Scale,
     actions: &Rc<RefCell<Vec<ExposureAction>>>,
@@ -901,6 +913,10 @@ fn assert_popup_rejection_after_range_toggle(
     );
 }
 
+#[expect(
+    clippy::suspicious_operation_groupings,
+    reason = "The GTK fixture intentionally computes normalized position from the live adjustment bounds."
+)]
 fn normalized_scale_position(scale: &gtk4::Scale) -> f64 {
     let adjustment = scale.adjustment();
     (scale.value() - adjustment.lower()) / (adjustment.upper() - adjustment.lower())
@@ -916,6 +932,10 @@ fn named_controller(widget: &impl IsA<gtk4::Widget>, name: &str) -> gtk4::EventC
         .unwrap_or_else(|| panic!("missing GTK controller {name}"))
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The fixture computes source-rounded exposure values in the native f32 evaluation order."
+)]
 fn assert_one_exposure_action(
     actions: &Rc<RefCell<Vec<ExposureAction>>>,
     rounded_source_value: f32,
@@ -931,6 +951,10 @@ fn assert_one_exposure_action(
     );
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The fixture computes source-rounded exposure values in the native f32 evaluation order."
+)]
 fn assert_last_exposure_action(
     actions: &Rc<RefCell<Vec<ExposureAction>>>,
     rounded_source_value: f32,
@@ -958,7 +982,7 @@ fn exposure_values(actions: &Rc<RefCell<Vec<ExposureAction>>>) -> Vec<f64> {
         .collect()
 }
 
-fn primary_accelerator_mask() -> gtk4::gdk::ModifierType {
+const fn primary_accelerator_mask() -> gtk4::gdk::ModifierType {
     #[cfg(target_os = "macos")]
     {
         gtk4::gdk::ModifierType::META_MASK
@@ -969,7 +993,7 @@ fn primary_accelerator_mask() -> gtk4::gdk::ModifierType {
     }
 }
 
-fn source_scroll_delta() -> f64 {
+const fn source_scroll_delta() -> f64 {
     #[cfg(target_os = "macos")]
     {
         50.0

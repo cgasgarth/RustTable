@@ -299,12 +299,15 @@ fn transfer(
     }
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "ICC s15Fixed16 values intentionally convert the native integer payload to f32"
+)]
 fn s15_fixed16(bytes: &[u8]) -> f32 {
     i32::from_be_bytes(bytes.try_into().expect("ICC XYZ value")) as f32 / 65_536.0
 }
 
-fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
+const fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
     (value.0.get(), value.1.get())
 }
 

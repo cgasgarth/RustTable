@@ -24,7 +24,7 @@ where
     K: Clone + Ord,
 {
     #[must_use]
-    pub fn new(budget: u64) -> Self {
+    pub const fn new(budget: u64) -> Self {
         Self {
             budget,
             bytes: 0,

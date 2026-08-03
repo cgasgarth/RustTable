@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Perspective analysis arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
@@ -458,7 +462,7 @@ fn sample(frame: &LuminanceFrame, x: u32, y: u32) -> f32 {
     frame.pixels[index]
 }
 
-fn line_key(line: &DetectedLine) -> (u8, u64, u64, u64, u64) {
+const fn line_key(line: &DetectedLine) -> (u8, u64, u64, u64, u64) {
     let start = line.segment.start();
     let end = line.segment.end();
     (

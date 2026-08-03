@@ -4,10 +4,10 @@
 //! delegated to the processing plan, while source geometry, channel coordinates,
 //! paint order, and display colors are prepared here for a later GTK adapter.
 
-#![allow(
+#![expect(
     clippy::cast_precision_loss,
     clippy::missing_errors_doc,
-    reason = "bounded source grids and typed render-construction errors are explicit here"
+    reason = "Bounded source grids and typed render-construction errors are explicit here."
 )]
 
 use std::fmt;
@@ -460,7 +460,9 @@ impl From<ColorZonesCompileError> for ColorZonesRenderError {
     }
 }
 
-fn source_curve_order(selected: ColorZonesChannel) -> [ColorZonesChannel; COLORZONES_CHANNELS] {
+const fn source_curve_order(
+    selected: ColorZonesChannel,
+) -> [ColorZonesChannel; COLORZONES_CHANNELS] {
     let channels = [
         ColorZonesChannel::Lightness,
         ColorZonesChannel::Chroma,
@@ -520,6 +522,10 @@ fn build_field(
     cells
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The source Color Zones field transform preserves its original floating-point order."
+)]
 fn field_lch(
     selection: ColorZonesChannel,
     output: ColorZonesChannel,
@@ -609,7 +615,14 @@ fn build_bottom_strip(
 
 #[cfg(test)]
 #[rustfmt::skip]
-#[allow(clippy::float_cmp, reason = "source constants and exact affine transforms are compared directly")]
+#[expect(
+    clippy::float_cmp,
+    reason = "Source constants and exact affine transforms are compared directly."
+)]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The affine expectation preserves source floating-point evaluation order."
+)]
 mod tests {
     use rusttable_processing::{ColorZonesChannel, ColorZonesNode, ColorZonesSplinesVersion};
     use super::*;

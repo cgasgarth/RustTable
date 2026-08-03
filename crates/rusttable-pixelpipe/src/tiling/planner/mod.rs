@@ -188,9 +188,8 @@ impl TilePlanner {
     /// # Errors
     ///
     /// Returns a typed failure when requirements, geometry, arithmetic, or the independent budget cannot support a plan.
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn plan(
-        &self,
+        self,
         requirements: &NodeRequirements,
         request: TilePlanRequest,
     ) -> Result<TilePlan, TilePlanError> {
@@ -296,9 +295,6 @@ impl TilePlanner {
         }
     }
 
-    // This keeps bounded component accounting together so every live resource
-    // follows the same checked-budget path.
-    #[allow(clippy::too_many_lines)]
     fn estimate(
         requirements: &NodeRequirements,
         backend: TileBackend,
@@ -338,71 +334,18 @@ impl TilePlanner {
             let output = candidate
                 .intersect(request_output)
                 .ok_or(TilePlanError::OutputOutsideRoi)?;
-            let larger = if input.area().unwrap_or(0) >= output.area().unwrap_or(0) {
-                input
-            } else {
-                output
+            let mut context = EstimateContext {
+                record,
+                budget,
+                candidate,
+                node_index,
+                node,
+                input,
+                output,
+                components: &mut components,
+                total: &mut total,
             };
-            for requirement in [record.input(), record.output(), record.temporary()] {
-                let area = choose_area(requirement.area(), input, output, larger);
-                let bytes = resource_bytes(requirement, area).map_err(|reason| {
-                    map_estimate_error(reason, node_index, node, requirement.kind(), candidate)
-                })?;
-                add_component(&mut components, node_index, node, requirement.kind(), bytes)?;
-                total = total
-                    .checked_add(bytes)
-                    .ok_or(TilePlanError::ArithmeticOverflow)?;
-                check_allocation(
-                    record,
-                    budget,
-                    bytes,
-                    node_index,
-                    node,
-                    candidate,
-                    requirement.kind(),
-                )?;
-            }
-            for requirement in record.auxiliary() {
-                let area = choose_area(requirement.area(), input, output, larger);
-                let bytes = resource_bytes(*requirement, area).map_err(|reason| {
-                    map_estimate_error(reason, node_index, node, requirement.kind(), candidate)
-                })?;
-                add_component(&mut components, node_index, node, requirement.kind(), bytes)?;
-                total = total
-                    .checked_add(bytes)
-                    .ok_or(TilePlanError::ArithmeticOverflow)?;
-                check_allocation(
-                    record,
-                    budget,
-                    bytes,
-                    node_index,
-                    node,
-                    candidate,
-                    requirement.kind(),
-                )?;
-            }
-            if record.fixed_bytes() != 0 {
-                let bytes = record.fixed_bytes();
-                add_component(
-                    &mut components,
-                    node_index,
-                    node,
-                    ResourceKind::Fixed,
-                    bytes,
-                )?;
-                total = total
-                    .checked_add(bytes)
-                    .ok_or(TilePlanError::ArithmeticOverflow)?;
-                check_allocation(
-                    record,
-                    budget,
-                    bytes,
-                    node_index,
-                    node,
-                    candidate,
-                    ResourceKind::Fixed,
-                )?;
-            }
+            estimate_node_resources(&mut context)?;
         }
         let required = total
             .checked_add(reserve)
@@ -445,6 +388,88 @@ impl TilePlanner {
             dominant,
         })
     }
+}
+
+struct EstimateContext<'a> {
+    record: &'a BackendRequirement,
+    budget: MemoryBudget,
+    candidate: TileRect,
+    node_index: usize,
+    node: &'a crate::NodeRequirement,
+    input: TileRect,
+    output: TileRect,
+    components: &'a mut Vec<EstimateComponent>,
+    total: &'a mut u64,
+}
+
+fn estimate_node_resources(context: &mut EstimateContext<'_>) -> Result<(), TilePlanError> {
+    let larger = if context.input.area().unwrap_or(0) >= context.output.area().unwrap_or(0) {
+        context.input
+    } else {
+        context.output
+    };
+    for requirement in [
+        context.record.input(),
+        context.record.output(),
+        context.record.temporary(),
+    ] {
+        let area = choose_area(requirement.area(), context.input, context.output, larger);
+        account_buffer(context, requirement, area)?;
+    }
+    for index in 0..context.record.auxiliary().len() {
+        let requirement = context.record.auxiliary()[index];
+        let area = choose_area(requirement.area(), context.input, context.output, larger);
+        account_buffer(context, requirement, area)?;
+    }
+    let fixed_bytes = context.record.fixed_bytes();
+    if fixed_bytes != 0 {
+        account_bytes(context, ResourceKind::Fixed, fixed_bytes)?;
+    }
+    Ok(())
+}
+
+fn account_buffer(
+    context: &mut EstimateContext<'_>,
+    requirement: crate::BufferRequirement,
+    area: TileRect,
+) -> Result<(), TilePlanError> {
+    let resource = requirement.kind();
+    let bytes = resource_bytes(requirement, area).map_err(|reason| {
+        map_estimate_error(
+            reason,
+            context.node_index,
+            context.node,
+            resource,
+            context.candidate,
+        )
+    })?;
+    account_bytes(context, resource, bytes)
+}
+
+fn account_bytes(
+    context: &mut EstimateContext<'_>,
+    resource: ResourceKind,
+    bytes: u64,
+) -> Result<(), TilePlanError> {
+    add_component(
+        context.components,
+        context.node_index,
+        context.node,
+        resource,
+        bytes,
+    )?;
+    *context.total = (*context.total)
+        .checked_add(bytes)
+        .ok_or(TilePlanError::ArithmeticOverflow)?;
+    check_allocation(
+        context.record,
+        context.budget,
+        bytes,
+        context.node_index,
+        context.node,
+        context.candidate,
+        resource,
+    )
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -522,7 +547,12 @@ fn resource_bytes(
     requirement.factor().checked_bytes(base)
 }
 
-fn choose_area(area: AreaSource, input: TileRect, output: TileRect, larger: TileRect) -> TileRect {
+const fn choose_area(
+    area: AreaSource,
+    input: TileRect,
+    output: TileRect,
+    larger: TileRect,
+) -> TileRect {
     match area {
         AreaSource::Input => input,
         AreaSource::Output => output,
@@ -561,7 +591,7 @@ fn check_allocation(
 ) -> Result<(), TilePlanError> {
     let limit = record
         .max_allocation()
-        .unwrap_or(budget.max_allocation())
+        .unwrap_or_else(|| budget.max_allocation())
         .min(budget.max_allocation());
     if bytes > limit {
         return Err(TilePlanError::MaxAllocation {
@@ -640,7 +670,7 @@ pub enum TilePlanError {
     OutputOutsideRoi,
     ConflictingTileDimensions,
     MinimumTileDoesNotFit {
-        estimate: Box<TilePlanError>,
+        estimate: Box<Self>,
     },
     UnknownRequiredResource {
         node_index: usize,

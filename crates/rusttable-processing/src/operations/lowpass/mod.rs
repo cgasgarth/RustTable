@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Lowpass arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Source-faithful CPU Lowpass leaf from Darktable's `src/iop/lowpass.c`.
 //!
 //! Coupled numerical sources are `src/common/gaussian.c`,
@@ -585,7 +590,7 @@ impl LowpassConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LowpassError {
     InvalidDimensions,
     SizeOverflow,
@@ -669,7 +674,10 @@ impl LowpassAllocationMode {
 /// CPU capabilities are deliberately fail-closed. The native tiling formula is
 /// retained as `overlap_pixels`, but the pixelpipe tiling contract is unavailable
 /// until a shared owner supplies factors, buffers, and frame/tile publication.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each capability flag is an independent fail-closed integration surface."
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LowpassCapabilities {
     pub cpu: bool,
@@ -1076,7 +1084,7 @@ fn bilateral_blur_with_copy_through<F: FnMut() -> bool>(
         .map_err(map_bilateral_error)?;
     Ok(LowpassValidatedOutput::Filtered(filtered))
 }
-fn map_bilateral_error(error: BilateralError) -> LowpassError {
+const fn map_bilateral_error(error: BilateralError) -> LowpassError {
     match error {
         BilateralError::Cancelled => LowpassError::Cancelled,
         other => LowpassError::Bilateral(other),
@@ -1369,10 +1377,10 @@ fn checked_mul(left: usize, right: usize) -> Result<usize, LowpassError> {
 fn checked_add(left: usize, right: usize) -> Result<usize, LowpassError> {
     left.checked_add(right).ok_or(LowpassError::SizeOverflow)
 }
-fn invalid_length(expected: usize, actual: usize) -> LowpassCodecError {
+const fn invalid_length(expected: usize, actual: usize) -> LowpassCodecError {
     LowpassCodecError::InvalidLength { expected, actual }
 }
-fn require_length(bytes: &[u8], expected: usize) -> Result<(), LowpassCodecError> {
+const fn require_length(bytes: &[u8], expected: usize) -> Result<(), LowpassCodecError> {
     if bytes.len() == expected {
         Ok(())
     } else {

@@ -82,7 +82,7 @@ fn dag_passes_and_failures_skip_only_dependent_branches() {
 
     let root = scheduler.start_next_at(now).expect("root starts").task_id();
     scheduler
-        .complete_failure(root, now, TaskFailure::WorkUnitFailed)
+        .complete_failure(root, now, &TaskFailure::WorkUnitFailed)
         .expect("root fails");
     assert_eq!(
         scheduler
@@ -117,9 +117,7 @@ fn cancellation_and_panic_are_isolated_at_work_unit_boundaries() {
     );
 
     cancelled = task(2, CpuPriority::InteractivePreview, 10);
-    scheduler
-        .submit_at(cancelled.clone(), now)
-        .expect("admitted");
+    scheduler.submit_at(cancelled, now).expect("admitted");
     let id = scheduler.start_next_at(now).expect("starts").task_id();
     assert_eq!(
         scheduler.run_task(id, now, |_| -> Result<(), ()> { panic!("isolated") }),

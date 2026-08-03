@@ -491,14 +491,14 @@ fn validate_image(
     Ok(ImageShape { row_len })
 }
 
-fn validate_dimensions(height: usize, width: usize) -> Result<(), BoxFilterError> {
+const fn validate_dimensions(height: usize, width: usize) -> Result<(), BoxFilterError> {
     if width == 0 || height == 0 {
         return Err(BoxFilterError::InvalidDimensions { width, height });
     }
     Ok(())
 }
 
-fn validate_buffer_len(buffer: &[f32], expected: usize) -> Result<(), BoxFilterError> {
+const fn validate_buffer_len(buffer: &[f32], expected: usize) -> Result<(), BoxFilterError> {
     if buffer.len() != expected {
         return Err(BoxFilterError::BufferShape {
             expected,
@@ -515,7 +515,7 @@ fn validate_finite(buffer: &[f32]) -> Result<(), BoxFilterError> {
     Ok(())
 }
 
-fn decode_mean_channels(channels: u32) -> Result<(usize, bool), BoxFilterError> {
+const fn decode_mean_channels(channels: u32) -> Result<(usize, bool), BoxFilterError> {
     match channels {
         1 => Ok((1, false)),
         2 => Ok((2, false)),
@@ -529,7 +529,7 @@ fn decode_mean_channels(channels: u32) -> Result<(usize, bool), BoxFilterError> 
     }
 }
 
-fn decode_horizontal_channels(channels: u32) -> Result<usize, BoxFilterError> {
+const fn decode_horizontal_channels(channels: u32) -> Result<usize, BoxFilterError> {
     match channels {
         KAHAN_4 => Ok(4),
         KAHAN_9 => Ok(9),
@@ -718,7 +718,7 @@ fn parallel_worker_count(sample_count: usize, independent_units: usize) -> usize
     available.min(independent_units).min(workers_by_size)
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "row workers need the retained filter geometry and isolated scratch slices"
 )]
@@ -799,7 +799,7 @@ fn cancellable_scratch_layout(
     Ok((row_len.max(vertical_scratch_len), vertical_scratch_rows))
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "the retained vertical pass needs explicit raster and cache geometry"
 )]
@@ -874,10 +874,6 @@ fn blur_vertical(
     false
 }
 
-#[allow(
-    clippy::too_many_arguments,
-    reason = "parallel vertical blocks retain explicit source and raster geometry"
-)]
 fn blur_vertical_parallel(
     buffer: &mut [f32],
     output: &mut [f32],
@@ -921,7 +917,7 @@ fn vertical_block_width(stride: usize, workers: usize) -> usize {
         .min(stride)
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "a compact worker block retains its source and destination strides"
 )]
@@ -980,7 +976,7 @@ fn blur_vertical_block(
     }
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "const-width output lanes mirror the retained vertical arithmetic"
 )]
@@ -1113,7 +1109,7 @@ fn scatter_vertical_blocks(
     });
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "const-width vertical lanes mirror Darktable's cache-oriented template"
 )]
@@ -1231,7 +1227,7 @@ fn store_mean_in_place<const LANES: usize>(
     }
 }
 
-fn vertical_scratch_row(row: usize, height: usize, scratch_rows: usize) -> usize {
+const fn vertical_scratch_row(row: usize, height: usize, scratch_rows: usize) -> usize {
     if scratch_rows == height {
         row
     } else {
@@ -1387,7 +1383,7 @@ fn extreme_horizontal_rows(
     });
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "parallel extrema columns need compact output and isolated worker scratch"
 )]
@@ -1452,7 +1448,7 @@ fn sliding_extreme(
     for (center, destination) in output.iter_mut().enumerate() {
         let right = center.saturating_add(radius).min(source.len() - 1);
         while next <= right {
-            push_extreme(source, queue, &mut head, &mut tail, next, extreme);
+            push_extreme(source, queue, head, &mut tail, next, extreme);
             next += 1;
         }
         let left = center.saturating_sub(radius);
@@ -1463,7 +1459,7 @@ fn sliding_extreme(
     }
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "column output retains explicit source height and destination geometry"
 )]
@@ -1483,7 +1479,7 @@ fn sliding_extreme_column(
     for center in 0..height {
         let right = center.saturating_add(radius).min(height - 1);
         while next <= right {
-            push_extreme(source, queue, &mut head, &mut tail, next, extreme);
+            push_extreme(source, queue, head, &mut tail, next, extreme);
             next += 1;
         }
         let left = center.saturating_sub(radius);
@@ -1497,13 +1493,13 @@ fn sliding_extreme_column(
 fn push_extreme(
     source: &[f32],
     queue: &mut [usize],
-    head: &mut usize,
+    head: usize,
     tail: &mut usize,
     candidate: usize,
     extreme: Extreme,
 ) {
     let candidate_value = bounded_extreme_value(source[candidate], extreme);
-    while *head < *tail {
+    while head < *tail {
         let prior = bounded_extreme_value(source[queue[*tail - 1]], extreme);
         if !dominates(candidate_value, prior, extreme) {
             break;

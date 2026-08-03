@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native RGB Levels arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded RGB Levels CPU leaf ported from `src/iop/rgblevels.c`.
 //!
 //! The leaf owns the native v1 parameter ABI, opaque future history values,
@@ -286,7 +291,7 @@ impl RgbLevelsHistory {
     }
 
     /// Materializes v1 and rejects a future opaque value.
-    pub fn current(&self) -> Result<RgbLevelsParametersV1, RgbLevelsCodecError> {
+    pub const fn current(&self) -> Result<RgbLevelsParametersV1, RgbLevelsCodecError> {
         match self {
             Self::V1(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(RgbLevelsCodecError::UnsupportedVersion(*version)),
@@ -896,7 +901,7 @@ impl RgbLevelsCapabilities {
         }
     }
 
-    pub fn require_gpu(self) -> Result<(), RgbLevelsCapabilityError> {
+    pub const fn require_gpu(self) -> Result<(), RgbLevelsCapabilityError> {
         if self.gpu_supported {
             Ok(())
         } else {
@@ -904,7 +909,7 @@ impl RgbLevelsCapabilities {
         }
     }
 
-    pub fn require_gtk(self) -> Result<(), RgbLevelsCapabilityError> {
+    pub const fn require_gtk(self) -> Result<(), RgbLevelsCapabilityError> {
         if self.gtk_supported {
             Ok(())
         } else {
@@ -912,7 +917,7 @@ impl RgbLevelsCapabilities {
         }
     }
 
-    pub fn require_masks(self) -> Result<(), RgbLevelsCapabilityError> {
+    pub const fn require_masks(self) -> Result<(), RgbLevelsCapabilityError> {
         if self.masks_consumed {
             Ok(())
         } else {
@@ -920,7 +925,7 @@ impl RgbLevelsCapabilities {
         }
     }
 
-    pub fn require_production_routing(self) -> Result<(), RgbLevelsCapabilityError> {
+    pub const fn require_production_routing(self) -> Result<(), RgbLevelsCapabilityError> {
         if self.production_routing_deferred {
             Err(RgbLevelsCapabilityError::ProductionRoutingDeferred)
         } else {

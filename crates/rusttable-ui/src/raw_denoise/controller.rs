@@ -1,6 +1,9 @@
 //! Generation-safe controller for linear RAW denoise intent and service results.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The raw-denoise controller routes planning failures through its typed service boundary."
+)]
 
 use super::model::{
     RAW_DENOISE_MAX_STRENGTH, RAW_DENOISE_TILES, RawDenoiseAction, RawDenoiseCancellationState,
@@ -313,7 +316,7 @@ impl<S: RawDenoiseServicePort> RawDenoiseController<S> {
         Ok(())
     }
 
-    fn running_kind(&self) -> Option<RawDenoiseJobKind> {
+    const fn running_kind(&self) -> Option<RawDenoiseJobKind> {
         match self.state.status {
             RawDenoiseStatus::Running { kind, .. }
             | RawDenoiseStatus::PendingPublication { kind, .. } => Some(kind),
@@ -321,7 +324,7 @@ impl<S: RawDenoiseServicePort> RawDenoiseController<S> {
         }
     }
 
-    fn finish(&mut self, kind: RawDenoiseJobKind) {
+    const fn finish(&mut self, kind: RawDenoiseJobKind) {
         self.state.active_job = None;
         self.state.cancellation_job = None;
         self.state.completed = Some(kind);

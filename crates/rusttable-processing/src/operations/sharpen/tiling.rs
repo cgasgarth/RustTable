@@ -65,11 +65,11 @@ impl SharpenRoi {
         self.height
     }
 
-    fn end_x(self) -> u32 {
+    const fn end_x(self) -> u32 {
         self.x + self.width
     }
 
-    fn end_y(self) -> u32 {
+    const fn end_y(self) -> u32 {
         self.y + self.height
     }
 }
@@ -126,7 +126,11 @@ impl SharpenTilingPlan {
         )
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "validated native ceilf radius is finite, nonnegative, and below the maximum"
+    )]
     fn resolve(
         parameter_radius: f32,
         committed_radius: f32,

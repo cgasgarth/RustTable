@@ -7,7 +7,7 @@ use super::NumericalError;
 /// # Errors
 ///
 /// Rejects non-finite values.
-pub fn ulp_distance_f32(left: f32, right: f32) -> Result<u32, NumericalError> {
+pub const fn ulp_distance_f32(left: f32, right: f32) -> Result<u32, NumericalError> {
     if !left.is_finite() || !right.is_finite() {
         return Err(NumericalError::NonFinite);
     }

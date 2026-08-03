@@ -1,7 +1,7 @@
 use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 use rusttable_core::Operation;
 
-pub(crate) fn compile_mask_manager(
+pub fn compile_mask_manager(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     if operation.parameters().next().is_some() {

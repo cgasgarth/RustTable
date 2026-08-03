@@ -4,7 +4,7 @@ use rusttable_masks::{
     ProducerIdentity, RasterMaskDescriptor, RasterMaskPublication, RasterMaskStore,
 };
 
-fn identity(id: u128) -> MaskIdentity {
+const fn identity(id: u128) -> MaskIdentity {
     MaskIdentity::new(7, 3, id, 1)
 }
 fn geometry() -> MaskGeometry {

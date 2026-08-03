@@ -21,7 +21,7 @@ use crate::{CanonicalArtifact, EncodeBudget, EncodeCancellation, NeverCancel};
 pub const SETTINGS_SCHEMA_VERSION: u16 = 1;
 const MAX_OUTPUT_BYTES: usize = 512 * 1024 * 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unit {
     Point,
     Millimeter,
@@ -404,6 +404,10 @@ fn validate(artifact: &CanonicalArtifact<'_>, settings: Settings) -> Result<(), 
     validate_metadata(artifact, settings.max_metadata_bytes).map_err(map_raster_error)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the native PDF geometry operation order"
+)]
 fn solve_geometry(artifact: &CanonicalArtifact<'_>, settings: Settings) -> Result<Geometry, Error> {
     let dimensions = artifact.image().descriptor().dimensions();
     let source_width = points_for_pixels(dimensions.width(), settings.dpi);
@@ -539,7 +543,8 @@ fn compressed_channels<C: EncodeCancellation>(
 
 #[expect(
     clippy::too_many_lines,
-    reason = "PDF object order is the reviewed fixed subset"
+    clippy::suboptimal_flops,
+    reason = "preserve the reviewed fixed PDF object order and native geometry arithmetic"
 )]
 fn write_pdf(
     pdf: &mut Pdf,

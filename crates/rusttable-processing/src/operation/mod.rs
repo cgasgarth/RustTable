@@ -50,7 +50,7 @@ mod compat;
 mod error;
 mod geometry;
 mod parameters;
-pub(crate) use geometry::{
+pub use geometry::{
     compile_clipping, compile_enlargecanvas, compile_finalscale, compile_lenscorrection,
     compile_perspective, compile_rasterfile, compile_scalepixels,
 };
@@ -60,7 +60,7 @@ mod colorcontrast;
 mod colorcorrection;
 mod colormapping;
 mod colortransfer;
-pub(crate) mod colorzones;
+pub mod colorzones;
 mod defringe;
 mod effects;
 mod grain;
@@ -74,32 +74,32 @@ mod spots;
 mod text;
 mod velvia;
 mod vibrance;
-pub(crate) use agx::compile_agx;
-pub(crate) use basicadj::compile_basicadj;
-pub(crate) use censorize::compile_censorize;
-pub(crate) use channelmixer::compile_channelmixer;
-pub(crate) use clahe::compile_clahe;
-pub(crate) use colorcontrast::compile_colorcontrast;
-pub(crate) use colorcorrection::compile_colorcorrection;
-pub(crate) use colormapping::compile_colormapping;
-pub(crate) use colortransfer::compile_colortransfer;
-pub(crate) use colorzones::compile_colorzones;
-pub(crate) use compat::{compile_dither, compile_invert};
-pub(crate) use defringe::compile_defringe;
-pub(crate) use effects::{compile_bloom, compile_soften};
-pub(crate) use error::compile_opacity;
-pub(crate) use grain::compile_grain;
-pub(crate) use legacy::{compile_relight, compile_shadhi};
-pub(crate) use levels::compile_levels;
-pub(crate) use parameters::{
+pub use agx::compile_agx;
+pub use basicadj::compile_basicadj;
+pub use censorize::compile_censorize;
+pub use channelmixer::compile_channelmixer;
+pub use clahe::compile_clahe;
+pub use colorcontrast::compile_colorcontrast;
+pub use colorcorrection::compile_colorcorrection;
+pub use colormapping::compile_colormapping;
+pub use colortransfer::compile_colortransfer;
+pub use colorzones::compile_colorzones;
+pub use compat::{compile_dither, compile_invert};
+pub use defringe::compile_defringe;
+pub use effects::{compile_bloom, compile_soften};
+pub use error::compile_opacity;
+pub use grain::compile_grain;
+pub use legacy::{compile_relight, compile_shadhi};
+pub use levels::compile_levels;
+pub use parameters::{
     compile_scalar, compile_scalar_parameter, parameter_bool_default, parameter_f32_array,
     parameter_f64, parameter_integer, parameter_u32,
 };
-pub(crate) use rgblevels::compile_rgblevels;
-pub(crate) use spatial::{compile_graduatednd, compile_vignette};
+pub use rgblevels::compile_rgblevels;
+pub use spatial::{compile_graduatednd, compile_vignette};
 use text::{invalid_parameters, optional_parameter_text, parameter_bool, parameter_text};
-pub(crate) use velvia::compile_velvia;
-pub(crate) use vibrance::compile_vibrance;
+pub use velvia::compile_velvia;
+pub use vibrance::compile_vibrance;
 const EXPOSURE_PARAMETER: &str = "stops";
 const EXPOSURE_BLACK_PARAMETER: &str = "black";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
@@ -115,7 +115,6 @@ pub struct ProcessingOperation {
     pub(crate) kind: ProcessingOperationKind,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[allow(clippy::large_enum_variant)]
 pub enum ProcessingOperationKind {
     Agx {
         config: AgxConfig,
@@ -373,7 +372,7 @@ impl ProcessingOperation {
                 |_| compile_scalar_parameter(operation, EXPOSURE_BLACK_PARAMETER),
             )?;
         let opacity = compile_opacity(operation)?;
-        Ok(ProcessingOperation {
+        Ok(Self {
             operation_id: operation.id(),
             enabled: operation.is_enabled(),
             opacity,
@@ -1025,9 +1024,7 @@ fn source_from_legacy_preset(
     }
 }
 
-pub(crate) fn compile_crop(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_crop(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &CROP_PARAMETERS)?;
     let config = CropConfig::new(
         parameter_f32(operation, "cx", 0.0)?,
@@ -1046,9 +1043,7 @@ pub(crate) fn compile_crop(
     })
 }
 
-pub(crate) fn compile_flip(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_flip(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &FLIP_PARAMETERS)?;
     let mode = match parameter_integer(operation, "mode", 0.0)? {
         0 => FlipMode::Automatic,
@@ -1068,7 +1063,7 @@ pub(crate) fn compile_flip(
     })
 }
 
-pub(crate) fn compile_rotatepixels(
+pub fn compile_rotatepixels(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &ROTATEPIXELS_PARAMETERS)?;
@@ -1085,7 +1080,7 @@ pub(crate) fn compile_rotatepixels(
     })
 }
 
-pub(crate) fn reject_unexpected(
+pub fn reject_unexpected(
     operation: &Operation,
     allowed: &[&str],
 ) -> Result<(), OperationCompileError> {
@@ -1102,7 +1097,7 @@ pub(crate) fn reject_unexpected(
     Ok(())
 }
 
-pub(crate) fn parameter_f32(
+pub fn parameter_f32(
     operation: &Operation,
     name: &'static str,
     default: f64,

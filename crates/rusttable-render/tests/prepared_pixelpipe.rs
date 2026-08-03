@@ -25,7 +25,7 @@ fn pixels(values: &[(f32, f32, f32)], width: u32, height: u32) -> WorkingRgbImag
     .expect("matching pixels")
 }
 
-fn provenance() -> RenderProvenance {
+const fn provenance() -> RenderProvenance {
     RenderProvenance::new(
         EditId::new(7).expect("nonzero edit ID"),
         PhotoId::new(8).expect("nonzero photo ID"),

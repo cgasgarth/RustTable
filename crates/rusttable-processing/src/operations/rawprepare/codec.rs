@@ -42,7 +42,7 @@ pub enum RawPrepareFlatField {
 }
 
 impl RawPrepareFlatField {
-    fn from_i32(value: i32) -> Result<Self, RawPrepareCodecError> {
+    const fn from_i32(value: i32) -> Result<Self, RawPrepareCodecError> {
         match value {
             0 => Ok(Self::Off),
             1 => Ok(Self::Embedded),
@@ -103,7 +103,7 @@ impl RawPrepareParametersV1 {
     }
 
     #[must_use]
-    pub fn to_bytes(&self) -> &[u8; RAWPREPARE_HISTORY_V1_PARAMETER_BYTES] {
+    pub const fn to_bytes(&self) -> &[u8; RAWPREPARE_HISTORY_V1_PARAMETER_BYTES] {
         &self.bytes
     }
 
@@ -198,7 +198,7 @@ impl RawPrepareParametersV2 {
     }
 
     #[must_use]
-    pub fn to_bytes(&self) -> &[u8; RAWPREPARE_HISTORY_V2_PARAMETER_BYTES] {
+    pub const fn to_bytes(&self) -> &[u8; RAWPREPARE_HISTORY_V2_PARAMETER_BYTES] {
         &self.bytes
     }
 

@@ -103,7 +103,7 @@ impl ConfigurationService {
     }
 
     #[must_use]
-    pub fn with_runtime_capabilities(mut self, capabilities: RuntimeCapabilities) -> Self {
+    pub const fn with_runtime_capabilities(mut self, capabilities: RuntimeCapabilities) -> Self {
         self.capabilities = capabilities;
         self
     }
@@ -258,6 +258,7 @@ impl ConfigurationService {
     fn replace_active(&self, snapshot: Arc<ConfigSnapshot>) -> Result<(), ConfigError> {
         let mut active = self.active.write().map_err(|_| ConfigError::Poisoned)?;
         *active = Some(snapshot);
+        drop(active);
         Ok(())
     }
 
@@ -273,6 +274,7 @@ impl ConfigurationService {
                 Err(mpsc::TrySendError::Disconnected(_)) => false,
             }
         });
+        drop(subscribers);
         Ok(())
     }
 }

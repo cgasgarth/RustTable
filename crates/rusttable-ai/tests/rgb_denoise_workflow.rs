@@ -279,7 +279,7 @@ fn repeated_request_reconciles_to_one_artifact() {
         [3; 32],
         profile(),
         profile(),
-        destination.clone(),
+        destination,
     )
     .expect("request")
     .with_catalog_import(false, false)

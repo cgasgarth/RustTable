@@ -178,7 +178,7 @@ fn replacement_repository_failure_preserves_state() {
     let before = state.clone();
     let current = state.edit(EditId::new(2).unwrap()).unwrap().clone();
     let mut repository = FakeEditRepository {
-        edits: [(current.id(), current)].into_iter().collect(),
+        edits: std::iter::once((current.id(), current)).collect(),
         commit_error: Some(EditRepositoryError::CommitFailure),
         ..FakeEditRepository::default()
     };

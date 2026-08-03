@@ -374,12 +374,9 @@ impl MaskGraph {
         identity: MaskIdentity,
         mut store: Option<&mut crate::RasterMaskStore>,
     ) -> Result<MaskRaster, MaskExecutionError> {
-        let node = self
-            .nodes
-            .get(&identity)
-            .ok_or(MaskExecutionError::MissingPublishedRaster(
-                identity_to_bytes(identity),
-            ))?;
+        let node = self.nodes.get(&identity).ok_or_else(|| {
+            MaskExecutionError::MissingPublishedRaster(identity_to_bytes(identity))
+        })?;
         match node {
             GraphNode::Mask(mask) => {
                 let mut value = match (&mask.source, &mask.values) {
@@ -388,9 +385,9 @@ impl MaskGraph {
                     }
                     (MaskSource::Generated(descriptor), _) => store
                         .as_deref_mut()
-                        .ok_or(MaskExecutionError::MissingPublishedRaster(
-                            descriptor.cache_identity(),
-                        ))?
+                        .ok_or_else(|| {
+                            MaskExecutionError::MissingPublishedRaster(descriptor.cache_identity())
+                        })?
                         .consume(descriptor)?
                         .raster()
                         .clone(),

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native convolution arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Shared deterministic separable convolution primitives for neighborhood effects.
 
 #![allow(

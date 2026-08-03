@@ -1,4 +1,3 @@
-#![allow(clippy::float_cmp)]
 #![forbid(unsafe_code)]
 
 use rusttable_processing::operations::finalscale;

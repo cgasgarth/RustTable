@@ -148,7 +148,7 @@ impl DarkroomEditRouter {
     }
 
     /// Replaces the application-owned current target and revision.
-    pub fn reconcile(&mut self, target: DarkroomEditTarget, revision: Revision) {
+    pub const fn reconcile(&mut self, target: DarkroomEditTarget, revision: Revision) {
         self.target = Some(target);
         self.revision = revision;
     }

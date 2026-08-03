@@ -25,9 +25,9 @@ use std::process::{Command as ProcessCommand, ExitCode, Output};
 
 use clap::{Parser, Subcommand};
 
-pub(crate) const PINNED_DARKTABLE_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
+pub const PINNED_DARKTABLE_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
 
-pub(crate) type Result<T = ()> = std::result::Result<T, String>;
+pub type Result<T = ()> = std::result::Result<T, String>;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -192,7 +192,12 @@ fn main() -> ExitCode {
     }
 }
 
-pub(crate) fn repository_root() -> PathBuf {
+/// Returns the repository root containing the workspace manifest.
+///
+/// # Panics
+///
+/// Panics if the xtask manifest is not nested under `crates/xtask`.
+pub fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
@@ -200,7 +205,12 @@ pub(crate) fn repository_root() -> PathBuf {
         .to_path_buf()
 }
 
-pub(crate) fn run_process(label: &str, command: &mut ProcessCommand) -> Result {
+/// Runs a command and reports its status.
+///
+/// # Errors
+///
+/// Returns an error if the command cannot start or exits unsuccessfully.
+pub fn run_process(label: &str, command: &mut ProcessCommand) -> Result {
     eprintln!("==> {label}");
     let status = command
         .status()
@@ -212,7 +222,12 @@ pub(crate) fn run_process(label: &str, command: &mut ProcessCommand) -> Result {
     }
 }
 
-pub(crate) fn run_process_quiet(label: &str, command: &mut ProcessCommand) -> Result {
+/// Runs a command and returns a bounded failure excerpt without streaming output.
+///
+/// # Errors
+///
+/// Returns an error if the command cannot start or exits unsuccessfully.
+pub fn run_process_quiet(label: &str, command: &mut ProcessCommand) -> Result {
     let output = command
         .output()
         .map_err(|error| format!("{label}: could not start: {error}"))?;

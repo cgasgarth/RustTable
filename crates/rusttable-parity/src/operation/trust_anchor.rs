@@ -13,8 +13,8 @@ use super::model::{
 };
 use crate::ScanError;
 
-pub(crate) const NATIVE_SOURCE_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
-pub(crate) const AUDITED_SOURCE_SNAPSHOT: &str = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf";
+pub const NATIVE_SOURCE_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
+pub const AUDITED_SOURCE_SNAPSHOT: &str = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf";
 
 const MANIFEST_LENS_NAME: &str = "lens";
 const TRUSTED_LENS_NAME: &str = "lenscorrection";
@@ -87,7 +87,7 @@ const OPAQUE_DEFERRED_MANIFEST_NAMES: &[&str] = &[
 ];
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TrustedOperationContract {
+pub struct TrustedOperationContract {
     pub(crate) compatibility_name: &'static str,
     pub(crate) rust_id: &'static str,
     pub(crate) descriptor_version: u16,
@@ -98,7 +98,7 @@ pub(crate) struct TrustedOperationContract {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TrustedRecord {
+pub struct TrustedRecord {
     pub(crate) source_commit: &'static str,
     pub(crate) source_snapshot: &'static str,
     pub(crate) module_version: u32,
@@ -114,7 +114,7 @@ pub(crate) struct TrustedRecord {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TrustedVersion {
+pub struct TrustedVersion {
     pub(crate) version: u32,
     pub(crate) byte_size: usize,
     pub(crate) layout_hash: &'static str,
@@ -124,7 +124,7 @@ pub(crate) struct TrustedVersion {
     pub(crate) codec_identity: &'static str,
 }
 
-pub(crate) const TRUSTED_OPERATIONS: &[TrustedOperationContract] = &[
+pub const TRUSTED_OPERATIONS: &[TrustedOperationContract] = &[
     TrustedOperationContract {
         compatibility_name: "agx",
         rust_id: "rusttable.agx",
@@ -4085,7 +4085,7 @@ const SPLITTONING_AUDITED_VERSIONS: &[TrustedVersion] = &[TrustedVersion {
 /// Literal contracts for bounded leaves whose shared production seams remain deferred.
 /// They are checked against both generated native records and audited overrides, but are
 /// intentionally excluded from the production registry closure until their shared seams land.
-pub(crate) const TRUSTED_DEFERRED_OPERATIONS: &[TrustedOperationContract] = &[
+pub const TRUSTED_DEFERRED_OPERATIONS: &[TrustedOperationContract] = &[
     TrustedOperationContract {
         compatibility_name: "colisa",
         rust_id: "rusttable.colisa",
@@ -4193,13 +4193,13 @@ pub(crate) const TRUSTED_DEFERRED_OPERATIONS: &[TrustedOperationContract] = &[
     },
 ];
 
-pub(crate) fn trusted_operation(name: &str) -> Option<&'static TrustedOperationContract> {
+pub fn trusted_operation(name: &str) -> Option<&'static TrustedOperationContract> {
     TRUSTED_OPERATIONS
         .iter()
         .find(|contract| contract.compatibility_name == name)
 }
 
-pub(crate) fn trusted_names() -> impl Iterator<Item = &'static str> {
+pub fn trusted_names() -> impl Iterator<Item = &'static str> {
     TRUSTED_OPERATIONS
         .iter()
         .map(|contract| contract.compatibility_name)
@@ -4506,6 +4506,10 @@ fn source_name_for_name(name: &str) -> Option<&'static str> {
         })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The provenance validator compares the complete native ABI, codec, version, and evidence contract in source order."
+)]
 fn validate_sources(
     operation: &str,
     record: &str,
@@ -4733,7 +4737,7 @@ fn validate_evidence_commits(
 }
 
 /// Validates one native manifest record against the checked-in contract.
-pub(crate) fn validate_native_operation_provenance(
+pub fn validate_native_operation_provenance(
     reference: &ReferenceIdentity,
     operation: &Operation,
 ) -> Result<(), ScanError> {
@@ -4749,6 +4753,10 @@ pub(crate) fn validate_native_operation_provenance(
     )
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Audited override validation checks every optional ABI, decoder, migration, and evidence field before application."
+)]
 fn validate_override_fields(
     entry: &OperationOverride,
     expected: &TrustedRecord,
@@ -4881,16 +4889,14 @@ fn validate_override_fields(
 }
 
 /// Validates one override against the independent audited contract, when known.
-pub(crate) fn validate_operation_override_provenance(
-    entry: &OperationOverride,
-) -> Result<(), ScanError> {
+pub fn validate_operation_override_provenance(entry: &OperationOverride) -> Result<(), ScanError> {
     let Some(contract) = trusted_for_source_name(&entry.name) else {
         return Ok(());
     };
     validate_override_fields(entry, &contract.audited)
 }
 
-pub(crate) fn validate_operation_override_names(
+pub fn validate_operation_override_names(
     overrides: &[OperationOverride],
     expected_names: &BTreeSet<String>,
 ) -> Result<(), ScanError> {
@@ -4938,7 +4944,7 @@ pub(crate) fn validate_operation_override_names(
     Ok(())
 }
 
-pub(crate) fn validate_operation_overrides(
+pub fn validate_operation_overrides(
     overrides: &[OperationOverride],
     expected_names: &BTreeSet<String>,
 ) -> Result<(), ScanError> {

@@ -95,4 +95,4 @@ fn parses_cargo_sentinel_and_user_cli() {
 }
 
 #[allow(dead_code)]
-fn _keep_error_type_visible(_: ConfigError) {}
+const fn _keep_error_type_visible(_: ConfigError) {}

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native liquify evaluation order is preserved for IEEE-754 parity."
+)]
+
 use crate::operations::OperationExecutionError;
 use crate::{FiniteF32, LinearRgb, PipelineStepIndex, RasterDimensions, RgbChannel};
 use rusttable_core::OperationId;

@@ -23,7 +23,7 @@ use rusttable_ui::{
 };
 
 #[derive(Debug, Default)]
-pub(crate) struct UnavailableAiBatchService;
+pub struct UnavailableAiBatchService;
 
 impl AiBatchServicePort for UnavailableAiBatchService {
     fn review(
@@ -64,7 +64,7 @@ impl AiBatchServicePort for UnavailableAiBatchService {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct UnavailableAiModelsService;
+pub struct UnavailableAiModelsService;
 
 impl AiModelsServicePort for UnavailableAiModelsService {
     fn snapshot(&mut self) -> Result<AiModelsSnapshot, AiModelsServiceError> {
@@ -117,7 +117,7 @@ impl AiModelsServicePort for UnavailableAiModelsService {
 /// The composition root keeps this seam explicit until the render snapshot and
 /// qualified #478 provider executor are injected. It never claims inference ran.
 #[derive(Debug, Default)]
-pub(crate) struct UnavailableRgbDenoiseService;
+pub struct UnavailableRgbDenoiseService;
 
 impl RgbDenoiseServicePort for UnavailableRgbDenoiseService {
     fn snapshot(
@@ -156,7 +156,7 @@ impl RgbDenoiseServicePort for UnavailableRgbDenoiseService {
 /// wired into the app yet. Keeping this adapter explicit prevents GTK from pretending
 /// those capabilities exist or from launching a substitute implementation.
 #[derive(Debug, Default)]
-pub(crate) struct UnavailableRawDenoiseService;
+pub struct UnavailableRawDenoiseService;
 
 impl RawDenoiseServicePort for UnavailableRawDenoiseService {
     fn snapshot(

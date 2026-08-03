@@ -71,7 +71,7 @@ enum LibraryLoadError {
 }
 
 impl LibraryLoadError {
-    fn failure_kind(&self) -> LibraryFailureKind {
+    const fn failure_kind(&self) -> LibraryFailureKind {
         match self {
             Self::CatalogLocation(error_kind) => {
                 let _ = error_kind;
@@ -318,7 +318,7 @@ fn fact(
     ))
 }
 
-fn format_label(format: InputFormat) -> &'static str {
+const fn format_label(format: InputFormat) -> &'static str {
     match format {
         InputFormat::Jpeg => "JPEG",
         InputFormat::JpegXl => "JPEG XL",

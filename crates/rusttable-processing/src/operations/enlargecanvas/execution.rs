@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Enlarge Canvas arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use crate::{LinearRgb, RasterDimensions};
 use rusttable_image::{
     AlphaMode, ByteOrder, ChannelLayout, ColorEncoding, ImageDescriptor, ImageView, ImageViewError,

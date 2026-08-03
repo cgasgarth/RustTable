@@ -389,7 +389,7 @@ fn evaluate_variable(
     }
 }
 
-fn value_matches(expected: VariableType, actual: &TemplateValue) -> bool {
+const fn value_matches(expected: VariableType, actual: &TemplateValue) -> bool {
     match expected {
         VariableType::Text => matches!(actual, TemplateValue::Text(_)),
         VariableType::Integer => matches!(actual, TemplateValue::Integer(_)),
@@ -651,13 +651,13 @@ fn format_datetime(
 fn return_padded(value: i32, width: usize) -> String {
     format!("{value:0>width$}")
 }
-fn gcd(mut left: u32, mut right: u32) -> u32 {
+const fn gcd(mut left: u32, mut right: u32) -> u32 {
     while right != 0 {
         (left, right) = (right, left % right);
     }
     left
 }
-fn is_private(id: &VariableId) -> bool {
+const fn is_private(id: &VariableId) -> bool {
     matches!(
         id,
         VariableId::SourceRelativeImportPath

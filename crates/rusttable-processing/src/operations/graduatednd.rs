@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Graduated ND arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible graduated neutral-density filter at the typed RGB boundary.
 //!
 //! This is the CPU scalar point transform from Darktable's `graduatednd`

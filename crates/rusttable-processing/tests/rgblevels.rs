@@ -16,6 +16,10 @@
     clippy::unreadable_literal,
     reason = "source-derived vectors assert native ABI order and f32 boundaries"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native RGB Levels test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 use rusttable_processing::operations::rgblevels;
 

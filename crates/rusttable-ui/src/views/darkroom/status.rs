@@ -58,7 +58,7 @@ impl DarkroomStatusSurface {
         }
     }
 
-    pub(super) fn widget(&self) -> &gtk4::CenterBox {
+    pub(super) const fn widget(&self) -> &gtk4::CenterBox {
         &self.root
     }
 

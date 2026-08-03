@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Rotate Pixels sampling order is preserved for IEEE-754 parity."
+)]
+
 use crate::RasterDimensions;
 use rusttable_image::Roi;
 use std::f64::consts::PI;
@@ -6,7 +11,7 @@ use super::codec::RotatePixelsInterpolation;
 use super::execution::RotatePixelsExecutionError;
 use super::geometry::f64_to_f32;
 
-pub(crate) fn validate_buffer(
+pub fn validate_buffer(
     input: &[f32],
     roi: Roi,
     channels: usize,
@@ -40,7 +45,7 @@ pub(crate) fn validate_buffer(
     Ok(())
 }
 
-pub(crate) fn checked_output_index(
+pub fn checked_output_index(
     x: u32,
     y: u32,
     width: u32,
@@ -57,15 +62,16 @@ pub(crate) fn checked_output_index(
         .ok_or(RotatePixelsExecutionError::ArithmeticOverflow)
 }
 
-pub(crate) fn pixel_count(
-    dimensions: RasterDimensions,
-) -> Result<usize, RotatePixelsExecutionError> {
+pub fn pixel_count(dimensions: RasterDimensions) -> Result<usize, RotatePixelsExecutionError> {
     usize::try_from(dimensions.pixel_count())
         .map_err(|_| RotatePixelsExecutionError::ArithmeticOverflow)
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn sample_pixel(
+#[expect(
+    clippy::too_many_lines,
+    reason = "interpolation branches preserve native tap order and edge reflection semantics"
+)]
+pub fn sample_pixel(
     input: &[f32],
     roi: Roi,
     channels: usize,
@@ -181,7 +187,10 @@ pub(crate) fn sample_pixel(
     Ok(sample)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each interpolation tap carries the native source geometry and weight explicitly"
+)]
 fn accumulate_tap(
     input: &[f32],
     stride: usize,
@@ -237,7 +246,7 @@ fn read_pixel(
     Ok(())
 }
 
-fn reflect_index(value: i32, extent: i32) -> i32 {
+const fn reflect_index(value: i32, extent: i32) -> i32 {
     if extent <= 1 {
         return 0;
     }
@@ -262,7 +271,10 @@ fn checked_i32(value: f64) -> Result<i32, RotatePixelsExecutionError> {
     if !value.is_finite() || value < f64::from(i32::MIN) || value > f64::from(i32::MAX) {
         return Err(RotatePixelsExecutionError::NonFiniteCoordinate);
     }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "validated native sample coordinates are finite and inside the i32 range"
+    )]
     Ok(value as i32)
 }
 

@@ -110,6 +110,10 @@ fn snapshot(operation: Operation, lightness: f32) -> CpuPixelpipeSnapshot {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Color Zones LUT selection and opacity arithmetic order"
+)]
 async fn dedicated_colorzones_gpu_uses_nearest_lut_with_opacity_and_tiles_when_available() {
     let Some(runtime) = gpu_runtime().await else {
         return;

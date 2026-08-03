@@ -3,7 +3,7 @@ use rusttable_core::{Operation, ParameterName, ParameterValue};
 use crate::ScalarNarrowingError;
 use crate::{FiniteF32, OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 
-pub(crate) fn compile_scalar<F>(
+pub fn compile_scalar<F>(
     operation: &Operation,
     required_name: &str,
     build: F,
@@ -39,7 +39,7 @@ where
     })
 }
 
-pub(crate) fn compile_scalar_parameter(
+pub fn compile_scalar_parameter(
     operation: &Operation,
     parameter_name: &str,
 ) -> Result<FiniteF32, OperationCompileError> {
@@ -81,7 +81,7 @@ pub(crate) fn compile_scalar_parameter(
     }
 }
 
-pub(crate) fn parameter_f64(
+pub fn parameter_f64(
     operation: &Operation,
     name: &'static str,
     default: f64,
@@ -89,7 +89,7 @@ pub(crate) fn parameter_f64(
     let parameter = ParameterName::new(name).expect("static processing parameter");
     match operation.parameter(&parameter) {
         None => Ok(default),
-        #[allow(
+        #[expect(
             clippy::cast_precision_loss,
             reason = "integer compatibility values are widened to the canonical f64 form"
         )]
@@ -103,7 +103,7 @@ pub(crate) fn parameter_f64(
     }
 }
 
-pub(crate) fn parameter_integer(
+pub fn parameter_integer(
     operation: &Operation,
     name: &'static str,
     default: f64,
@@ -119,11 +119,14 @@ pub(crate) fn parameter_integer(
             format!("{name} must be an exact small integer"),
         ));
     }
-    #[allow(clippy::cast_possible_truncation, reason = "range checked above")]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the validated compatibility integer is narrowed at the native boundary"
+    )]
     Ok(value as i32)
 }
 
-pub(crate) fn parameter_f32_array<const N: usize>(
+pub fn parameter_f32_array<const N: usize>(
     operation: &Operation,
     name: &'static str,
     default: [f32; N],
@@ -187,7 +190,7 @@ pub(crate) fn parameter_f32_array<const N: usize>(
         .map_err(|_| super::invalid_parameters(operation, format!("{name} has an invalid shape")))
 }
 
-pub(crate) fn parameter_bool_default(
+pub fn parameter_bool_default(
     operation: &Operation,
     name: &'static str,
     default: bool,
@@ -204,7 +207,7 @@ pub(crate) fn parameter_bool_default(
     }
 }
 
-pub(crate) fn parameter_u32(
+pub fn parameter_u32(
     operation: &Operation,
     name: &'static str,
     default: i64,

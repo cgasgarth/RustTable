@@ -2,7 +2,7 @@ use crate::context::CorrelationContext;
 use crate::event::{DiagnosticEvent, SCHEMA_VERSION};
 use crate::privacy::{Redactor, VisibleValue, visible_value};
 
-pub(crate) fn escape(value: &str) -> String {
+pub fn escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
         match character {
@@ -23,7 +23,7 @@ pub(crate) fn escape(value: &str) -> String {
     escaped
 }
 
-pub(crate) fn event_line(
+pub fn event_line(
     package_version: &str,
     sequence: u64,
     timestamp: u128,
@@ -66,7 +66,7 @@ pub(crate) fn event_line(
     line
 }
 
-pub(crate) fn human_line(
+pub fn human_line(
     sequence: u64,
     timestamp: u128,
     event: &DiagnosticEvent,

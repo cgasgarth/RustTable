@@ -359,7 +359,7 @@ fn validate_artifact(entry: &FixtureEntry, path: &Path) -> Result<(), ManifestEr
     Ok(())
 }
 
-fn validate_limits(limits: FixtureManifestLimits) -> Result<(), ManifestError> {
+const fn validate_limits(limits: FixtureManifestLimits) -> Result<(), ManifestError> {
     if limits.max_file_bytes == 0
         || limits.max_total_bytes == 0
         || limits.max_decompressed_bytes == 0

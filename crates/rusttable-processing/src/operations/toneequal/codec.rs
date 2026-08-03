@@ -34,7 +34,7 @@ impl ToneEqualizerHistory {
     }
 
     #[must_use]
-    pub fn current(&self) -> &ToneEqualizerParametersV2 {
+    pub const fn current(&self) -> &ToneEqualizerParametersV2 {
         match self {
             Self::V2(parameters) => parameters,
         }
@@ -149,7 +149,7 @@ fn migrate_v1(bytes: &[u8]) -> Result<ToneEqualizerParametersV2, ToneEqualizerCo
     Ok(parameters)
 }
 
-fn ensure_length(bytes: &[u8], expected: usize) -> Result<(), ToneEqualizerCodecError> {
+const fn ensure_length(bytes: &[u8], expected: usize) -> Result<(), ToneEqualizerCodecError> {
     if bytes.len() == expected {
         Ok(())
     } else {

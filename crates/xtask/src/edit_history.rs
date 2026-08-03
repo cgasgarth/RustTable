@@ -6,7 +6,7 @@ use crate::Result;
 const SOURCE_MAP: &str = "architecture/rusttable-edit-history-source-map.toml";
 const SCHEMA: &str = "rusttable.edit-history-source-map.v1";
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     let document = toml::from_str::<toml::Value>(
         &fs::read_to_string(root.join(SOURCE_MAP))
             .map_err(|error| format!("edit history source map: read failed: {error}"))?,

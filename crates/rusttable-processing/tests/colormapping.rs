@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Mapping test vectors preserve IEEE-754 parity order."
+)]
+
 //! Source-derived bounded Color Mapping CPU leaf coverage.
 //!
 //! This test includes the operation by path so the leaf remains isolated from
@@ -38,7 +43,7 @@ fn dimensions(width: u32, height: u32) -> RasterDimensions {
     RasterDimensions::new(width, height).expect("nonzero dimensions")
 }
 
-fn pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> ColorMappingPixel {
+const fn pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> ColorMappingPixel {
     [lightness, a, b, alpha]
 }
 

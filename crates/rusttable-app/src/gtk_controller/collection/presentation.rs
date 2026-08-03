@@ -49,7 +49,7 @@ pub(super) fn photo_state(
     LighttablePhotoState::new(photo_id, selected.contains(&photo_id), rating, labels)
 }
 
-fn ui_rating(rating: Rating) -> LighttableRating {
+const fn ui_rating(rating: Rating) -> LighttableRating {
     match rating {
         Rating::Zero => LighttableRating::Zero,
         Rating::One => LighttableRating::One,

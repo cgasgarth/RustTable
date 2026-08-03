@@ -22,7 +22,7 @@ pub enum GrainChannel {
 }
 
 impl GrainChannel {
-    pub fn from_id(id: u32) -> Result<Self, GrainParameterError> {
+    pub const fn from_id(id: u32) -> Result<Self, GrainParameterError> {
         match id {
             0 => Ok(Self::Hue),
             1 => Ok(Self::Saturation),
@@ -58,7 +58,7 @@ impl GrainParametersV1 {
     }
 
     #[must_use]
-    pub fn new(channel: GrainChannel, scale: f32, strength: f32) -> Self {
+    pub const fn new(channel: GrainChannel, scale: f32, strength: f32) -> Self {
         Self {
             channel,
             scale,
@@ -206,7 +206,7 @@ impl GrainHistory {
     }
 
     #[must_use]
-    pub fn migrate_v1(&self) -> Option<GrainParametersV2> {
+    pub const fn migrate_v1(&self) -> Option<GrainParametersV2> {
         match self {
             Self::V1(parameters) => Some(GrainParametersV2::new(
                 parameters.channel,
@@ -218,7 +218,7 @@ impl GrainHistory {
         }
     }
 
-    pub fn current(&self) -> Result<GrainParametersV2, GrainCodecError> {
+    pub const fn current(&self) -> Result<GrainParametersV2, GrainCodecError> {
         match self {
             Self::V2(parameters) => Ok(*parameters),
             Self::V1(_) => Err(GrainCodecError::RequiresMigration),

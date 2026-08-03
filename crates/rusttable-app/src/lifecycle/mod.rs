@@ -28,7 +28,7 @@ pub enum ServiceState {
 }
 
 impl ServiceState {
-    fn can_transition_to(self, next: Self) -> bool {
+    const fn can_transition_to(self, next: Self) -> bool {
         matches!(
             (self, next),
             (Self::Created, Self::Starting | Self::Stopped)
@@ -486,11 +486,8 @@ impl ServiceRegistry {
             events.push(LifecycleEvent::ServiceStarting(id.clone()));
             let result = std::panic::AssertUnwindSafe(service.start(&context))
                 .catch_unwind()
-                .await;
-            let result = match result {
-                Ok(result) => result,
-                Err(_) => Err(ServiceError::panic()),
-            };
+                .await
+                .unwrap_or_else(|_| Err(ServiceError::panic()));
             if let Err(error) = result {
                 let finding = if error.kind == ServiceErrorKind::Panic {
                     ServiceHealthFinding::StartPanicked
@@ -723,7 +720,7 @@ impl ServiceRegistry {
         }
     }
 
-    fn receipt(
+    const fn receipt(
         &self,
         events: Vec<LifecycleEvent>,
         task_drains: BTreeMap<ServiceId, TaskDrainReceipt>,
@@ -751,7 +748,7 @@ pub(crate) trait Recorder {
 
 impl Recorder for DiagnosticsGuard {
     fn record(&self, event: &DiagnosticEvent) -> Result<(), DiagnosticsError> {
-        DiagnosticsGuard::record(self, event)
+        Self::record(self, event)
     }
 }
 
@@ -766,12 +763,13 @@ where
     A: FnOnce(Option<Arc<G>>) -> ApplicationRunResult<Error>,
     W: FnMut(&str),
 {
-    let guard = if let Ok(guard) = installer() {
-        Some(Arc::new(guard))
-    } else {
-        warn("RustTable diagnostics installation failed; continuing");
-        None
-    };
+    let guard = installer().map_or_else(
+        |_| {
+            warn("RustTable diagnostics installation failed; continuing");
+            None
+        },
+        |guard| Some(Arc::new(guard)),
+    );
 
     if let Some(ref guard) = guard
         && guard.record(&DiagnosticEvent::startup()).is_err()
@@ -781,10 +779,12 @@ where
 
     let result = application(guard.clone());
     if let Some(ref guard) = guard {
-        let event = result.as_ref().map_or(
-            DiagnosticEvent::application_failure(
-                rusttable_diagnostics::ApplicationFailureCode::DesktopUiRun,
-            ),
+        let event = result.as_ref().map_or_else(
+            |_| {
+                DiagnosticEvent::application_failure(
+                    rusttable_diagnostics::ApplicationFailureCode::DesktopUiRun,
+                )
+            },
             |()| DiagnosticEvent::shutdown(),
         );
         if guard.record(&event).is_err() {

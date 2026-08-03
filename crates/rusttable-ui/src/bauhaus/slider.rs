@@ -8,7 +8,11 @@
 // GTK exposes doubles while every numeric field and calculation in the pinned
 // Bauhaus implementation uses C `float`; narrowing at this boundary is the
 // behavior being ported.
-#![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "GTK-facing slider values intentionally narrow through the retained native f32 ABI."
+)]
 
 use std::{error::Error, fmt};
 
@@ -54,6 +58,10 @@ enum CurveDirection {
 }
 
 impl SliderCurve {
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source logarithmic slider curve preserves its multiply/add evaluation order."
+    )]
     fn apply(self, value: f32, direction: CurveDirection) -> f32 {
         match self {
             Self::Linear => value,
@@ -174,12 +182,15 @@ impl BauhausSliderModel {
 
     /// Returns the current raw value.
     #[must_use]
-    #[allow(clippy::float_cmp)] // Darktable treats an exactly collapsed range as a sentinel.
     pub fn value(&self) -> f64 {
         f64::from(self.value_f32())
     }
 
-    #[allow(clippy::float_cmp)] // Darktable treats an exactly collapsed range as a sentinel.
+    #[expect(
+        clippy::float_cmp,
+        clippy::suboptimal_flops,
+        reason = "Darktable keeps the source slider multiply/add order for numeric parity."
+    )]
     fn value_f32(&self) -> f32 {
         if self.maximum == self.minimum {
             return self.maximum;
@@ -190,18 +201,25 @@ impl BauhausSliderModel {
 
     /// Returns the current value after display factor and offset.
     #[must_use]
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source display projection preserves the configured factor/offset evaluation order."
+    )]
     pub fn display_value(&self) -> f64 {
         f64::from(self.value_f32() * self.factor + self.offset)
     }
 
     /// Sets a raw value using Darktable's hard clamping, degree wrapping,
     /// visible-range expansion, curve mapping, and display-unit rounding.
-    #[allow(clippy::float_cmp)] // Exact equality selects Darktable's wrap/range branches.
     pub fn set_value(&mut self, value: f64) {
         self.set_value_f32(value as f32);
     }
 
-    #[allow(clippy::float_cmp)] // Exact equality selects Darktable's wrap/range branches.
+    #[expect(
+        clippy::float_cmp,
+        clippy::suboptimal_flops,
+        reason = "The source degree wrapping preserves exact equality and multiply/add evaluation order."
+    )]
     fn set_value_f32(&mut self, value: f32) {
         if value.is_nan() {
             return;
@@ -412,7 +430,6 @@ impl BauhausSliderModel {
         f64::from(self.effective_step_f32(policy))
     }
 
-    #[allow(clippy::float_cmp)] // Zero is the source sentinel for an automatic step.
     fn effective_step_f32(&self, policy: AutomaticStepPolicy) -> f32 {
         let mut step = self.step;
         if step == 0.0_f32 {
@@ -439,6 +456,10 @@ impl BauhausSliderModel {
 
     /// Applies one source-style step with a pre-resolved accelerator speed and
     /// the live global automatic-step range policy.
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source degree-wrap test preserves its original multiply/subtract order."
+    )]
     pub fn add_step(&mut self, delta: f64, speed: f64, force: bool, policy: AutomaticStepPolicy) {
         let delta = delta as f32;
         let speed = speed as f32;
@@ -506,7 +527,10 @@ impl BauhausSliderModel {
     }
 
     /// Changes the literal suffix and applies Darktable's percent shortcut.
-    #[allow(clippy::float_cmp)] // The source shortcut applies only to the literal default factor.
+    #[expect(
+        clippy::float_cmp,
+        reason = "The source shortcut applies only to the literal default factor."
+    )]
     pub fn set_format(&mut self, format: impl Into<String>) {
         self.format = format.into();
         if self.format.contains('%') && self.hard_maximum.abs() <= 10.0_f32 {
@@ -564,6 +588,10 @@ impl BauhausSliderModel {
     /// Formats a raw value using Darktable's sign, precision, factor, offset,
     /// and literal suffix rules.
     #[must_use]
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source formatter preserves factor/offset arithmetic order for display parity."
+    )]
     pub fn value_text(&self, value: f64) -> String {
         let value = value as f32;
         let displayed = value * self.factor + self.offset;
@@ -583,7 +611,10 @@ impl BauhausSliderModel {
 
     /// Adds or replaces a gradient stop. Returns `false` only when a new stop
     /// would exceed `DT_BAUHAUS_SLIDER_MAX_STOPS`.
-    #[allow(clippy::float_cmp)] // Stop positions are exact identity keys in the source.
+    #[expect(
+        clippy::float_cmp,
+        reason = "Stop positions are exact identity keys in the source."
+    )]
     pub fn set_stop(&mut self, position: f64, rgb: [f64; 3]) -> bool {
         let position = position as f32;
         let rgb = [rgb[0] as f32, rgb[1] as f32, rgb[2] as f32];
@@ -615,6 +646,10 @@ impl BauhausSliderModel {
         self.set_normalized_position_f32(position as f32);
     }
 
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source popup commits the normalized value in its original multiply/add order."
+    )]
     fn set_normalized_position_f32(&mut self, position: f32) {
         let position = position.clamp(0.0_f32, 1.0_f32);
         let raw = self.curve.apply(position, CurveDirection::Get);

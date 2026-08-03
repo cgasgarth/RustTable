@@ -21,7 +21,10 @@ pub enum WebPCodingMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each boolean maps an independent WebP RIFF feature or metadata presence flag"
+)]
 pub struct WebPFeatures {
     pub icc_profile: bool,
     pub alpha: bool,

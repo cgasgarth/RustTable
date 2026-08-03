@@ -211,7 +211,7 @@ pub enum EnabledState {
 }
 
 impl EnabledState {
-    fn decode(value: Option<i64>) -> Self {
+    const fn decode(value: Option<i64>) -> Self {
         match value {
             Some(0) => Self::Disabled,
             Some(1) => Self::Enabled,
@@ -278,8 +278,8 @@ pub enum ModuleOrderVersion {
 }
 
 impl ModuleOrderVersion {
-    fn decode(value: Option<i64>) -> Option<Self> {
-        value.map(|value| match value {
+    const fn decode(value: i64) -> Self {
+        match value {
             0 => Self::Custom,
             1 => Self::Legacy,
             2 => Self::V30,
@@ -287,7 +287,7 @@ impl ModuleOrderVersion {
             4 => Self::V50,
             5 => Self::V50Jpeg,
             value => Self::Unknown(value),
-        })
+        }
     }
 }
 

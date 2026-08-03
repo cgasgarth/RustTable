@@ -1,4 +1,8 @@
-#![allow(clippy::excessive_precision, clippy::unreadable_literal)] // Published color-space matrices are retained at their reference precision.
+#![expect(
+    clippy::excessive_precision,
+    clippy::unreadable_literal,
+    reason = "published color-space matrices are retained at their reference precision"
+)]
 
 use super::{CanonicalProfile, DiffError};
 
@@ -15,18 +19,22 @@ pub fn profile_convert(
     multiply(inverse_profile_matrix(target), adapted)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the published CIEDE2000 arithmetic and rounding order"
+)]
 #[must_use]
 pub fn ciede2000(first: [f32; 3], second: [f32; 3]) -> f32 {
-    let c1 = (first[1] * first[1] + first[2] * first[2]).sqrt();
-    let c2 = (second[1] * second[1] + second[2] * second[2]).sqrt();
+    let c1 = first[1].hypot(first[2]);
+    let c2 = second[1].hypot(second[2]);
     let c_bar = f32::midpoint(c1, c2);
     let twenty_five_7 = 25.0_f32.powi(7);
     let c_bar_7 = c_bar.powi(7);
     let g = 0.5 * (1.0 - (c_bar_7 / (c_bar_7 + twenty_five_7)).sqrt());
     let a1 = (1.0 + g) * first[1];
     let a2 = (1.0 + g) * second[1];
-    let c1 = (a1 * a1 + first[2] * first[2]).sqrt();
-    let c2 = (a2 * a2 + second[2] * second[2]).sqrt();
+    let c1 = a1.hypot(first[2]);
+    let c2 = a2.hypot(second[2]);
     let h1 = hue_angle(a1, first[2]);
     let h2 = hue_angle(a2, second[2]);
     let delta_l = second[0] - first[0];
@@ -87,6 +95,10 @@ fn hue_angle(a: f32, b: f32) -> f32 {
     if angle < 0.0 { angle + 360.0 } else { angle }
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the reference RGB-to-Lab arithmetic and rounding order"
+)]
 fn rgb_to_lab(rgb: [f32; 3], profile: CanonicalProfile) -> [f32; 3] {
     let xyz = adapt_white_point(
         multiply(profile_matrix(profile), rgb),
@@ -97,7 +109,7 @@ fn rgb_to_lab(rgb: [f32; 3], profile: CanonicalProfile) -> [f32; 3] {
         const EPSILON: f32 = 216.0 / 24_389.0;
         const KAPPA: f32 = 24_389.0 / 27.0;
         if value > EPSILON {
-            value.powf(1.0 / 3.0)
+            value.cbrt()
         } else {
             (KAPPA * value + 16.0) / 116.0
         }
@@ -106,7 +118,7 @@ fn rgb_to_lab(rgb: [f32; 3], profile: CanonicalProfile) -> [f32; 3] {
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
 
-fn profile_matrix(profile: CanonicalProfile) -> [[f32; 3]; 3] {
+const fn profile_matrix(profile: CanonicalProfile) -> [[f32; 3]; 3] {
     match profile {
         CanonicalProfile::Srgb => [
             [0.4124564, 0.3575761, 0.1804375],
@@ -126,7 +138,7 @@ fn profile_matrix(profile: CanonicalProfile) -> [[f32; 3]; 3] {
     }
 }
 
-fn inverse_profile_matrix(profile: CanonicalProfile) -> [[f32; 3]; 3] {
+const fn inverse_profile_matrix(profile: CanonicalProfile) -> [[f32; 3]; 3] {
     match profile {
         CanonicalProfile::Srgb => [
             [3.2404542, -1.5371385, -0.4985314],
@@ -146,7 +158,7 @@ fn inverse_profile_matrix(profile: CanonicalProfile) -> [[f32; 3]; 3] {
     }
 }
 
-fn white_point(profile: CanonicalProfile) -> [f32; 3] {
+const fn white_point(profile: CanonicalProfile) -> [f32; 3] {
     match profile {
         CanonicalProfile::Srgb | CanonicalProfile::DisplayP3 | CanonicalProfile::Rec2020 => {
             [0.95047, 1.0, 1.08883]
@@ -154,6 +166,10 @@ fn white_point(profile: CanonicalProfile) -> [f32; 3] {
     }
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the reference matrix multiplication order"
+)]
 fn multiply(matrix: [[f32; 3]; 3], vector: [f32; 3]) -> [f32; 3] {
     [
         matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
@@ -162,7 +178,10 @@ fn multiply(matrix: [[f32; 3]; 3], vector: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-#[allow(clippy::float_cmp)]
+#[expect(
+    clippy::float_cmp,
+    reason = "preserve exact equality for canonical white-point vectors before adaptation"
+)]
 fn adapt_white_point(xyz: [f32; 3], source: [f32; 3], target: [f32; 3]) -> [f32; 3] {
     if source == target {
         return xyz;

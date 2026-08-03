@@ -3,6 +3,11 @@
 //! ports history/style materialization.
 
 #![forbid(unsafe_code)]
+#![expect(
+    clippy::imprecise_flops,
+    clippy::suboptimal_flops,
+    reason = "Native RGB Curve preset equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use super::parameters::{RgbCurveParametersV1, RgbCurveType};
 
@@ -23,7 +28,7 @@ pub struct RgbCurvePreset {
     pub parameters: RgbCurveParametersV1,
 }
 
-fn preset(parameters: RgbCurveParametersV1, name: &'static str) -> RgbCurvePreset {
+const fn preset(parameters: RgbCurveParametersV1, name: &'static str) -> RgbCurvePreset {
     RgbCurvePreset {
         name,
         localization_key: name,

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::imprecise_flops,
+    clippy::suboptimal_flops,
+    reason = "Native Color Zones test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_precision_loss,
     reason = "source-derived tests construct native f32 curve coordinates from bounded node indices"

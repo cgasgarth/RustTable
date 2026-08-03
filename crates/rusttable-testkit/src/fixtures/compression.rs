@@ -17,7 +17,7 @@ impl DecompressionReport {
     }
 }
 
-pub(crate) fn preflight(
+pub fn preflight(
     compression: Compression,
     bytes: &[u8],
     max_output_bytes: u64,
@@ -54,7 +54,7 @@ pub(crate) fn preflight(
     Ok(report)
 }
 
-pub(crate) fn decompressed_bytes(
+pub fn decompressed_bytes(
     compression: Compression,
     bytes: &[u8],
     max_output_bytes: u64,

@@ -29,7 +29,7 @@ const ASSET_ID: u128 = 181_002;
 const EDIT_ID: u128 = 181_003;
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum FoundationCommand {
+pub enum FoundationCommand {
     /// Run the real persisted catalog-to-preview vertical slice.
     CatalogPreview {
         /// Parser-qualified fixture ID from fixtures/manifest.toml.
@@ -56,7 +56,7 @@ pub(crate) enum FoundationCommand {
     },
 }
 
-pub(crate) fn run(root: &Path, command: FoundationCommand) -> Result {
+pub fn run(root: &Path, command: FoundationCommand) -> Result {
     match command {
         FoundationCommand::CatalogPreview {
             fixture,

@@ -42,6 +42,10 @@ impl ResidentIntermediate {
         })
     }
     #[must_use]
+    #[expect(
+        clippy::suspicious_operation_groupings,
+        reason = "Adjacent lifetime intervals intentionally compare this end to the next start."
+    )]
     pub fn compatible_with(&self, next: &Self) -> bool {
         self.lifetime.end == next.lifetime.start
             && self.class.generation == next.class.generation

@@ -14,7 +14,7 @@ use crate::iop::modules::{
 };
 mod interaction;
 mod panel_widgets;
-pub(crate) mod status;
+pub mod status;
 mod surfaces;
 mod viewport;
 pub(super) use crate::gui::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
@@ -316,7 +316,7 @@ impl DarkroomView {
     }
 
     #[must_use]
-    pub fn page(&self) -> &gtk4::Box {
+    pub const fn page(&self) -> &gtk4::Box {
         &self.page
     }
 
@@ -371,7 +371,7 @@ impl DarkroomView {
     }
 
     #[must_use]
-    pub fn preview(&self) -> &PhotoPreview {
+    pub const fn preview(&self) -> &PhotoPreview {
         &self.preview
     }
 
@@ -634,22 +634,22 @@ impl DarkroomView {
     }
 
     #[must_use]
-    pub fn left_panel(&self) -> &gtk4::Box {
+    pub const fn left_panel(&self) -> &gtk4::Box {
         &self.left_panel
     }
 
     #[must_use]
-    pub fn left_modules(&self) -> &gtk4::Box {
+    pub const fn left_modules(&self) -> &gtk4::Box {
         &self.left_modules
     }
 
     #[must_use]
-    pub fn right_panel(&self) -> &gtk4::Box {
+    pub const fn right_panel(&self) -> &gtk4::Box {
         &self.right_panel
     }
 
     #[must_use]
-    pub fn right_modules(&self) -> &gtk4::Box {
+    pub const fn right_modules(&self) -> &gtk4::Box {
         &self.right_modules
     }
 
@@ -743,22 +743,22 @@ impl DarkroomView {
 
     /// Returns the searchable module entry for shell-level focus and tests.
     #[must_use]
-    pub fn module_search(&self) -> &gtk4::SearchEntry {
+    pub const fn module_search(&self) -> &gtk4::SearchEntry {
         &self.module_search
     }
 
     #[must_use]
-    pub fn exposure(&self) -> &ExposurePanel {
+    pub const fn exposure(&self) -> &ExposurePanel {
         &self.exposure
     }
 
     #[must_use]
-    pub fn mask_manager(&self) -> &MaskManagerPanel {
+    pub const fn mask_manager(&self) -> &MaskManagerPanel {
         &self.mask_manager
     }
 
     #[must_use]
-    pub fn multiscale_retouch(&self) -> &MultiscaleRetouchPanel {
+    pub const fn multiscale_retouch(&self) -> &MultiscaleRetouchPanel {
         &self.multiscale_retouch
     }
 

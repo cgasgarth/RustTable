@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RetouchPixel {
     pub(crate) channels: [f32; 3],

@@ -9,7 +9,7 @@ use super::{OperationCompileError, ProcessingOperation, ProcessingOperationKind,
 
 const PAYLOAD_CHUNKS: usize = COLORTRANSFER_NATIVE_PARAMETER_BYTES.div_ceil(2_048);
 
-pub(crate) fn compile_colortransfer(
+pub fn compile_colortransfer(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     let defaults = encode_native_payload_chunks(&ColorTransferParameters::default().to_bytes());

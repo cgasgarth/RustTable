@@ -8,7 +8,7 @@ use rusttable_testkit::bench::{BenchmarkReceipt, compare_baseline};
 use crate::{Result, run_process};
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum BenchCommand {
+pub enum BenchCommand {
     /// Run active catalog and rendering workloads.
     Run(BenchRunArgs),
     /// Compare two benchmark receipts.
@@ -16,21 +16,21 @@ pub(crate) enum BenchCommand {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct BenchRunArgs {
+pub struct BenchRunArgs {
     /// Use the benchmark's bounded merge-readiness sample counts.
     #[arg(long)]
     check: bool,
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct BenchCompareArgs {
+pub struct BenchCompareArgs {
     #[arg(long)]
     baseline: PathBuf,
     #[arg(long)]
     current: PathBuf,
 }
 
-pub(crate) fn run(root: &Path, command: BenchCommand) -> Result {
+pub fn run(root: &Path, command: BenchCommand) -> Result {
     match command {
         BenchCommand::Run(arguments) => run_bench(root, &arguments),
         BenchCommand::Compare(arguments) => compare(root, &arguments),

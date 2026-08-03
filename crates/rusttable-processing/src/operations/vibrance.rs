@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Vibrance arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible Vibrance processing at the Lab D50 boundary.
 //!
 //! The parameter codec, CPU equation, module flags, and presentation metadata
@@ -56,7 +61,7 @@ impl VibranceParametersV2 {
     }
 
     #[must_use]
-    pub fn to_bytes(self) -> [u8; VIBRANCE_V2_PARAMETER_BYTES] {
+    pub const fn to_bytes(self) -> [u8; VIBRANCE_V2_PARAMETER_BYTES] {
         self.amount.to_le_bytes()
     }
 
@@ -106,7 +111,7 @@ impl VibranceHistory {
         }
     }
 
-    pub fn current(&self) -> Result<VibranceParametersV2, VibranceCodecError> {
+    pub const fn current(&self) -> Result<VibranceParametersV2, VibranceCodecError> {
         match self {
             Self::V2(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(VibranceCodecError::UnsupportedVersion(*version)),
@@ -156,7 +161,7 @@ impl VibranceConfig {
     }
 
     #[must_use]
-    pub fn defaults() -> Self {
+    pub const fn defaults() -> Self {
         Self {
             amount: FiniteF32::from_proven_finite(VIBRANCE_DEFAULT_AMOUNT),
         }

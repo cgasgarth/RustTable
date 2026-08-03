@@ -86,7 +86,10 @@ impl ReferenceRunner {
     /// # Errors
     ///
     /// Returns an error for invalid inputs, process failures to start, or resource-limit violations.
-    #[allow(clippy::too_many_lines)] // The lifecycle is kept together so every exit path shares cleanup.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the reference process lifecycle together so every exit path shares cleanup"
+    )]
     pub fn run_with_artifacts(
         &self,
         request: &ReferenceRequest,
@@ -355,7 +358,10 @@ fn spawn(
             .env("RUSTTABLE_OPENCL_CACHE", &environment.opencl)
             .env(
                 "RUSTTABLE_REFERENCE_CONFIG",
-                request.config_path.as_deref().unwrap_or(Path::new("")),
+                request
+                    .config_path
+                    .as_deref()
+                    .unwrap_or_else(|| Path::new("")),
             )
             .env("RUSTTABLE_REFERENCE_OUTPUT", output)
             .env("RUSTTABLE_REFERENCE_ROOT", &environment.root)
@@ -525,7 +531,7 @@ fn terminate_process_tree(child: &mut dyn ChildWrapper) {
     let _ = child.wait();
 }
 
-fn exit_status(code: Option<i32>, success: bool) -> ExitStatus {
+const fn exit_status(code: Option<i32>, success: bool) -> ExitStatus {
     ExitStatus { code, success }
 }
 

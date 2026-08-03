@@ -1,4 +1,15 @@
-#![allow(clippy::similar_names, clippy::too_many_lines)]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Censorize Gaussian arithmetic order is preserved for IEEE-754 parity."
+)]
+#![expect(
+    clippy::similar_names,
+    reason = "Gaussian kernel variables mirror the native sigma/radius terminology."
+)]
+#![expect(
+    clippy::too_many_lines,
+    reason = "The Gaussian kernel keeps native coefficient construction and bounded validation together."
+)]
 
 use super::execution::{CensorizeExecutionError, CensorizePixel};
 use crate::RasterDimensions;
@@ -9,7 +20,7 @@ pub(super) struct ReferenceGaussian {
 }
 
 impl ReferenceGaussian {
-    pub(super) fn new(sigma: f32) -> Self {
+    pub(super) const fn new(sigma: f32) -> Self {
         Self { sigma }
     }
 
@@ -167,6 +178,6 @@ fn params(sigma: f32) -> (f32, f32, f32, f32, f32, f32, f32, f32) {
     (a0, a1, a2, a3, b1, b2, coefp, coefn)
 }
 
-fn clamp(value: f32) -> f32 {
+const fn clamp(value: f32) -> f32 {
     value.clamp(0.0, f32::MAX)
 }

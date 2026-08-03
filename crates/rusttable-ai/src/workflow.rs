@@ -143,7 +143,8 @@ pub struct ModelOutput {
 }
 
 impl ModelOutput {
-    pub fn new(width: u32, height: u32, planar_rgb: Vec<f32>) -> Self {
+    #[must_use]
+    pub const fn new(width: u32, height: u32, planar_rgb: Vec<f32>) -> Self {
         Self {
             width,
             height,
@@ -711,6 +712,10 @@ fn model_alpha(request: &SuperResolutionRequest, x: u32, y: u32) -> f32 {
     }
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined luminance threshold order"
+)]
 fn has_deep_shadows(source: &LinearRgbaImage) -> bool {
     let mut dark = 0u64;
     let mut total = 0u64;
@@ -742,8 +747,12 @@ fn mirror(value: i64, limit: u32) -> u32 {
     .expect("mirror is in range")
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined sRGB transfer equation and rounding order"
+)]
 fn srgb_encode(value: f32) -> f32 {
-    if value <= 0.0031308 {
+    if value <= 0.003_130_8 {
         12.92 * value
     } else {
         1.055 * value.powf(1.0 / 2.4) - 0.055
@@ -757,10 +766,7 @@ fn srgb_decode(value: f32) -> f32 {
     }
 }
 fn sha256(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    crate::package::hex_digest(Sha256::digest(bytes))
 }
 
 #[derive(Debug, Default)]
@@ -787,7 +793,7 @@ impl SuperResolutionPublisher for FileTiffPublisher {
             });
         }
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let temporary = destination.with_extension(format!("rt-tmp-{}", sequence));
+        let temporary = destination.with_extension(format!("rt-tmp-{sequence}"));
         let result = (|| {
             let mut file = OpenOptions::new()
                 .write(true)
@@ -811,7 +817,7 @@ impl SuperResolutionPublisher for FileTiffPublisher {
                 source,
             })?;
             Ok(PublicationReceipt {
-                destination: Some(destination.to_owned()),
+                destination: Some(destination.clone()),
                 artifact_sha256: sha256(artifact),
                 bytes: u64::try_from(artifact.len()).unwrap_or(u64::MAX),
                 dimensions: probe.dimensions(),

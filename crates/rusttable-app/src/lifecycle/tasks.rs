@@ -27,7 +27,7 @@ pub enum CancellationReason {
 struct CancellationNode {
     cancelled: AtomicBool,
     reason: Mutex<Option<CancellationReason>>,
-    children: Mutex<Vec<Weak<CancellationNode>>>,
+    children: Mutex<Vec<Weak<Self>>>,
     notify: Notify,
 }
 
@@ -150,7 +150,7 @@ pub struct TaskReceipt {
 impl TaskReceipt {
     /// Returns the task group that owns this task.
     #[must_use]
-    pub fn group(&self) -> &TaskGroupId {
+    pub const fn group(&self) -> &TaskGroupId {
         &self.group
     }
 
@@ -221,11 +221,13 @@ impl ServiceTaskGroup {
             return Err(TaskGroupError::Stopped);
         }
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
-        let mut tasks = self.tasks.lock().await;
-        if !self.accepting.load(Ordering::Acquire) {
-            return Err(TaskGroupError::Stopped);
+        {
+            let mut tasks = self.tasks.lock().await;
+            if !self.accepting.load(Ordering::Acquire) {
+                return Err(TaskGroupError::Stopped);
+            }
+            tasks.spawn(task);
         }
-        tasks.spawn(task);
         Ok(TaskReceipt {
             group: self.id.clone(),
             sequence,

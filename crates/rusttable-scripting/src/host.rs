@@ -69,7 +69,7 @@ pub struct LuaHost {
 
 impl LuaHost {
     #[must_use]
-    pub fn new(config: HostConfig, ports: HostPorts) -> Self {
+    pub const fn new(config: HostConfig, ports: HostPorts) -> Self {
         let max_queue = config.limits.max_event_queue;
         Self {
             config,
@@ -130,6 +130,10 @@ impl LuaHost {
     /// # Errors
     ///
     /// Returns a stable cancellation, quota, serialization, Lua, or quarantine error.
+    #[expect(
+        clippy::future_not_send,
+        reason = "mlua::Lua is intentionally single-threaded; execution stays on its owning runtime"
+    )]
     pub async fn execute(&mut self, id: &ScriptId) -> Result<InvocationReceipt, ScriptError> {
         let record = self.scripts.get_mut(id).ok_or_else(|| {
             ScriptError::new(ErrorCode::InvalidManifest, "script is not installed")
@@ -244,6 +248,10 @@ impl LuaHost {
     /// # Errors
     ///
     /// Returns a stable event, callback, serialization, or reentrancy error.
+    #[expect(
+        clippy::future_not_send,
+        reason = "mlua::Lua is intentionally single-threaded; callbacks stay on its owning runtime"
+    )]
     pub async fn deliver_events(&mut self, id: &ScriptId) -> Result<usize, ScriptError> {
         let events = {
             let record = self.scripts.get_mut(id).ok_or_else(|| {
@@ -427,12 +435,13 @@ fn create_lua(
             transaction
                 .commit(&mut storage)
                 .map_err(mlua::Error::external)?;
+            drop(storage);
             Ok(())
         })?,
     )?;
     module.set("storage", storage_module)?;
     let notifications = lua.create_table()?;
-    let notification_capabilities = capabilities.clone();
+    let notification_capabilities = capabilities;
     let notification_ports = ports.notifications;
     notifications.set(
         "send",
@@ -485,6 +494,7 @@ fn install_limits(
         ledger
             .tick(1_000)
             .map_err(|error| mlua::Error::RuntimeError(error.to_string()))?;
+        drop(ledger);
         let mut recursion = hook_recursion
             .lock()
             .map_err(|_| mlua::Error::RuntimeError("recursion counter poisoned".to_owned()))?;
@@ -492,6 +502,7 @@ fn install_limits(
             DebugEvent::Call => {
                 *recursion = recursion.saturating_add(1);
                 if *recursion > recursion_limit {
+                    drop(recursion);
                     return Err(mlua::Error::RuntimeError(
                         "quota exceeded: recursion".to_owned(),
                     ));
@@ -500,6 +511,7 @@ fn install_limits(
             DebugEvent::Ret => *recursion = recursion.saturating_sub(1),
             _ => {}
         }
+        drop(recursion);
         let _ = hook_generation.load(Ordering::Acquire);
         Ok(VmState::Continue)
     })?;
@@ -535,7 +547,7 @@ mod tests {
             HostPorts::default(),
         );
         let source = "return os.execute('bad')";
-        let id = manifest(source, BTreeSet::new()).id.clone();
+        let id = manifest(source, BTreeSet::new()).id;
         let manifest = manifest(source, BTreeSet::new());
         host.install(&manifest, source).expect("install");
         assert!(futures::executor::block_on(host.execute(&id)).is_err());
@@ -547,7 +559,7 @@ mod tests {
     fn reload_invalidates_generation_and_preserves_no_lua_handles() {
         let mut host = LuaHost::new(HostConfig::default(), HostPorts::default());
         let first = "return 1";
-        let id = manifest(first, BTreeSet::new()).id.clone();
+        let id = manifest(first, BTreeSet::new()).id;
         let first_manifest = manifest(first, BTreeSet::new());
         host.install(&first_manifest, first).expect("install");
         let old = futures::executor::block_on(host.execute(&id)).expect("execute");
@@ -572,7 +584,7 @@ mod tests {
             },
             HostPorts::default(),
         );
-        let id = manifest(source, BTreeSet::new()).id.clone();
+        let id = manifest(source, BTreeSet::new()).id;
         let manifest = manifest(source, BTreeSet::new());
         host.install(&manifest, source).expect("install");
         let error = futures::executor::block_on(host.execute(&id)).unwrap_err();

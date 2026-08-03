@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::fmt::Write as _;
 use std::io::{Cursor, Read};
 
 use sha2::{Digest, Sha256};
@@ -111,7 +112,7 @@ impl ModelPackage {
             if file.is_dir()
                 || file
                     .unix_mode()
-                    .is_some_and(|mode| mode & 0o170000 == 0o120000)
+                    .is_some_and(|mode| mode & 0o170_000 == 0o120_000)
             {
                 return Err(PackageError::DirectoryOrSymlink);
             }
@@ -223,7 +224,7 @@ impl ModelPackage {
     }
 
     #[must_use]
-    pub fn data_assets(&self) -> &BTreeMap<String, Vec<u8>> {
+    pub const fn data_assets(&self) -> &BTreeMap<String, Vec<u8>> {
         &self.data_assets
     }
 
@@ -254,7 +255,7 @@ fn validate_path(name: &str) -> Result<(), PackageError> {
     Ok(())
 }
 
-pub(crate) fn hash_assets(assets: &BTreeMap<String, Vec<u8>>) -> String {
+pub fn hash_assets(assets: &BTreeMap<String, Vec<u8>>) -> String {
     let mut hasher = Sha256::new();
     for (name, bytes) in assets {
         hasher.update(name.as_bytes());
@@ -265,12 +266,13 @@ pub(crate) fn hash_assets(assets: &BTreeMap<String, Vec<u8>>) -> String {
     hex_digest(hasher.finalize())
 }
 
-pub(crate) fn hex_digest(digest: impl AsRef<[u8]>) -> String {
-    digest
-        .as_ref()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+pub fn hex_digest(digest: impl AsRef<[u8]>) -> String {
+    let digest = digest.as_ref();
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(output, "{byte:02x}").expect("writing hexadecimal data to a String cannot fail");
+    }
+    output
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -234,7 +234,7 @@ impl DngCfaDescriptor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DngLinearDescriptor {
     dimensions: ImageDimensions,
     samples: Vec<u16>,
@@ -252,7 +252,6 @@ pub struct DngLinearDescriptor {
 }
 
 impl DngLinearDescriptor {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         dimensions: ImageDimensions,
         samples: Vec<u16>,
@@ -393,7 +392,7 @@ impl Default for DngLimits {
 }
 
 impl DngLimits {
-    pub fn checked(self) -> Result<Self, DngError> {
+    pub const fn checked(self) -> Result<Self, DngError> {
         if self.max_encoded_bytes == 0 || self.max_pixels == 0 {
             Err(DngError::InvalidLimits)
         } else {

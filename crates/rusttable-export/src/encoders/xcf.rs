@@ -86,7 +86,7 @@ impl Default for Settings {
 impl Settings {
     /// # Errors
     /// Returns an error when the layout or bounded limits are invalid.
-    pub fn validate(self) -> Result<(), Error> {
+    pub const fn validate(self) -> Result<(), Error> {
         if !matches!(self.channels, ChannelLayout::Rgb | ChannelLayout::Rgba) {
             return Err(Error::UnsupportedLayout(self.channels));
         }
@@ -867,7 +867,7 @@ impl<'a> Cursor<'a> {
     const fn new(data: &'a [u8]) -> Self {
         Self { data, at: 0 }
     }
-    fn remaining(&self) -> usize {
+    const fn remaining(&self) -> usize {
         self.data.len().saturating_sub(self.at)
     }
     fn take(&mut self, len: usize) -> Result<&'a [u8], Error> {

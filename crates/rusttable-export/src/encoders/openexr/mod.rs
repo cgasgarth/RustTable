@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_lines)]
-
 mod inspect;
 mod metadata;
 mod settings;
@@ -303,6 +301,10 @@ macro_rules! write_typed {
     };
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-derived OpenEXR channel and sample dispatch together"
+)]
 fn write_image<W: Write + Seek>(
     writer: &mut W,
     artifact: &CanonicalArtifact<'_>,
@@ -462,7 +464,7 @@ fn write_image<W: Write + Seek>(
     Ok(())
 }
 
-fn exr_encoding(settings: Settings) -> Encoding {
+const fn exr_encoding(settings: Settings) -> Encoding {
     Encoding {
         compression: match settings.compression {
             Compression::None => exr::prelude::Compression::Uncompressed,

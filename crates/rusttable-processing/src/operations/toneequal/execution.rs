@@ -19,6 +19,11 @@
     clippy::too_many_arguments,
     reason = "source-shaped f32 raster loops preserve native processing order"
 )]
+#![expect(
+    clippy::imprecise_flops,
+    clippy::suboptimal_flops,
+    reason = "Native Tone Equalizer f32 equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt;
 
@@ -173,7 +178,7 @@ impl ToneEqualizerPlan {
     }
 
     #[must_use]
-    pub fn tile_contract(&self) -> ToneEqualizerTileContract {
+    pub const fn tile_contract(&self) -> ToneEqualizerTileContract {
         ToneEqualizerTileContract::WholeRasterOnly
     }
 
@@ -308,6 +313,10 @@ impl ToneEqualizerPlan {
         self.execute_with_cancel(input, width, height, roi_scale, output_mode, cancelled)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The native tone-equalizer mask keeps luminance, detail selection, cancellation, and publication order together."
+    )]
     fn compute_luminance_mask(
         &self,
         input: &[ToneEqualizerPixel],

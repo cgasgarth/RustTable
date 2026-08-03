@@ -5,9 +5,9 @@
 //! integration are owned by a later milestone.
 
 /// Fail-closed capability projection for the isolated CPU leaf.
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
-    reason = "the fail-closed capability projection mirrors independent native flags"
+    reason = "The fail-closed capability projection mirrors independent native flags."
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FilmicDescriptor {

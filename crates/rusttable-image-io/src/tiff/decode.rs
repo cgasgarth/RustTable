@@ -163,7 +163,7 @@ impl TiffDecoder {
     }
 }
 
-pub(crate) fn is_tiff_signature(bytes: &[u8]) -> bool {
+pub fn is_tiff_signature(bytes: &[u8]) -> bool {
     matches!(
         bytes.get(..4),
         Some([b'I', b'I', 42 | 43, 0] | [b'M', b'M', 0, 42 | 43])
@@ -193,7 +193,7 @@ pub fn half_bits_to_f32(h: u16) -> f32 {
     f32::from_bits(bits | (u32::from(h & 0x8000) << 16))
 }
 
-pub(crate) fn decode_tiff_probe(
+pub fn decode_tiff_probe(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<ImageProbe, ImageInputError> {
@@ -559,7 +559,10 @@ fn crop(mut pixels: TiffPixelData, roi: Roi) -> Result<TiffPixelData, TiffDecode
     Ok(pixels)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "TIFF crop helper keeps storage layout, channel count, and checked ROI coordinates explicit across chunky and planar formats"
+)]
 fn crop_values<T: Copy>(
     values: &[T],
     storage: TiffStorageLayout,

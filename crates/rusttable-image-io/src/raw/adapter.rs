@@ -647,7 +647,7 @@ fn convert_layout(
     }
 }
 
-fn channel(value: CFAColor) -> RawChannel {
+const fn channel(value: CFAColor) -> RawChannel {
     match value {
         CFAColor::RED => RawChannel::Red,
         CFAColor::GREEN => RawChannel::Green,
@@ -686,7 +686,7 @@ fn color_matrices(
     Ok(output)
 }
 
-fn convert_illuminant(value: Illuminant) -> RawIlluminant {
+const fn convert_illuminant(value: Illuminant) -> RawIlluminant {
     match value {
         Illuminant::Unknown => RawIlluminant::Unknown,
         Illuminant::Daylight => RawIlluminant::Daylight,
@@ -799,7 +799,7 @@ fn convert_rect(rect: Rect) -> Result<RawRect, RawDecodeError> {
     .map_err(invalid)
 }
 
-fn orientation(value: Orientation) -> RawOrientation {
+const fn orientation(value: Orientation) -> RawOrientation {
     match value {
         Orientation::Normal => RawOrientation::Normal,
         Orientation::HorizontalFlip => RawOrientation::HorizontalFlip,
@@ -890,7 +890,7 @@ fn capability(
     })
 }
 
-fn invalid(error: RawFrameValidationError) -> RawDecodeError {
+const fn invalid(error: RawFrameValidationError) -> RawDecodeError {
     RawDecodeError::InvalidFrame(error)
 }
 

@@ -127,7 +127,7 @@ impl RotatePixelsPlan {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RotatePixelsExecution {
     pixels: Vec<LinearRgb>,
     dimensions: RasterDimensions,
@@ -231,7 +231,7 @@ pub struct RotatePixelsWgpuDispatch {
 }
 
 #[must_use]
-pub fn wgpu_dispatch(plan: &RotatePixelsPlan, channels: u32) -> RotatePixelsWgpuDispatch {
+pub const fn wgpu_dispatch(plan: &RotatePixelsPlan, channels: u32) -> RotatePixelsWgpuDispatch {
     RotatePixelsWgpuDispatch {
         workgroups_x: ceil_div(plan.output_dimensions.width(), 8),
         workgroups_y: ceil_div(plan.output_dimensions.height(), 8),
@@ -279,6 +279,6 @@ fn digest_f32(values: &[f32]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-fn ceil_div(value: u32, divisor: u32) -> u32 {
+const fn ceil_div(value: u32, divisor: u32) -> u32 {
     value.saturating_add(divisor - 1) / divisor
 }

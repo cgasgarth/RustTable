@@ -231,6 +231,10 @@ fn process_smooth(
 
 /// `process_v3` calls the fast-hypot path as `(b, a)`, whose release-build
 /// contract is this source-order f32 square root rather than `hypotf`.
+#[expect(
+    clippy::imprecise_flops,
+    reason = "Native Color Zones fast-hypot path preserves the source-order f32 squares and square root."
+)]
 fn smooth_chroma(a: f32, b: f32) -> f32 {
     (b * b + a * a).sqrt()
 }
@@ -276,7 +280,7 @@ fn lch_to_lab(lch: [f32; 3], alpha: f32) -> ColorZonesPixel {
 }
 
 /// Exact comparison order from `GLib`'s `CLAMP(x, 0, 1)` macro.
-#[allow(
+#[expect(
     clippy::manual_clamp,
     reason = "the direct port preserves GLib CLAMP comparison order and signed-zero/NaN behavior"
 )]

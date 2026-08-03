@@ -24,7 +24,7 @@ pub struct ReferenceRequest {
 
 impl ReferenceRequest {
     #[must_use]
-    pub fn timeout(&self) -> Duration {
+    pub const fn timeout(&self) -> Duration {
         Duration::from_millis(self.timeout_ms)
     }
 }

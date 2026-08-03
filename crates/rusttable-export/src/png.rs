@@ -252,7 +252,7 @@ pub struct PngExportReceipt {
 
 impl PngExportReceipt {
     #[must_use]
-    pub fn output(&self) -> &OutputReceipt {
+    pub const fn output(&self) -> &OutputReceipt {
         &self.output
     }
 
@@ -282,7 +282,7 @@ impl PngExportReceipt {
     }
 
     #[must_use]
-    pub fn metadata(&self) -> Option<&PngMetadataReceipt> {
+    pub const fn metadata(&self) -> Option<&PngMetadataReceipt> {
         self.metadata.as_ref()
     }
 
@@ -645,7 +645,10 @@ impl PngPublisher {
         }
     }
 
-    fn validate_dimensions(&self, dimensions: ImageDimensions) -> Result<(), PngPublishError> {
+    const fn validate_dimensions(
+        &self,
+        dimensions: ImageDimensions,
+    ) -> Result<(), PngPublishError> {
         if dimensions.width() > self.limits.max_width()
             || dimensions.height() > self.limits.max_height()
         {

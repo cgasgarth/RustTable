@@ -1,4 +1,11 @@
-#![allow(clippy::missing_panics_doc, clippy::too_many_lines)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "Watermark descriptor invariants are checked by bounded static contract construction."
+)]
+#![expect(
+    clippy::too_many_lines,
+    reason = "The source-ordered Watermark descriptor keeps its complete parameter contract together."
+)]
 
 use crate::descriptor::{
     AlphaPolicy, CapabilityContract, DescriptorId, ImagePredicate, InputOutputContract,

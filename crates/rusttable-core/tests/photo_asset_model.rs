@@ -2,7 +2,7 @@ use rusttable_core::{
     Asset, AssetId, AssetRole, ByteLength, ContentHash, Photo, PhotoBuildError, PhotoId, Revision,
 };
 
-fn asset(id: u128, role: AssetRole, length: u64) -> Asset {
+const fn asset(id: u128, role: AssetRole, length: u64) -> Asset {
     Asset::new(
         AssetId::new(id).expect("test IDs are nonzero"),
         role,

@@ -7,7 +7,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const PARAMETERS: [&str; 3] = ["autoscale", "preserve_colors", "levels"];
 
-pub(crate) fn compile_rgblevels(
+pub fn compile_rgblevels(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &PARAMETERS)?;

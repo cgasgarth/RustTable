@@ -38,7 +38,7 @@ impl FiniteF32 {
     }
 
     #[must_use]
-    pub fn is_negative(self) -> bool {
+    pub const fn is_negative(self) -> bool {
         self.get().is_sign_negative()
     }
 }

@@ -87,7 +87,7 @@ fn queue_rejects_illegal_terminal_transition_and_conflicting_idempotency() {
         .transition(ExportJobId::new(1).unwrap(), ExportJobState::Committing, 4)
         .unwrap();
     store
-        .succeed(ExportJobId::new(1).unwrap(), vec![9], 5)
+        .succeed(ExportJobId::new(1).unwrap(), &[9], 5)
         .unwrap();
     assert!(
         store

@@ -181,7 +181,7 @@ pub enum HistoryReceiptProvenance {
     RustTable,
 }
 
-fn provenance_kind(value: &HistoryProvenance) -> HistoryReceiptProvenance {
+const fn provenance_kind(value: &HistoryProvenance) -> HistoryReceiptProvenance {
     match value {
         HistoryProvenance::Native => HistoryReceiptProvenance::Native,
         HistoryProvenance::Darktable { .. } => HistoryReceiptProvenance::Darktable,
@@ -203,7 +203,10 @@ pub struct HistoryCommitReceipt {
 
 impl HistoryCommitReceipt {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the durable history receipt's explicit evidence fields"
+    )]
     pub const fn new(
         photo_id: PhotoId,
         revision: HistoryRevisionId,

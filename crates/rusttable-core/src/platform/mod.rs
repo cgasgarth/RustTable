@@ -4,8 +4,6 @@
 //! small, privacy-safe vocabulary that the application composition layer and the later GPU
 //! service share.
 
-#![allow(clippy::struct_excessive_bools)]
-
 use std::{collections::BTreeSet, fmt};
 
 mod target;
@@ -222,7 +220,10 @@ impl PlatformIdentity {
     /// # Errors
     ///
     /// Returns an error when the identity contains invalid build, libc, or mode data.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the explicit normalized platform identity fields"
+    )]
     pub fn new(
         operating_system: OperatingSystem,
         architecture: CpuArchitecture,
@@ -282,7 +283,7 @@ impl PlatformIdentity {
     }
 
     #[must_use]
-    pub fn target(&self) -> &TargetTriple {
+    pub const fn target(&self) -> &TargetTriple {
         &self.target
     }
 
@@ -377,6 +378,10 @@ impl fmt::Display for BackendPreferenceError {
 
 impl std::error::Error for BackendPreferenceError {}
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "preserve the native compute capability contract's independent feature flags"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CoreComputeRequirements {
     pub compute_dispatch: bool,
@@ -424,7 +429,10 @@ impl PlatformRequirement {
     /// # Errors
     ///
     /// Returns an error when the requirement has contradictory execution or libc policy.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the explicit platform requirement contract fields"
+    )]
     pub fn new(
         target: TargetTriple,
         operating_system: OperatingSystem,
@@ -477,7 +485,7 @@ impl PlatformRequirement {
     }
 
     #[must_use]
-    pub fn target(&self) -> &TargetTriple {
+    pub const fn target(&self) -> &TargetTriple {
         &self.target
     }
     #[must_use]
@@ -513,7 +521,7 @@ impl PlatformRequirement {
         &self.window_systems
     }
     #[must_use]
-    pub fn backends(&self) -> &BackendPreference {
+    pub const fn backends(&self) -> &BackendPreference {
         &self.backends
     }
     #[must_use]
@@ -525,7 +533,7 @@ impl PlatformRequirement {
         &self.runner
     }
     #[must_use]
-    pub fn package_target(&self) -> &TargetTriple {
+    pub const fn package_target(&self) -> &TargetTriple {
         &self.package_target
     }
 }
@@ -633,11 +641,11 @@ impl PlatformDecision {
         self.level
     }
     #[must_use]
-    pub fn identity(&self) -> &PlatformIdentity {
+    pub const fn identity(&self) -> &PlatformIdentity {
         &self.identity
     }
     #[must_use]
-    pub fn requirement(&self) -> Option<&PlatformRequirement> {
+    pub const fn requirement(&self) -> Option<&PlatformRequirement> {
         self.requirement.as_ref()
     }
     #[must_use]
@@ -683,7 +691,7 @@ pub struct PlatformRegistry {
 
 impl PlatformRegistry {
     #[must_use]
-    pub fn new(requirements: Vec<PlatformRequirement>) -> Self {
+    pub const fn new(requirements: Vec<PlatformRequirement>) -> Self {
         Self {
             requirements,
             compute: CoreComputeRequirements::initial(),
@@ -761,17 +769,16 @@ impl PlatformRegistry {
                 compute: self.compute,
             };
         }
-        let level = match probe {
-            None => SupportLevel::SupportedGpuCandidate,
-            Some(probe) => match probe.has_qualified_backend(&requirement.backends, self.compute) {
+        let level = probe.map_or(SupportLevel::SupportedGpuCandidate, |probe| {
+            match probe.has_qualified_backend(&requirement.backends, self.compute) {
                 Ok(true) => SupportLevel::SupportedGpuCandidate,
                 Ok(false) => SupportLevel::SupportedCpuOnly,
                 Err(finding) => {
                     findings.push(finding);
                     SupportLevel::SupportedCpuOnly
                 }
-            },
-        };
+            }
+        });
         PlatformDecision {
             level,
             identity,

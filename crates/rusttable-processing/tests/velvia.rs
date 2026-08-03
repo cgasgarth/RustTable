@@ -74,7 +74,7 @@ fn pipeline(opacity: f64) -> CompiledPipeline {
     .expect("pipeline")
 }
 
-fn channel_bits(pixel: LinearRgb) -> [u32; 3] {
+const fn channel_bits(pixel: LinearRgb) -> [u32; 3] {
     [
         pixel.red().get().to_bits(),
         pixel.green().get().to_bits(),
@@ -276,6 +276,10 @@ fn nonpositive_normalized_strength_is_bit_identical_and_positive_strength_preser
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Velvia contract test keeps descriptor, registry order, and migration evidence assertions together."
+)]
 fn descriptor_registry_order_and_migration_evidence_are_explicit() {
     let descriptor = velvia_descriptor();
     descriptor.validate().expect("descriptor");

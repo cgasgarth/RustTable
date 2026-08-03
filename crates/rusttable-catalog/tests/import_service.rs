@@ -8,7 +8,7 @@ use rusttable_core::{
 use rusttable_image::{ImageDimensions, ImageProbe, InputFormat};
 use std::collections::BTreeMap;
 
-fn hash(byte: u8) -> ContentHash {
+const fn hash(byte: u8) -> ContentHash {
     ContentHash::Sha256([byte; 32])
 }
 

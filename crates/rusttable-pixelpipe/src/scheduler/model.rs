@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -132,6 +130,10 @@ pub struct TaskId(u64);
 
 impl TaskId {
     /// Creates a nonzero task identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TaskError::ZeroId`] when `value` is zero.
     pub const fn new(value: u64) -> Result<Self, TaskError> {
         if value == 0 {
             Err(TaskError::ZeroId)
@@ -155,6 +157,11 @@ pub struct LeaseClaim {
 }
 
 impl LeaseClaim {
+    /// Creates a nonempty lease claim.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TaskError::InvalidLeaseClaim`] when either value is zero.
     pub const fn new(planned_bytes: u64, lease_count: u16) -> Result<Self, TaskError> {
         if planned_bytes == 0 || lease_count == 0 {
             Err(TaskError::InvalidLeaseClaim)
@@ -189,6 +196,12 @@ pub struct ResourceClaim {
 }
 
 impl ResourceClaim {
+    /// Creates an atomic resource and lease claim.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TaskError`] when limits, lease totals, or claim dimensions
+    /// are invalid.
     pub fn new(
         memory_bytes: u64,
         worker_tokens: u16,
@@ -280,6 +293,11 @@ impl fmt::Debug for TaskSpec {
 }
 
 impl TaskSpec {
+    /// Creates an immutable scheduler task specification.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TaskError::ZeroWorkUnits`] when `work_units` is zero.
     pub fn new(
         task_id: TaskId,
         request_id: RequestId,
@@ -306,6 +324,12 @@ impl TaskSpec {
         })
     }
 
+    /// Adds a checked dependency list to the task.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TaskError::InvalidDependencies`] for self-dependencies,
+    /// duplicates, or an oversized dependency list.
     pub fn with_dependencies(mut self, dependencies: Vec<TaskId>) -> Result<Self, TaskError> {
         if dependencies.len() > 64 || dependencies.contains(&self.task_id) {
             return Err(TaskError::InvalidDependencies);
@@ -395,7 +419,13 @@ pub struct SchedulerConfig {
 }
 
 impl SchedulerConfig {
-    pub fn new(
+    /// Creates a scheduler configuration with nonzero resource limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerConfigError::InvalidLimits`] when any limit is zero
+    /// or the per-class queue exceeds the total queue.
+    pub const fn new(
         total_queue_limit: usize,
         per_class_queue_limit: usize,
         active_pipeline_limit: u16,
@@ -428,6 +458,12 @@ impl SchedulerConfig {
         self
     }
 
+    /// Sets the queue-aging interval.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerConfigError::InvalidAging`] when the interval is
+    /// zero.
     pub const fn with_aging_after(
         mut self,
         aging_after: Duration,
@@ -662,7 +698,7 @@ impl SchedulerReceipt {
         self.publication_allowed
     }
     #[must_use]
-    pub fn failure(&self) -> Option<&TaskFailure> {
+    pub const fn failure(&self) -> Option<&TaskFailure> {
         self.failure.as_ref()
     }
 }

@@ -8,7 +8,7 @@ use rusttable_image::{
 
 use super::preview;
 
-pub(crate) fn decode_linear_frame(
+pub fn decode_linear_frame(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<DecodedFrame, ImageInputError> {
@@ -78,7 +78,7 @@ pub(crate) fn decode_linear_frame(
     })
 }
 
-pub(crate) fn decode_legacy_frame(
+pub fn decode_legacy_frame(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<DecodedFrame, ImageInputError> {

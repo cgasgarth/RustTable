@@ -457,6 +457,10 @@ fn apply_output_transform(
     Ok(())
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined luminance and gamut restoration order"
+)]
 fn preserve_gamut(plan: &RgbAiPlan, source: &[[f32; 4]], output: &mut [[f32; 4]]) {
     let width = usize::try_from(plan.source_dimensions().width()).unwrap_or(0);
     let height = usize::try_from(plan.source_dimensions().height()).unwrap_or(0);
@@ -506,7 +510,7 @@ fn output_identity(plan_hash: [u8; 32], pixels: &[[f32; 4]]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RgbAiExecutionError {
     SourcePlanMismatch,
     Provider(ProviderError),

@@ -100,10 +100,11 @@ impl MemoryFactor {
         }
     }
 
-    #[allow(
+    #[expect(
         clippy::cast_precision_loss,
         clippy::cast_possible_truncation,
-        clippy::cast_sign_loss
+        clippy::cast_sign_loss,
+        reason = "The finite nonnegative bound check preserves the source byte-budget conversion"
     )]
     pub(crate) fn checked_bytes(self, base: u64) -> Result<u64, EstimateError> {
         match self {
@@ -480,7 +481,7 @@ impl NodeRequirement {
     }
 
     #[must_use]
-    pub fn backend(&self, backend: TileBackend) -> Option<&BackendRequirement> {
+    pub const fn backend(&self, backend: TileBackend) -> Option<&BackendRequirement> {
         match backend {
             TileBackend::Cpu => Some(&self.cpu),
             TileBackend::Gpu => self.gpu.as_ref(),

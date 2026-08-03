@@ -228,6 +228,6 @@ fn source_map_covers_ported_and_explicitly_deferred_surfaces() {
     }));
 }
 
-fn defaults() -> MonochromeParametersV2 {
+const fn defaults() -> MonochromeParametersV2 {
     MonochromeParametersV2::defaults()
 }

@@ -18,7 +18,7 @@ pub struct FrameDimensions {
 }
 
 impl FrameDimensions {
-    pub fn new(width: usize, height: usize) -> Result<Self, Lut3dExecutionError> {
+    pub const fn new(width: usize, height: usize) -> Result<Self, Lut3dExecutionError> {
         if width == 0 || height == 0 || width.checked_mul(height).is_none() {
             return Err(Lut3dExecutionError::InvalidDimensions { width, height });
         }
@@ -44,7 +44,11 @@ pub struct Lut3dPlan {
 
 impl Lut3dPlan {
     #[must_use]
-    pub fn new(lut: Lut3d, colorspace: Lut3dColorspace, interpolation: Lut3dInterpolation) -> Self {
+    pub const fn new(
+        lut: Lut3d,
+        colorspace: Lut3dColorspace,
+        interpolation: Lut3dInterpolation,
+    ) -> Self {
         Self {
             lut,
             colorspace,

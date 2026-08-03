@@ -23,7 +23,7 @@ pub enum ColorMathError {
     Singular,
 }
 
-pub(super) fn finite3(value: [f32; 3]) -> Result<[f32; 3], ColorMathError> {
+pub fn finite3(value: [f32; 3]) -> Result<[f32; 3], ColorMathError> {
     value
         .into_iter()
         .all(f32::is_finite)
@@ -31,11 +31,11 @@ pub(super) fn finite3(value: [f32; 3]) -> Result<[f32; 3], ColorMathError> {
         .ok_or(ColorMathError::NonFinite)
 }
 
-pub(super) fn finite_output(value: [f32; 3]) -> Result<[f32; 3], ColorMathError> {
+pub fn finite_output(value: [f32; 3]) -> Result<[f32; 3], ColorMathError> {
     finite3(value)
 }
 
-pub(super) fn map_slice(
+pub fn map_slice(
     input: &[[f32; 3]],
     output: &mut [[f32; 3]],
     mut convert: impl FnMut([f32; 3]) -> Result<[f32; 3], ColorMathError>,

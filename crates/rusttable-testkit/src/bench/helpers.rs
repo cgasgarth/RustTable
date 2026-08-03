@@ -203,18 +203,18 @@ pub(super) fn env_optional(name: &str) -> Option<String> {
 }
 
 pub(super) fn environment_check(id: &str, variable: &str) -> QualificationCheck {
-    match env_optional(variable) {
-        Some(value) => QualificationCheck {
-            id: id.to_owned(),
-            outcome: QualificationOutcome::Passed,
-            detail: format!("{variable}={value}"),
-        },
-        None => QualificationCheck {
+    env_optional(variable).map_or_else(
+        || QualificationCheck {
             id: id.to_owned(),
             outcome: QualificationOutcome::Unavailable,
             detail: format!("{variable} is unavailable"),
         },
-    }
+        |value| QualificationCheck {
+            id: id.to_owned(),
+            outcome: QualificationOutcome::Passed,
+            detail: format!("{variable}={value}"),
+        },
+    )
 }
 
 pub(super) fn csv_env(name: &str) -> Vec<String> {

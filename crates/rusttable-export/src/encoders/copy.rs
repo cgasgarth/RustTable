@@ -1,6 +1,4 @@
 //! Queue-safe, byte-exact copies of immutable imported source objects.
-#![allow(clippy::format_collect)]
-#![allow(clippy::missing_errors_doc)]
 
 use std::fmt;
 use std::fs::{self, OpenOptions};
@@ -11,6 +9,7 @@ use rusttable_core::RenderSizeRequest;
 use rusttable_import::{SourceSnapshot, SourceSnapshotReadError};
 use sha2::{Digest, Sha256};
 
+use crate::hash_helpers::{hex, hex_bytes};
 use crate::{AlphaPolicy, DitherPolicy, ExportRequest, MetadataAction, MetadataPolicy};
 
 pub const ENCODER_ID_COPY: &str = "copy";
@@ -37,6 +36,10 @@ impl SourceDescriptor {
     }
 
     /// Captures only non-private source identity evidence needed by a queued job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the source path has no safe normalized extension.
     pub fn from_snapshot(snapshot: &SourceSnapshot) -> Result<Self, Error> {
         let extension = snapshot
             .path()
@@ -127,12 +130,12 @@ impl Default for Settings {
 
 impl Settings {
     #[must_use]
-    pub fn with_max_output_bytes(mut self, value: u64) -> Self {
+    pub const fn with_max_output_bytes(mut self, value: u64) -> Self {
         self.max_output_bytes = value;
         self
     }
     #[must_use]
-    pub fn with_chunk_bytes(mut self, value: usize) -> Self {
+    pub const fn with_chunk_bytes(mut self, value: usize) -> Self {
         self.chunk_bytes = value;
         self
     }
@@ -164,6 +167,11 @@ impl Settings {
     }
 
     /// Validates queue limits before any source or staging file is opened.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a configured limit, chunk size, extension, or
+    /// sidecar is invalid.
     pub fn validate(&self) -> Result<(), Error> {
         if self.max_output_bytes == 0 {
             return Err(Error::InvalidSettings(
@@ -283,6 +291,10 @@ impl Encoder {
     }
 
     /// Rejects all render, pixel, and metadata mutations before queue execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the request or copy settings are incompatible.
     pub fn validate_request(&self, request: &ExportRequest) -> Result<(), Error> {
         request
             .validate()
@@ -303,6 +315,11 @@ impl Encoder {
     }
 
     /// Streams the source through a bounded reusable buffer and verifies exact identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, cancellation, source reading, writing,
+    /// or identity verification fails.
     pub fn encode_to_writer<W, C, P>(
         &self,
         snapshot: &SourceSnapshot,
@@ -363,6 +380,11 @@ impl Encoder {
     }
 
     /// Encodes primary and optional sidecar outputs into pre-created queue staging paths.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, staging, source reading, writing,
+    /// cancellation, or sidecar generation fails.
     pub fn encode_to_paths<C, P>(
         &self,
         snapshot: &SourceSnapshot,
@@ -546,17 +568,4 @@ fn ensure_new_path(path: &Path) -> Result<(), Error> {
 
 fn remove_if_exists(path: &Path) {
     let _ = fs::remove_file(path);
-}
-
-fn hex(bytes: &[u8; 32]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn hex_bytes(bytes: &[u8]) -> String {
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
-    }
-    output
 }

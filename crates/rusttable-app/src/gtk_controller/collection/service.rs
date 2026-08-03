@@ -1,7 +1,5 @@
 //! Application-owned bridge for persisted library-view state.
 
-#![allow(clippy::missing_errors_doc)]
-
 use std::path::Path;
 
 use rusttable_catalog::{
@@ -17,6 +15,11 @@ pub struct LibraryCollectionService {
 }
 
 impl LibraryCollectionService {
+    /// Opens the persisted collection and active-lighttable state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the collection repository cannot be opened or loaded.
     pub fn open(path: &Path) -> Result<Self, CollectionRepositoryError> {
         let repository = RedbCollectionRepository::open(path)?;
         let state = repository.load()?;
@@ -38,6 +41,11 @@ impl LibraryCollectionService {
         &self.active_lighttable
     }
 
+    /// Applies and persists one collection command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when command validation, conflict detection, or persistence fails.
     pub fn dispatch(
         &mut self,
         command: CollectionCommand,
@@ -46,6 +54,11 @@ impl LibraryCollectionService {
         Ok(())
     }
 
+    /// Persists and adopts the active-lighttable state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the state cannot be persisted.
     pub fn persist_active_lighttable(
         &mut self,
         state: ActiveLighttableState,

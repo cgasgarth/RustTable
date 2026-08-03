@@ -106,7 +106,7 @@ pub enum BasicPointOperation {
 }
 
 impl BasicPointOperation {
-    fn entry_point(self) -> &'static str {
+    const fn entry_point(self) -> &'static str {
         match self {
             Self::BasicAdj(_) => "basicadj",
             Self::Exposure { .. } => "exposure",
@@ -388,7 +388,10 @@ impl GpuRuntime {
     /// operation and returns that same representation, preserving alpha.
     /// Unsupported transfer, opacity, masks, mixed-domain chains, and non-point
     /// stages are rejected by the pixelpipe adapter before this method is called.
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the point GPU path preserves operation order, buffer ABI, dispatch, and readback"
+    )]
     pub fn execute_basic_point(
         &self,
         request: BasicPointRequest<'_>,
@@ -810,6 +813,11 @@ fn floats_as_bytes(values: &[f32]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::suboptimal_flops,
+        reason = "Reference tests preserve native arithmetic operation order."
+    )]
+
     use super::*;
 
     #[test]
@@ -1040,6 +1048,10 @@ mod tests {
         );
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the complete checked-reflection layout matrix and per-binding assertions together."
+    )]
     #[test]
     fn entry_scoped_runtime_layouts_match_checked_reflection() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
@@ -1261,7 +1273,7 @@ mod tests {
         );
     }
 
-    #[allow(
+    #[expect(
         clippy::manual_midpoint,
         reason = "the parity reference preserves Darktable's overflow-sensitive expression order"
     )]
@@ -1425,6 +1437,10 @@ mod tests {
         assert_eq!(result.dispatches(), 1);
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the complete GPU overflow matrix, including signed-zero and boundary cases, together."
+    )]
     #[tokio::test]
     async fn vibrance_dispatch_overflows_when_the_true_opencl_hypot_exceeds_f32() {
         let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {

@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::any::{Any, TypeId};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -16,8 +14,8 @@ use rusttable_image::{
     ConcurrentCache,
 };
 
-pub(crate) mod key;
-pub(crate) mod value;
+pub mod key;
+pub mod value;
 
 use self::value::{CacheValue, CancellationToken, ValueDescriptor};
 use crate::{CacheKey, CacheKeyDigest, ImplementationIdentity};
@@ -213,6 +211,7 @@ impl FlightDeadlines {
                 return Err(CacheError::Poisoned);
             }
         }
+        drop(state);
         self.wake.notify_all();
         Ok(())
     }
@@ -482,6 +481,10 @@ impl Cache {
     }
 
     /// Returns a pinned typed value when the full structured key matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache error when locking, allocation, or type validation fails.
     pub fn lookup<T: CacheValue>(
         &self,
         key: &CacheKey,
@@ -557,7 +560,14 @@ impl Cache {
 
     /// Builds one exact key at most once at a time. Waiters can cancel their
     /// own wait without cancelling the shared build.
-    #[allow(clippy::needless_pass_by_value)]
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache or builder error when publication cannot complete.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "The owned key is the identity retained by the shared cache flight"
+    )]
     pub fn get_or_build<T, F>(
         &self,
         key: CacheKey,
@@ -609,37 +619,56 @@ impl Cache {
             {
                 return Err(CacheError::SuppressedFailure(failure.message.clone()));
             }
-            if let Some(flight) = inner.in_flight.get(key) {
-                (flight.clone(), false)
-            } else {
-                let flight = Arc::new(InFlight {
-                    token: CancellationToken::for_generation(key.generation()),
-                    state: Mutex::new(FlightState {
-                        completed: false,
-                        error: None,
-                        success: None,
-                    }),
-                    wake: Condvar::new(),
-                    consumers: Mutex::new(Consumers {
-                        next_id: 2,
-                        active: BTreeSet::from([1]),
-                    }),
-                    deadlines: Arc::new(FlightDeadlines::new()),
-                    stale: AtomicBool::new(false),
-                });
-                inner.in_flight.insert(key.clone(), flight.clone());
-                (flight, true)
-            }
+            let existing = inner.in_flight.get(key).cloned();
+            let result = existing.map_or_else(
+                || {
+                    let flight = Arc::new(InFlight {
+                        token: CancellationToken::for_generation(key.generation()),
+                        state: Mutex::new(FlightState {
+                            completed: false,
+                            error: None,
+                            success: None,
+                        }),
+                        wake: Condvar::new(),
+                        consumers: Mutex::new(Consumers {
+                            next_id: 2,
+                            active: BTreeSet::from([1]),
+                        }),
+                        deadlines: Arc::new(FlightDeadlines::new()),
+                        stale: AtomicBool::new(false),
+                    });
+                    inner.in_flight.insert(key.clone(), flight.clone());
+                    (flight, true)
+                },
+                |flight| (flight, false),
+            );
+            drop(inner);
+            result
         };
         if !owner {
             let registration = ConsumerRegistration::register(&flight, cancellation, deadline)?;
             return self.wait_for_flight::<T>(key, &flight, cancellation, deadline, registration);
         }
 
+        self.build_owner_flight(key, &flight, cancellation, deadline, builder)
+    }
+
+    fn build_owner_flight<T, F>(
+        &self,
+        key: &CacheKey,
+        flight: &Arc<InFlight>,
+        cancellation: &CancellationToken,
+        deadline: Option<CancellationDeadline>,
+        builder: F,
+    ) -> Result<CacheLease<T>, CacheError>
+    where
+        T: CacheValue,
+        F: FnOnce(&CancellationToken) -> Result<T, CacheError>,
+    {
         #[cfg(test)]
         Self::pause_at_test_gate(&self.owner_registration_gate);
         let registration =
-            match ConsumerRegistration::register_reserved(&flight, 1, cancellation, deadline) {
+            match ConsumerRegistration::register_reserved(flight, 1, cancellation, deadline) {
                 Ok(registration) => registration,
                 Err(error) => {
                     if let Ok(mut state) = flight.state.lock() {
@@ -666,7 +695,7 @@ impl Cache {
                 })
                 .and_then(|value| {
                     let _ = consumer_cancelled(cancellation, deadline);
-                    self.publish(key.clone(), value, &flight)
+                    self.publish(key.clone(), value, flight)
                 }),
             Err(error) => Err(error),
         };
@@ -704,11 +733,13 @@ impl Cache {
             if inner
                 .in_flight
                 .get(key)
-                .is_some_and(|current| Arc::ptr_eq(current, &flight))
+                .is_some_and(|current| Arc::ptr_eq(current, flight))
             {
                 inner.in_flight.remove(key);
             }
             flight.wake.notify_all();
+            drop(state);
+            drop(inner);
         }
         drop(registration);
         if consumer_cancelled(cancellation, deadline) {
@@ -716,6 +747,22 @@ impl Cache {
         } else {
             result
         }
+    }
+
+    fn wait_for_flight_state<'a>(
+        flight: &'a InFlight,
+        state: std::sync::MutexGuard<'a, FlightState>,
+    ) -> Result<
+        (
+            std::sync::MutexGuard<'a, FlightState>,
+            std::sync::WaitTimeoutResult,
+        ),
+        CacheError,
+    > {
+        flight
+            .wake
+            .wait_timeout(state, Duration::from_millis(5))
+            .map_err(|_| CacheError::Poisoned)
     }
 
     fn wait_for_flight<T: CacheValue>(
@@ -764,10 +811,12 @@ impl Cache {
                 }
                 return direct.ok_or(CacheError::BuildNotPublished);
             }
-            let (_guard, timeout) = flight
-                .wake
-                .wait_timeout(state, Duration::from_millis(5))
-                .map_err(|_| CacheError::Poisoned)?;
+            drop(state);
+            let (wait_state, timeout) = Self::wait_for_flight_state(
+                flight,
+                flight.state.lock().map_err(|_| CacheError::Poisoned)?,
+            )?;
+            drop(wait_state);
             if timeout.timed_out() {
                 thread::yield_now();
             }
@@ -878,6 +927,10 @@ impl Cache {
 
     /// Applies natural key misses for the requested scope and invalidates
     /// matching in-flight publications before they can become entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache error when invalidation bookkeeping or resident removal fails.
     pub fn invalidate(&self, scope: CacheScope) -> Result<InvalidationReceipt, CacheError> {
         let (sequence, keys) = {
             let _publication = self.publication.lock().map_err(|_| CacheError::Poisoned)?;
@@ -901,7 +954,9 @@ impl Cache {
                 .lock()
                 .map_err(|_| CacheError::Poisoned)?
                 .extend(keys.iter().cloned());
-            (sequence, keys)
+            let result = (sequence, keys);
+            drop(inner);
+            result
         };
         let mut removed = 0_usize;
         let mut deferred_error = None;
@@ -943,6 +998,11 @@ impl Cache {
         })
     }
 
+    /// Updates the soft resident budget and performs bounded garbage collection.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache error when the resident backend rejects the new budget.
     pub fn set_budget(&self, budget: u64) -> Result<CacheMetrics, CacheError> {
         let _publication = self.publication.lock().map_err(|_| CacheError::Poisoned)?;
         self.resident
@@ -966,6 +1026,11 @@ impl Cache {
             .unwrap_or_default()
     }
 
+    /// Stops new cache flights and releases all unpinned resident entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache error when shutdown bookkeeping or resident removal fails.
     pub fn shutdown(&self) -> Result<ShutdownReport, CacheError> {
         let (in_flight_builds, keys) = {
             let _publication = self.publication.lock().map_err(|_| CacheError::Poisoned)?;
@@ -973,7 +1038,9 @@ impl Cache {
             inner.shutdown = true;
             let in_flight_builds = inner.in_flight.len();
             let keys = self.resident.keys().map_err(map_common_error)?;
-            (in_flight_builds, keys)
+            let result = (in_flight_builds, keys);
+            drop(inner);
+            result
         };
         let entries = keys.len();
         let mut pinned = 0_usize;
@@ -1142,7 +1209,7 @@ impl<T: CacheValue> CacheLease<T> {
         &self.value
     }
     #[must_use]
-    pub fn key(&self) -> &CacheKey {
+    pub const fn key(&self) -> &CacheKey {
         &self.key
     }
     #[must_use]
@@ -1280,7 +1347,7 @@ impl InvalidationReceipt {
         self.removed
     }
     #[must_use]
-    pub fn scope(&self) -> &CacheScope {
+    pub const fn scope(&self) -> &CacheScope {
         &self.scope
     }
 }
@@ -1342,7 +1409,7 @@ impl CacheKey {
     fn diagnostic_sentinel() -> Self {
         // Only used to keep invalidation receipts privacy-safe; it is never
         // inserted or compared to a product key.
-        CacheKey::builder()
+        Self::builder()
             .source(crate::SourceIdentity::new([0; 32]))
             .source_descriptor([0])
             .snapshot(crate::PipelineSnapshotIdentity::from_bytes(&[0]))

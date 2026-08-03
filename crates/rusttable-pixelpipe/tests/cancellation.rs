@@ -168,7 +168,7 @@ fn shared_build_cancels_only_when_every_consumer_leaves() {
     while !started.load(Ordering::Acquire) {
         thread::yield_now();
     }
-    let waiter_cache = cache.clone();
+    let waiter_cache = cache;
     let waiter_second = second.clone();
     let waiter = thread::spawn(move || {
         waiter_cache.get_or_build::<TestValue, _>(key(10, 10), &waiter_second, |_| Ok(TestValue(2)))

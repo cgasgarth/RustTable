@@ -22,7 +22,7 @@ pub fn probe(bytes: &[u8], limits: DecodeLimits) -> Result<JpegHeader, ImageInpu
     probe_bounded(bytes, limits, false)
 }
 
-pub(crate) fn probe_bounded(
+pub fn probe_bounded(
     bytes: &[u8],
     limits: DecodeLimits,
     budgeted: bool,
@@ -43,7 +43,10 @@ pub fn inspect(bytes: &[u8], limits: DecodeLimits) -> Result<JpegHeader, ImageIn
     Ok(header)
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "JPEG marker and entropy parsing keeps source ordering, scan counts, and bounded metadata in one state machine"
+)]
 fn parse(
     bytes: &[u8],
     stop_at_scan: bool,
@@ -454,7 +457,7 @@ fn segment_limit_error(budgeted: bool, message: &str) -> ImageInputError {
     }
 }
 
-fn sof_kind(marker: u8) -> JpegSof {
+const fn sof_kind(marker: u8) -> JpegSof {
     match marker {
         0xc0 => JpegSof::BaselineDct,
         0xc1 => JpegSof::ExtendedSequentialDct,
@@ -536,7 +539,7 @@ fn read_u32(bytes: &[u8], offset: usize, little: bool) -> Option<u32> {
     })
 }
 
-fn is_metadata_marker(marker: u8) -> bool {
+const fn is_metadata_marker(marker: u8) -> bool {
     matches!(marker, 0xe1 | 0xe2)
 }
 
@@ -575,7 +578,7 @@ fn malformed(message: &str) -> ImageInputError {
     }
 }
 
-fn unsupported(reason: UnsupportedImageFeature) -> ImageInputError {
+const fn unsupported(reason: UnsupportedImageFeature) -> ImageInputError {
     ImageInputError::UnsupportedFeature {
         format: InputFormat::Jpeg,
         reason,

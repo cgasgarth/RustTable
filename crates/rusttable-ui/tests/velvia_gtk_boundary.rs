@@ -35,7 +35,10 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Velvia GTK boundary fixture keeps source projection, widget hierarchy, and state routing together."
+)]
 fn velvia_source_projection_uses_bauhaus_and_routes_state() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.velvia-boundary"),

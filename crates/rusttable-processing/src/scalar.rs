@@ -42,7 +42,7 @@ impl FiniteF32 {
 impl TryFrom<FiniteF64> for FiniteF32 {
     type Error = ScalarNarrowingError;
 
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
         reason = "the processing boundary intentionally narrows after validating the result"
     )]

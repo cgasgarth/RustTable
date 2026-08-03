@@ -55,7 +55,10 @@ fn full_circle_mapping_preserves_dead_zone_and_clockwise_positions() {
 }
 
 #[test]
-#[allow(clippy::float_cmp)]
+#[expect(
+    clippy::float_cmp,
+    reason = "The fixture asserts the exact source f32 narrowing sentinel for popup geometry."
+)]
 fn public_popup_inputs_are_narrowed_before_source_float_math() {
     let sub_float_ulp = f64::from(f32::EPSILON) / 4.0;
     let range = SliderRange::new(1.0, 1.0 + sub_float_ulp);
@@ -187,7 +190,10 @@ fn one_shared_scroll_remainder_interleaves_controllers_and_any_stop_resets_it() 
     assert_eq!(shared.push_sum(0.0, 0.8), None);
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The fixture intentionally converts expected values through the source f32 numeric boundary."
+)]
 fn assert_source_float_close(actual: f64, expected: f64) {
     let expected = f64::from(expected as f32);
     let tolerance = 4.0 * f64::from(f32::EPSILON) * expected.abs().max(1.0);

@@ -87,7 +87,10 @@ pub enum FeaturePlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "shader numerical metadata serializes independent reflection and parity flags"
+)]
 pub struct NumericalMetadata {
     pub uses_f32: bool,
     pub uses_f16: bool,
@@ -283,7 +286,7 @@ impl fmt::Display for ShaderError {
 
 impl std::error::Error for ShaderError {}
 
-pub(crate) fn hex(bytes: &[u8; 32]) -> String {
+pub fn hex(bytes: &[u8; 32]) -> String {
     let mut output = String::with_capacity(64);
     for byte in bytes {
         use std::fmt::Write as _;

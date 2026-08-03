@@ -1,6 +1,9 @@
 //! Generation-safe controller for RGB denoise intent and service results.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The RGB-denoise controller routes qualification and job failures through its typed service boundary."
+)]
 
 use super::model::{
     RGB_DENOISE_MAX_DETAIL_STRENGTH, RGB_DENOISE_SCALES, RGB_DENOISE_TILES, RgbDenoiseAction,

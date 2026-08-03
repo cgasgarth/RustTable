@@ -108,9 +108,14 @@ impl<'a> RgbDenoiseWorkflow<'a> {
             if self.control.is_cancelled(RgbDenoiseStage::Import) {
                 return Err(WorkflowError::Cancelled(RgbDenoiseStage::Import));
             }
-            let import_port = self.importer.as_deref_mut().ok_or(WorkflowError::Import {
-                source: ImportError::Failed("catalog import port is not configured".to_owned()),
-            })?;
+            let import_port =
+                self.importer
+                    .as_deref_mut()
+                    .ok_or_else(|| WorkflowError::Import {
+                        source: ImportError::Failed(
+                            "catalog import port is not configured".to_owned(),
+                        ),
+                    })?;
             match import_port
                 .import_and_group(
                     request.input().source_identity().as_bytes(),

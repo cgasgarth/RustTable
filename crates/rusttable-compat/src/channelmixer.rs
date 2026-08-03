@@ -56,7 +56,7 @@ pub enum ChannelMixerAlgorithm {
 }
 
 impl ChannelMixerAlgorithm {
-    fn from_native(raw: i32) -> Result<Self, ChannelMixerCodecError> {
+    const fn from_native(raw: i32) -> Result<Self, ChannelMixerCodecError> {
         match raw {
             0 => Ok(Self::V1),
             1 => Ok(Self::V2),
@@ -419,8 +419,10 @@ pub enum ChannelMixerHistoryStepDecode {
 }
 
 /// Decodes one Channel Mixer row's core without editing exhaustive import
-/// dispatch. The owning import integrator must retain `source` as authoritative
-/// until blend/mask and multi-instance behavior is proven.
+/// dispatch.
+///
+/// The owning import integrator must retain `source` as authoritative until
+/// blend/mask and multi-instance behavior is proven.
 #[must_use]
 pub fn decode_channelmixer_history_step(step: &CompatHistoryStep) -> ChannelMixerHistoryStepDecode {
     let Some(raw_version) = step.module else {

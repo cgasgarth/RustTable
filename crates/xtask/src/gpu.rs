@@ -13,7 +13,7 @@ const SOURCE_MAP_SCHEMA: &str = "rusttable.gpu-source-map.v1";
 const ISSUE: i64 = 290;
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum GpuCommand {
+pub enum GpuCommand {
     /// Qualify adapter selection, bounded probes, and the CPU fallback path.
     Qualify {
         #[arg(long, default_value = "current")]
@@ -53,7 +53,7 @@ pub(crate) enum GpuCommand {
     },
 }
 
-pub(crate) fn run(root: &Path, command: GpuCommand) -> Result {
+pub fn run(root: &Path, command: GpuCommand) -> Result {
     match command {
         GpuCommand::Qualify {
             platform,
@@ -64,10 +64,12 @@ pub(crate) fn run(root: &Path, command: GpuCommand) -> Result {
         } => qualify(
             root,
             &platform,
-            all_adapters,
-            all_stable_probes,
-            verify_cpu_fallback,
-            verify_loss,
+            [
+                all_adapters,
+                all_stable_probes,
+                verify_cpu_fallback,
+                verify_loss,
+            ],
         ),
         GpuCommand::ResourceMatrix {
             all_classes,
@@ -97,15 +99,13 @@ pub(crate) fn run(root: &Path, command: GpuCommand) -> Result {
     }
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
-fn qualify(
-    root: &Path,
-    platform: &str,
-    all_adapters: bool,
-    all_stable_probes: bool,
-    verify_cpu_fallback: bool,
-    verify_loss: bool,
-) -> Result {
+fn qualify(root: &Path, platform: &str, checks: [bool; 4]) -> Result {
+    let [
+        all_adapters,
+        all_stable_probes,
+        verify_cpu_fallback,
+        verify_loss,
+    ] = checks;
     if platform != "current" {
         return Err(format!(
             "GPU qualification does not support platform {platform}"
@@ -125,7 +125,7 @@ fn qualify(
     Ok(())
 }
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     let text = fs::read_to_string(root.join(SOURCE_MAP))
         .map_err(|error| format!("GPU source map: read failed: {error}"))?;
     let document = toml::from_str::<toml::Value>(&text)
@@ -238,7 +238,7 @@ fn transfer_matrix(root: &Path, options: [bool; 5]) -> Result {
     Ok(())
 }
 
-pub(crate) fn verify_resource_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_resource_source_map(root: &Path, issue: i64) -> Result {
     verify_accounting_map(
         root,
         RESOURCE_SOURCE_MAP,
@@ -248,7 +248,7 @@ pub(crate) fn verify_resource_source_map(root: &Path, issue: i64) -> Result {
     )
 }
 
-pub(crate) fn verify_transfer_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_transfer_source_map(root: &Path, issue: i64) -> Result {
     verify_accounting_map(
         root,
         TRANSFER_SOURCE_MAP,
@@ -353,13 +353,13 @@ fn verify_accounting_map(
     Ok(())
 }
 
-pub(crate) fn verify_resource_architecture(root: &Path) -> Result {
+pub fn verify_resource_architecture(root: &Path) -> Result {
     verify_pool_manifest(root)?;
     verify_no_direct_wgpu_creation(root, "resource")?;
     Ok(())
 }
 
-pub(crate) fn verify_transfer_architecture(root: &Path) -> Result {
+pub fn verify_transfer_architecture(root: &Path) -> Result {
     verify_pool_manifest(root)?;
     verify_no_direct_transfer_bypass(root)?;
     Ok(())

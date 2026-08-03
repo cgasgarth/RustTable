@@ -53,8 +53,8 @@ fn image() -> RgbaF32Image {
             RgbaF32Pixel::new(
                 0.15 + x * 0.01,
                 0.25 + y * 0.02,
-                0.35 + (x + y) * 0.01,
-                0.4 + (x + y) * 0.01,
+                (x + y).mul_add(0.01, 0.35),
+                (x + y).mul_add(0.01, 0.4),
             )
         })
         .collect();

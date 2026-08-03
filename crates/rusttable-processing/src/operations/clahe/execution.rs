@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native CLAHE arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -639,7 +643,7 @@ fn clip_histogram(histogram: &mut [i64; CLAHE_HISTOGRAM_ENTRIES], limit: i64) {
     }
 }
 
-fn luminance(channels: [f32; 4]) -> f32 {
+const fn luminance(channels: [f32; 4]) -> f32 {
     let maximum = channels[0]
         .max(channels[1])
         .max(channels[2])

@@ -3,13 +3,13 @@ pub const CONTAINER_SIGNATURE: [u8; 12] =
     [0, 0, 0, 12, b'J', b'X', b'L', b' ', 0x0d, 0x0a, 0x87, 0x0a];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ContainerKind {
+pub enum ContainerKind {
     Bare,
     Isobmff,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct BoxRecord {
+pub struct BoxRecord {
     pub box_type: [u8; 4],
     pub offset: u64,
     pub total_bytes: u64,
@@ -17,7 +17,7 @@ pub(crate) struct BoxRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ContainerInspection {
+pub struct ContainerInspection {
     pub kind: ContainerKind,
     pub boxes: Vec<BoxRecord>,
     pub codestream_bytes: u64,
@@ -26,13 +26,13 @@ pub(crate) struct ContainerInspection {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ContainerLimits {
+pub struct ContainerLimits {
     pub max_boxes: u32,
     pub max_metadata_bytes: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ContainerError {
+pub enum ContainerError {
     NotJpegXl,
     Truncated(&'static str),
     Invalid(&'static str),
@@ -46,11 +46,11 @@ pub(crate) enum ContainerError {
     Overflow,
 }
 
-pub(crate) fn matches_signature(bytes: &[u8]) -> bool {
+pub fn matches_signature(bytes: &[u8]) -> bool {
     bytes.starts_with(&BARE_SIGNATURE) || bytes.starts_with(&CONTAINER_SIGNATURE)
 }
 
-pub(crate) fn signature_kind(bytes: &[u8]) -> Result<ContainerKind, ContainerError> {
+pub fn signature_kind(bytes: &[u8]) -> Result<ContainerKind, ContainerError> {
     if bytes.starts_with(&BARE_SIGNATURE) {
         Ok(ContainerKind::Bare)
     } else if bytes.starts_with(&CONTAINER_SIGNATURE) {
@@ -60,7 +60,7 @@ pub(crate) fn signature_kind(bytes: &[u8]) -> Result<ContainerKind, ContainerErr
     }
 }
 
-pub(crate) fn inspect(
+pub fn inspect(
     bytes: &[u8],
     limits: ContainerLimits,
 ) -> Result<ContainerInspection, ContainerError> {
@@ -81,7 +81,10 @@ pub(crate) fn inspect(
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "JPEG XL container inspection keeps box ordering, codestream parts, and essential-feature checks auditable"
+)]
 fn inspect_container(
     bytes: &[u8],
     limits: ContainerLimits,
@@ -248,7 +251,7 @@ fn validate_ftyp(payload: &[u8]) -> Result<(), ContainerError> {
     Ok(())
 }
 
-fn is_known_auxiliary(box_type: [u8; 4]) -> bool {
+const fn is_known_auxiliary(box_type: [u8; 4]) -> bool {
     matches!(
         &box_type,
         b"Exif" | b"xml " | b"jumb" | b"jhgm" | b"free" | b"skip"

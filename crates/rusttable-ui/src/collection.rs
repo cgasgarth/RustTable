@@ -198,7 +198,7 @@ pub struct CollectionRule {
 impl CollectionRule {
     /// Creates an empty rule for the requested property.
     #[must_use]
-    pub fn new(property: CollectionProperty) -> Self {
+    pub const fn new(property: CollectionProperty) -> Self {
         Self {
             property,
             search_text: String::new(),
@@ -218,7 +218,7 @@ impl CollectionRule {
     }
 
     /// Sets the active property.
-    pub fn set_property(&mut self, property: CollectionProperty) {
+    pub const fn set_property(&mut self, property: CollectionProperty) {
         self.property = property;
     }
 
@@ -358,7 +358,7 @@ fn parse_fixed(value: &str) -> Option<u32> {
         .then(|| value.parse().ok())?
 }
 
-fn days_in_month(year: u32, month: u32) -> u32 {
+const fn days_in_month(year: u32, month: u32) -> u32 {
     match month {
         2 if year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400)) => {
             29

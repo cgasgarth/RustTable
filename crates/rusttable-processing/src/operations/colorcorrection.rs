@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Correction arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible Color Correction v1 processing at the Lab D50 boundary.
 //!
 //! The parameter layout, committed coefficients, presets, CPU equation, flags,
@@ -144,7 +149,7 @@ impl ColorCorrectionHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ColorCorrectionParametersV1, ColorCorrectionCodecError> {
+    pub const fn current(&self) -> Result<ColorCorrectionParametersV1, ColorCorrectionCodecError> {
         match self {
             Self::V1(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => {
@@ -208,7 +213,7 @@ impl ColorCorrectionConfig {
     }
 
     #[must_use]
-    pub fn defaults() -> Self {
+    pub const fn defaults() -> Self {
         Self {
             hia: FiniteF32::from_proven_finite(COLORCORRECTION_DEFAULT_HIA),
             hib: FiniteF32::from_proven_finite(COLORCORRECTION_DEFAULT_HIB),

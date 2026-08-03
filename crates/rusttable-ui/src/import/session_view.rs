@@ -127,8 +127,12 @@ impl ImportSessionPanel {
 
     /// Projects aliases, duplicate/failure rows, progress, receipts, and recovery state.
     pub fn set_state(&self, state: &ImportSessionViewModel) {
-        self.status
-            .set_text(state.diagnostic.as_deref().unwrap_or(state.state.label()));
+        self.status.set_text(
+            state
+                .diagnostic
+                .as_deref()
+                .unwrap_or_else(|| state.state.label()),
+        );
         self.progress.set_fraction(if state.total == 0 {
             0.0
         } else {

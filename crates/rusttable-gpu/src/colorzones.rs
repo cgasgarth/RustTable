@@ -112,7 +112,10 @@ pub struct ColorZonesRequest<'a> {
 
 impl<'a> ColorZonesRequest<'a> {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "request fields preserve the native Color Zones LUT and dispatch ABI"
+    )]
     pub const fn new(
         pixels: &'a [[f32; 4]],
         lightness_lut: &'a [f32],
@@ -154,7 +157,7 @@ impl<'a> ColorZonesRequest<'a> {
             .is_some_and(CancellationToken::is_cancelled)
     }
 
-    fn luts(self) -> [(ColorZonesLutResource, &'a [f32]); 3] {
+    const fn luts(self) -> [(ColorZonesLutResource, &'a [f32]); 3] {
         [
             (ColorZonesLutResource::Lightness, self.lightness_lut),
             (ColorZonesLutResource::Chroma, self.chroma_lut),
@@ -406,7 +409,10 @@ impl GpuRuntime {
     /// The caller must provide Darktable-scale D50 Lab plus alpha. This leaf
     /// deliberately does not perform colorspace conversion, masks, blending, or
     /// publication; those remain typed pixelpipe responsibilities.
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the GPU path keeps LUT uploads, bind-group layout, dispatch, and readback in native order"
+    )]
     pub fn execute_colorzones(
         &self,
         request: ColorZonesRequest<'_>,
@@ -585,7 +591,7 @@ fn create_mapped_storage_buffer(
     })
 }
 
-fn buffer_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupLayoutEntry {
+const fn buffer_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -598,7 +604,7 @@ fn buffer_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupLa
     }
 }
 
-fn uniform_binding(binding: u32) -> wgpu::BindGroupLayoutEntry {
+const fn uniform_binding(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,

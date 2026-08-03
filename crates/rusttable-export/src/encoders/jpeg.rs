@@ -539,7 +539,7 @@ fn add_chunked_app(
     Ok(encoder)
 }
 
-fn sampling(value: ChromaSubsampling) -> Subsampling {
+const fn sampling(value: ChromaSubsampling) -> Subsampling {
     match value {
         ChromaSubsampling::FourFourFour => Subsampling::S444,
         ChromaSubsampling::FourTwoTwo => Subsampling::S422,

@@ -20,7 +20,7 @@ fn path() -> PathBuf {
     ))
 }
 
-fn view() -> CollectionViewDefinition {
+const fn view() -> CollectionViewDefinition {
     CollectionViewDefinition::new(
         CollectionQuery::AllPhotos,
         CollectionSort::FilenameAscending,

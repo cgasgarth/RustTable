@@ -227,7 +227,7 @@ fn scalar(id: &str, minimum: f64, maximum: f64, default: f64) -> ParameterDescri
     }
 }
 
-fn tiling() -> TilingContract {
+const fn tiling() -> TilingContract {
     TilingContract {
         overlap_pixels: 0,
         alignment_pixels: 1,
@@ -276,7 +276,7 @@ fn color_io(derives_output: bool) -> InputOutputContract {
     }
 }
 
-fn mask_blend() -> super::MaskBlendContract {
+const fn mask_blend() -> super::MaskBlendContract {
     super::MaskBlendContract {
         consumes_mask: false,
         publishes_mask: false,

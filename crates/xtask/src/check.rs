@@ -85,7 +85,7 @@ const CHECKS: &[(&str, CheckFn)] = &[
     ),
 ];
 
-pub(crate) fn run(root: &Path, parallel: bool, changed: bool, base: Option<&str>) -> Result {
+pub fn run(root: &Path, parallel: bool, changed: bool, base: Option<&str>) -> Result {
     if changed {
         run_changed(root, base.unwrap_or(DEFAULT_BASE))
     } else {

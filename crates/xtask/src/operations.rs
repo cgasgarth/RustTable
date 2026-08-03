@@ -55,7 +55,7 @@ fn verify_registry_provenance(registry: &rusttable_processing::RegistrySnapshot)
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum OperationSchemaCommand {
+pub enum OperationSchemaCommand {
     /// Validate representative descriptors and their workspace ownership.
     Verify {
         #[arg(long)]
@@ -66,7 +66,7 @@ pub(crate) enum OperationSchemaCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum OperationStackCommand {
+pub enum OperationStackCommand {
     /// Validate the initial workflow templates and their workspace ownership.
     Verify {
         #[arg(long)]
@@ -77,7 +77,7 @@ pub(crate) enum OperationStackCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum OperationRegistryCommand {
+pub enum OperationRegistryCommand {
     /// Generate or check the deterministic built-in operation receipt.
     Generate,
     Check {
@@ -88,7 +88,7 @@ pub(crate) enum OperationRegistryCommand {
     },
 }
 
-pub(crate) fn run_schema(root: &Path, command: &OperationSchemaCommand) -> Result {
+pub fn run_schema(root: &Path, command: &OperationSchemaCommand) -> Result {
     match command {
         OperationSchemaCommand::Verify {
             all_registered_fixtures,
@@ -123,7 +123,7 @@ pub(crate) fn run_schema(root: &Path, command: &OperationSchemaCommand) -> Resul
     }
 }
 
-pub(crate) fn run_stack(root: &Path, command: &OperationStackCommand) -> Result {
+pub fn run_stack(root: &Path, command: &OperationStackCommand) -> Result {
     match command {
         OperationStackCommand::Verify {
             templates,
@@ -153,7 +153,7 @@ pub(crate) fn run_stack(root: &Path, command: &OperationStackCommand) -> Result 
     }
 }
 
-pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> Result {
+pub fn run_registry(root: &Path, command: &OperationRegistryCommand) -> Result {
     let receipt_path = root.join("architecture/rusttable-operation-registry.toml");
     match command {
         OperationRegistryCommand::Generate => {
@@ -205,7 +205,7 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
     }
 }
 
-pub(crate) fn run_manifest(root: &Path, check: bool) -> Result {
+pub fn run_manifest(root: &Path, check: bool) -> Result {
     let path = root.join("architecture/operation-capabilities.json");
     let rendered = render_operation_capabilities(root)?;
     if check {
@@ -225,7 +225,7 @@ pub(crate) fn run_manifest(root: &Path, check: bool) -> Result {
     Ok(())
 }
 
-pub(crate) fn verify_operation_manifest(root: &Path) -> Result {
+pub fn verify_operation_manifest(root: &Path) -> Result {
     run_manifest(root, true)
 }
 
@@ -238,6 +238,10 @@ struct OperationCapabilitiesArtifact {
     entries: Vec<RegistryClosureEntry>,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "operation capability rendering keeps manifest validation, registry closure, and artifact ordering together"
+)]
 fn render_operation_capabilities(root: &Path) -> Result<String> {
     verify_architecture_provenance(root)?;
     let manifest_path = root.join("architecture/darktable-operations.toml");
@@ -252,7 +256,7 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
     verify_registry_provenance(registry)?;
     let registry_closure = RegistryClosure::from_registry(registry)
         .map_err(|error| format!("operation manifest: registry failed: {error}"))?;
-    let mut entries = registry_closure.entries.clone();
+    let mut entries = registry_closure.entries;
     for operation in &manifest.operations {
         let identity = format!(
             "darktable:{}:{}:v{}",
@@ -267,8 +271,20 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
             .find(|definition| definition.descriptor().id.compatibility_name == registry_name);
         let (rust_id, status, implementation_crate, cpu_supported, gpu_supported, reason) =
             if independently_trusted {
-                match registered {
-                    Some(definition) => {
+                registered.map_or_else(
+                    || {
+                        (
+                            None,
+                            OperationClassification::IntentionallyUnsupportedBlocking,
+                            String::new(),
+                            operation.cpu_implementation != "none",
+                            !operation.opencl_kernels.is_empty(),
+                            Some(
+                                "reference operation is not yet registered in RustTable".to_owned(),
+                            ),
+                        )
+                    },
+                    |definition| {
                         let (status, implementation_crate, cpu, gpu, reason) =
                             registered_operation_capability(definition);
                         (
@@ -279,16 +295,8 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
                             gpu,
                             reason,
                         )
-                    }
-                    None => (
-                        None,
-                        OperationClassification::IntentionallyUnsupportedBlocking,
-                        String::new(),
-                        operation.cpu_implementation != "none",
-                        !operation.opencl_kernels.is_empty(),
-                        Some("reference operation is not yet registered in RustTable".to_owned()),
-                    ),
-                }
+                    },
+                )
             } else {
                 (
                     registered.map(|definition| definition.descriptor().id.rust_id.clone()),
@@ -392,7 +400,10 @@ fn registered_operation_capability(
     )
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-derived built-in operation smoke sequence together"
+)]
 fn execute_builtin_smoke() -> Result {
     let cases = [
         ("rusttable.exposure", [("stops", 0.5), ("", 0.0), ("", 0.0)]),
@@ -518,7 +529,7 @@ fn execute_smoke_operation(index: usize, operation: &Operation) -> Result {
         .map_err(|error| format!("operation registry: executor failed: {error}"))
 }
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     let filename = match issue {
         263 => "rusttable-operation-descriptor-source-map.toml",
         264 => "rusttable-operation-stack-source-map.toml",
@@ -616,7 +627,7 @@ pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
     Ok(())
 }
 
-pub(crate) fn verify_registry_source_map(root: &Path) -> Result {
+pub fn verify_registry_source_map(root: &Path) -> Result {
     let path = root.join("architecture/rusttable-operation-registry-source-map.toml");
     let text = fs::read_to_string(&path)
         .map_err(|error| format!("operation registry source map: read failed: {error}"))?;

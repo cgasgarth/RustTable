@@ -115,7 +115,7 @@ impl ColorCorrectionHistory {
 
     /// Color Correction has no native `legacy_params` branch: v1 is already
     /// current and every unknown version remains non-executable and opaque.
-    pub fn migrate_to_current(
+    pub const fn migrate_to_current(
         &self,
     ) -> Result<ColorCorrectionParametersV1, ColorCorrectionCodecError> {
         match self {

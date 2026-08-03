@@ -31,7 +31,7 @@ impl VirtualCopyId {
     ///
     /// This cannot panic because the source ID is constructed from the same
     /// nonzero invariant as [`VirtualCopyId`].
-    pub fn photo_id(self) -> PhotoId {
+    pub const fn photo_id(self) -> PhotoId {
         // The virtual-copy edit/history namespace uses the same fixed-width ID
         // representation as native edits while the aggregate ID remains typed.
         PhotoId::new(self.get()).expect("VirtualCopyId is nonzero")
@@ -264,11 +264,11 @@ impl VirtualCopy {
         Ok(())
     }
 
-    fn set_order(&mut self, order: u64) {
+    const fn set_order(&mut self, order: u64) {
         self.order = order;
     }
 
-    fn set_deleted(&mut self, deleted: bool) {
+    const fn set_deleted(&mut self, deleted: bool) {
         self.deleted = deleted;
     }
 }
@@ -518,7 +518,7 @@ impl Default for VirtualCopyCatalog {
     }
 }
 
-fn projection(copy: &VirtualCopy) -> VirtualCopyProjection {
+const fn projection(copy: &VirtualCopy) -> VirtualCopyProjection {
     VirtualCopyProjection {
         id: copy.id,
         source: copy.source,

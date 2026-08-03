@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use crate::{PINNED_DARKTABLE_COMMIT, Result};
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ReferenceCommand {
+pub enum ReferenceCommand {
     /// Record a qualified darktable source, executable, and data bundle.
     Provision(ProvisionArgs),
     /// Run the CPU/XMP qualification matrix, with optional GPU coverage.
@@ -22,7 +22,7 @@ pub(crate) enum ReferenceCommand {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct TestArgs {
+pub struct TestArgs {
     #[arg(long, default_value = "fixtures/reference/darktable.toml")]
     identity: PathBuf,
     #[arg(long)]
@@ -48,7 +48,7 @@ pub(crate) struct TestArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct ProvisionArgs {
+pub struct ProvisionArgs {
     #[arg(long, default_value = "fixtures/reference/darktable.toml")]
     identity: PathBuf,
     #[arg(long)]
@@ -79,7 +79,7 @@ pub(crate) struct ProvisionArgs {
     architecture: String,
 }
 
-pub(crate) fn run(root: &Path, command: ReferenceCommand) -> Result {
+pub fn run(root: &Path, command: ReferenceCommand) -> Result {
     match command {
         ReferenceCommand::Provision(arguments) => provision(root, &arguments),
         ReferenceCommand::Test(arguments) => test(root, &arguments),

@@ -7,7 +7,7 @@ use rusttable_render::{
     render_edit_with_provenance,
 };
 
-fn source(photo_id: u128, dimensions: ImageDimensions) -> RenderSourceProvenance {
+const fn source(photo_id: u128, dimensions: ImageDimensions) -> RenderSourceProvenance {
     RenderSourceProvenance::new(
         PhotoId::new(photo_id).unwrap(),
         AssetId::new(3).unwrap(),

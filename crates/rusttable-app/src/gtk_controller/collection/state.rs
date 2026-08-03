@@ -12,7 +12,7 @@ pub struct ActiveLighttableRestoreReport {
     pub discarded_hidden: usize,
 }
 
-pub(super) fn active_property(property: CollectionProperty) -> ActiveLighttableProperty {
+pub(super) const fn active_property(property: CollectionProperty) -> ActiveLighttableProperty {
     match property {
         CollectionProperty::Filmroll => ActiveLighttableProperty::Filmroll,
         CollectionProperty::Folders => ActiveLighttableProperty::Folders,
@@ -22,7 +22,7 @@ pub(super) fn active_property(property: CollectionProperty) -> ActiveLighttableP
     }
 }
 
-pub(super) fn ui_property(property: ActiveLighttableProperty) -> CollectionProperty {
+pub(super) const fn ui_property(property: ActiveLighttableProperty) -> CollectionProperty {
     match property {
         ActiveLighttableProperty::Filmroll => CollectionProperty::Filmroll,
         ActiveLighttableProperty::Folders => CollectionProperty::Folders,
@@ -32,7 +32,7 @@ pub(super) fn ui_property(property: ActiveLighttableProperty) -> CollectionPrope
     }
 }
 
-pub(super) fn active_sort(sort: LighttableSort) -> ActiveLighttableSort {
+pub(super) const fn active_sort(sort: LighttableSort) -> ActiveLighttableSort {
     match sort {
         LighttableSort::Filename => ActiveLighttableSort::Filename,
         LighttableSort::CaptureTime => ActiveLighttableSort::CaptureTime,
@@ -40,7 +40,7 @@ pub(super) fn active_sort(sort: LighttableSort) -> ActiveLighttableSort {
     }
 }
 
-pub(super) fn ui_sort(sort: ActiveLighttableSort) -> LighttableSort {
+pub(super) const fn ui_sort(sort: ActiveLighttableSort) -> LighttableSort {
     match sort {
         ActiveLighttableSort::Filename => LighttableSort::Filename,
         ActiveLighttableSort::CaptureTime => LighttableSort::CaptureTime,
@@ -48,7 +48,7 @@ pub(super) fn ui_sort(sort: ActiveLighttableSort) -> LighttableSort {
     }
 }
 
-pub(super) fn active_sort_direction(
+pub(super) const fn active_sort_direction(
     direction: LighttableSortDirection,
 ) -> ActiveLighttableSortDirection {
     match direction {
@@ -57,7 +57,7 @@ pub(super) fn active_sort_direction(
     }
 }
 
-pub(super) fn ui_sort_direction(
+pub(super) const fn ui_sort_direction(
     direction: ActiveLighttableSortDirection,
 ) -> LighttableSortDirection {
     match direction {

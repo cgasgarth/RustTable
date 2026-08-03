@@ -16,7 +16,12 @@ pub struct PipelineCacheIdentity {
 }
 
 impl PipelineCacheIdentity {
-    #[allow(clippy::missing_panics_doc)]
+    /// Hashes the canonical serialized identity used as the cache filename.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if this fixed-shape identity stops being serializable, which
+    /// would violate the pipeline-cache ABI contract.
     #[must_use]
     pub fn key(&self) -> [u8; 32] {
         let bytes = postcard::to_allocvec(self).expect("cache identity is serializable");
@@ -186,7 +191,7 @@ mod tests {
             store.load(&key).expect("load"),
             Some(b"trusted only as a performance artifact".to_vec())
         );
-        let mut changed = key.clone();
+        let mut changed = key;
         changed.shader[0] = 9;
         assert_eq!(store.load(&changed).expect("mismatch is a miss"), None);
         fs::remove_dir_all(root).expect("cleanup");

@@ -302,7 +302,7 @@ impl fmt::Debug for OperationDefinition {
 
 impl OperationDefinition {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         descriptor: OperationDescriptor,
         cpu: Option<CpuFactory>,
         gpu: Option<GpuBinding>,
@@ -345,7 +345,7 @@ impl OperationDefinition {
     }
 
     #[must_use]
-    pub fn gpu(&self) -> Option<&GpuBinding> {
+    pub const fn gpu(&self) -> Option<&GpuBinding> {
         self.gpu.as_ref()
     }
 
@@ -388,7 +388,7 @@ pub struct DeviceCapabilitySnapshot {
 
 impl DeviceCapabilitySnapshot {
     #[must_use]
-    pub fn cpu_only() -> Self {
+    pub const fn cpu_only() -> Self {
         Self {
             gpu_available: false,
             tier: None,
@@ -743,7 +743,7 @@ impl RegistrySnapshot {
     }
 
     #[must_use]
-    pub fn identity_hash(&self) -> [u8; 32] {
+    pub const fn identity_hash(&self) -> [u8; 32] {
         self.identity_hash
     }
 

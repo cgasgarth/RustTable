@@ -1,5 +1,3 @@
-#![allow(clippy::large_enum_variant)]
-
 use crate::descriptor::DescriptorId;
 use rusttable_masks::MaskReference;
 use sha2::{Digest, Sha256};
@@ -235,7 +233,7 @@ pub struct OperationStackSnapshot {
 impl OperationStackSnapshot {
     /// Creates an empty immutable snapshot for a workflow template.
     #[must_use]
-    pub fn new(template: OperationStackTemplate) -> Self {
+    pub const fn new(template: OperationStackTemplate) -> Self {
         Self {
             template,
             operations: Vec::new(),
@@ -252,7 +250,7 @@ impl OperationStackSnapshot {
         self.revision
     }
     #[must_use]
-    pub fn template(&self) -> &OperationStackTemplate {
+    pub const fn template(&self) -> &OperationStackTemplate {
         &self.template
     }
 
@@ -330,7 +328,10 @@ impl OperationStackSnapshot {
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the command state machine preserves validation, ordering, and revision transitions"
+    )]
     fn apply_mut(&mut self, command: StackCommand) -> Result<bool, OperationStackError> {
         match command {
             StackCommand::Insert {
@@ -353,7 +354,7 @@ impl OperationStackSnapshot {
                     return Err(OperationStackError::SingleInstanceViolation);
                 }
                 let index = position.resolve(self.operations.len())?;
-                self.operations.insert(index, operation);
+                self.operations.insert(index, *operation);
                 self.revision = self
                     .revision
                     .checked_add(1)
@@ -500,7 +501,7 @@ pub enum InsertPosition {
     Index(usize),
 }
 impl InsertPosition {
-    fn resolve(self, length: usize) -> Result<usize, OperationStackError> {
+    const fn resolve(self, length: usize) -> Result<usize, OperationStackError> {
         match self {
             Self::Start => Ok(0),
             Self::End => Ok(length),
@@ -515,7 +516,7 @@ pub type MoveTarget = InsertPosition;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StackCommand {
     Insert {
-        operation: OperationInstance,
+        operation: Box<OperationInstance>,
         position: InsertPosition,
     },
     Remove {
@@ -570,7 +571,7 @@ pub enum MigrationFinding {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MigrationOutcome {
-    Executable(OperationInstance),
+    Executable(Box<OperationInstance>),
     Opaque(OpaqueOperation),
     Blocked(Vec<MigrationFinding>),
 }
@@ -623,7 +624,7 @@ mod tests {
         let stack = OperationStackSnapshot::new(OperationStackTemplate::raster_basic());
         let first = stack
             .apply(StackCommand::Insert {
-                operation: operation(1),
+                operation: Box::new(operation(1)),
                 position: InsertPosition::End,
             })
             .expect("insert");

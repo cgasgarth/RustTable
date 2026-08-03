@@ -1,8 +1,8 @@
 //! Lighttable-only GTK composition shared by the shell runtime.
 
-pub(crate) mod interaction;
-pub(crate) mod layout_controls;
-pub(crate) mod toolbar;
+pub mod interaction;
+pub mod layout_controls;
+pub mod toolbar;
 
 use gtk4::prelude::*;
 
@@ -17,7 +17,7 @@ use interaction::{LighttableLayout, LighttableZoom};
 /// The values originate in `darktable_spec`; this type only selects one of the
 /// bounded lighttable densities and never invents a second geometry contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LighttableGridSpec {
+pub struct LighttableGridSpec {
     zoom: LighttableZoom,
     columns: usize,
     card_width_px: u16,
@@ -223,7 +223,7 @@ impl LighttableGridSpec {
 
 #[allow(dead_code)] // constructed by focused geometry tests and the viewport adapter
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct GridPosition {
+pub struct GridPosition {
     pub(crate) row: usize,
     pub(crate) column: usize,
 }
@@ -231,7 +231,7 @@ pub(crate) struct GridPosition {
 /// Geometry for the single horizontally scrolling filmstrip row.
 #[allow(dead_code)] // consumed by the filmstrip viewport adapter
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FilmstripSpec {
+pub struct FilmstripSpec {
     width_px: u16,
     height_px: u16,
     gap_px: u8,
@@ -317,7 +317,7 @@ impl FilmstripSpec {
 /// Catalog states that the central lighttable can present without exposing
 /// filesystem or catalog-internal error details.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LighttableCollectionState {
+pub enum LighttableCollectionState {
     #[allow(dead_code)] // constructed when catalog loading becomes asynchronous
     Loading,
     Empty,
@@ -439,7 +439,7 @@ const EMPTY_STATE_ROWS: [EmptyStateRow; 8] = [
     },
 ];
 
-pub(crate) fn empty_collection_state() -> gtk4::Grid {
+pub fn empty_collection_state() -> gtk4::Grid {
     let root = gtk4::Grid::new();
     root.set_widget_name("empty-collection-state");
     root.set_halign(gtk4::Align::Fill);

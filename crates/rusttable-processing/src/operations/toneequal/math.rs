@@ -8,6 +8,10 @@
     clippy::similar_names,
     reason = "the f32 equations retain the native source's matrix layout"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Tone Equalizer matrix equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use super::parameters::{
     CHANNELS, CONTRAST_FULCRUM, LUT_ENTRIES, LUT_RESOLUTION, MAX_EV, MIN_EV, PIXEL_CHANNELS,
@@ -192,6 +196,6 @@ pub fn transform_luminance(pixel: f32, exposure_boost: f32, fulcrum: f32, contra
 }
 
 #[must_use]
-pub fn default_contrast_fulcrum() -> f32 {
+pub const fn default_contrast_fulcrum() -> f32 {
     CONTRAST_FULCRUM
 }

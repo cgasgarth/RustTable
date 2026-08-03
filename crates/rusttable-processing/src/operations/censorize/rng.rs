@@ -10,7 +10,7 @@
 pub const CENSORIZE_RNG_VERSION: &str = "splitmix32-xoshiro128plus-box-muller.v1";
 
 #[must_use]
-pub fn splitmix32(seed: u64) -> u32 {
+pub const fn splitmix32(seed: u64) -> u32 {
     let mut result = (seed ^ (seed >> 33)).wrapping_mul(0x62a9_d9ed_7997_05f5);
     result = (result ^ (result >> 28)).wrapping_mul(0xcb24_d0a5_c88c_35b3);
     (result >> 32) as u32

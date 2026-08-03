@@ -52,7 +52,7 @@ impl IccProfileLimits {
         }
     }
 
-    fn validate(self) -> Result<Self, IccParseError> {
+    const fn validate(self) -> Result<Self, IccParseError> {
         if self.max_profile_bytes < TAG_TABLE_PREFIX_SIZE
             || self.max_profile_bytes > u32::MAX as usize
             || self.max_tags == 0
@@ -162,7 +162,7 @@ impl IccParseError {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TagRecord {
+pub struct TagRecord {
     pub signature: IccSignature,
     pub offset: usize,
     pub size: usize,
@@ -491,7 +491,7 @@ fn validate_lut_channels(header: &IccHeader, tags: &[IccTag]) -> Result<(), IccP
     Ok(())
 }
 
-fn is_transform_lut(signature: IccSignature) -> bool {
+const fn is_transform_lut(signature: IccSignature) -> bool {
     matches!(
         &signature.0,
         b"A2B0" | b"A2B1" | b"A2B2" | b"A2B3" | b"B2A0" | b"B2A1" | b"B2A2" | b"B2A3"
@@ -545,7 +545,7 @@ fn validate_embedded_profile_id(
     Ok(())
 }
 
-fn parse_color_space(signature: IccSignature) -> Result<IccColorSpace, IccParseError> {
+const fn parse_color_space(signature: IccSignature) -> Result<IccColorSpace, IccParseError> {
     match &signature.0 {
         b"RGB " => Ok(IccColorSpace::Rgb),
         b"GRAY" => Ok(IccColorSpace::Gray),
@@ -587,7 +587,7 @@ const fn is_leap_year(year: u16) -> bool {
     year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
 }
 
-pub(crate) fn signature(bytes: &[u8], offset: usize) -> Result<IccSignature, IccParseError> {
+pub fn signature(bytes: &[u8], offset: usize) -> Result<IccSignature, IccParseError> {
     let raw: [u8; 4] = bytes
         .get(offset..offset + 4)
         .ok_or(IccParseError::Truncated)?
@@ -614,7 +614,7 @@ fn optional_signature(bytes: &[u8], offset: usize) -> Result<IccSignature, IccPa
     }
 }
 
-pub(crate) fn xyz(bytes: &[u8], offset: usize) -> Result<IccXyz, IccParseError> {
+pub fn xyz(bytes: &[u8], offset: usize) -> Result<IccXyz, IccParseError> {
     Ok(IccXyz::new([
         fixed(bytes, offset)?,
         fixed(bytes, offset + 4)?,
@@ -622,14 +622,17 @@ pub(crate) fn xyz(bytes: &[u8], offset: usize) -> Result<IccXyz, IccParseError> 
     ]))
 }
 
-pub(crate) fn fixed(bytes: &[u8], offset: usize) -> Result<FiniteF32, IccParseError> {
+pub fn fixed(bytes: &[u8], offset: usize) -> Result<FiniteF32, IccParseError> {
     let raw = be_i32(bytes, offset)?;
     let value = f64::from(raw) / 65_536.0;
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "ICC fixed-point decoding narrows the validated source representation to the public f32 contract."
+    )]
     FiniteF32::new(value as f32).map_err(|_| IccParseError::InvalidHeaderField)
 }
 
-pub(crate) fn be_u16(bytes: &[u8], offset: usize) -> Result<u16, IccParseError> {
+pub fn be_u16(bytes: &[u8], offset: usize) -> Result<u16, IccParseError> {
     let raw: [u8; 2] = bytes
         .get(offset..offset + 2)
         .ok_or(IccParseError::Truncated)?
@@ -638,7 +641,7 @@ pub(crate) fn be_u16(bytes: &[u8], offset: usize) -> Result<u16, IccParseError> 
     Ok(u16::from_be_bytes(raw))
 }
 
-pub(crate) fn be_u32(bytes: &[u8], offset: usize) -> Result<u32, IccParseError> {
+pub fn be_u32(bytes: &[u8], offset: usize) -> Result<u32, IccParseError> {
     let raw: [u8; 4] = bytes
         .get(offset..offset + 4)
         .ok_or(IccParseError::Truncated)?
@@ -647,7 +650,7 @@ pub(crate) fn be_u32(bytes: &[u8], offset: usize) -> Result<u32, IccParseError> 
     Ok(u32::from_be_bytes(raw))
 }
 
-pub(crate) fn be_i32(bytes: &[u8], offset: usize) -> Result<i32, IccParseError> {
+pub fn be_i32(bytes: &[u8], offset: usize) -> Result<i32, IccParseError> {
     let raw: [u8; 4] = bytes
         .get(offset..offset + 4)
         .ok_or(IccParseError::Truncated)?

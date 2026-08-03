@@ -1,6 +1,9 @@
 //! Display-safe multiscale-retouch state and its application-service port.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The multiscale-retouch model exposes typed preview-service failures at the UI boundary."
+)]
 
 use std::fmt;
 
@@ -128,7 +131,7 @@ pub enum MultiscaleRetouchStatus {
     Failed { message: String },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiscaleRetouchSnapshot {
     pub(crate) generation: u64,
     pub(crate) capability: MultiscaleCapability,
@@ -158,7 +161,7 @@ impl MultiscaleRetouchSnapshot {
     }
 
     #[must_use]
-    pub fn available(generation: u64) -> Self {
+    pub const fn available(generation: u64) -> Self {
         Self {
             generation,
             capability: MultiscaleCapability::Available,
@@ -212,7 +215,7 @@ impl MultiscaleRetouchSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiscaleRetouchRequest {
     band: MultiscaleBand,
     source: MultiscaleSourceTarget,
@@ -285,7 +288,7 @@ impl fmt::Display for MultiscaleRetouchServiceError {
 
 impl std::error::Error for MultiscaleRetouchServiceError {}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MultiscaleRetouchServiceEvent {
     Progress {
         generation: u64,

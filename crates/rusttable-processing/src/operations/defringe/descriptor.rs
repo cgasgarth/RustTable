@@ -7,8 +7,16 @@ use crate::descriptor::{
     UiHint,
 };
 
+/// Builds the source-ordered Defringe descriptor.
+///
+/// # Panics
+///
+/// Panics only if the fixed native-compatible descriptor identity is invalid.
 #[must_use]
-#[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the descriptor keeps native parameter order and capability metadata together"
+)]
 pub fn defringe_descriptor() -> OperationDescriptor {
     let scalar =
         |id: &str, minimum: f64, maximum: f64, default: f64, unit: &str| ParameterDescriptor {

@@ -3,7 +3,7 @@ use rusttable_core::{Operation, ParameterName, ParameterValue};
 
 const ALLOWED: [&str; 3] = ["scales", "tile_edge", "memory_budget"];
 
-pub(crate) fn compile_retouch(
+pub fn compile_retouch(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     if let Some((parameter, _)) = operation

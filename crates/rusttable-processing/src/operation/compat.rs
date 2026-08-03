@@ -11,9 +11,7 @@ const DITHER_PARAMETERS: [&str; 8] = [
     "method", "palette", "radius", "range0", "range1", "range2", "range3", "damping",
 ];
 
-pub(crate) fn compile_invert(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_invert(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &INVERT_PARAMETERS)?;
     let color = [
         super::parameter_f32(operation, "red", 1.0)?,
@@ -31,9 +29,7 @@ pub(crate) fn compile_invert(
     })
 }
 
-pub(crate) fn compile_dither(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_dither(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &DITHER_PARAMETERS)?;
     let method_id = super::parameter_integer(operation, "method", 5.0)?;
     let method = DitherMethod::from_id(u32::try_from(method_id).map_err(|_| {

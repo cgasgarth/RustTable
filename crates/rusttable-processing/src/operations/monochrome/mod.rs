@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Monochrome arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded Monochrome CPU leaf ported from `src/iop/monochrome.c`.
 //!
 //! The leaf owns the native v2 ABI, v1 migration, defaults, Lab color-filter
@@ -213,7 +218,7 @@ impl MonochromeHistory {
     }
 
     /// Materializes a current v2 value, rejecting a future opaque value.
-    pub fn current(&self) -> Result<MonochromeParametersV2, MonochromeCodecError> {
+    pub const fn current(&self) -> Result<MonochromeParametersV2, MonochromeCodecError> {
         match self {
             Self::V1(parameters) => Ok(MonochromeParametersV2::new(
                 parameters.a,
@@ -748,7 +753,10 @@ impl MonochromePlan {
     }
 }
 
-fn validate_input(pixel: MonochromePixel, index: usize) -> Result<(), MonochromeExecutionError> {
+const fn validate_input(
+    pixel: MonochromePixel,
+    index: usize,
+) -> Result<(), MonochromeExecutionError> {
     if !pixel.lightness().is_finite() {
         return Err(MonochromeExecutionError::NonFiniteInput {
             pixel: index,
@@ -813,7 +821,7 @@ fn darktable_clamps(value: f32, lower: f32, upper: f32) -> f32 {
     }
 }
 
-fn map_bilateral_error(error: BilateralError) -> MonochromeExecutionError {
+const fn map_bilateral_error(error: BilateralError) -> MonochromeExecutionError {
     match error {
         BilateralError::BufferShape { expected, actual } => {
             MonochromeExecutionError::DimensionsMismatch { expected, actual }

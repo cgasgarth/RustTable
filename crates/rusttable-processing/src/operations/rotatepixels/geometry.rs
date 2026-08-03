@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Rotate Pixels geometry order is preserved for IEEE-754 parity."
+)]
+
 use crate::RasterDimensions;
 use rusttable_image::Roi;
 use sha2::{Digest, Sha256};
@@ -403,7 +408,11 @@ fn checked_u32(value: f64, rounding: Rounding) -> Result<u32, RotatePixelsPlanEr
     if !rounded.is_finite() || rounded < 0.0 || rounded > f64::from(u32::MAX) {
         return Err(RotatePixelsPlanError::ArithmeticOverflow);
     }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "validated native rounded dimensions are nonnegative and within the u32 contract"
+    )]
     Ok(rounded as u32)
 }
 
@@ -530,7 +539,11 @@ fn plan_identity(
     Ok(hasher.finalize().into())
 }
 
-#[allow(clippy::cast_possible_truncation)]
-pub(crate) fn f64_to_f32(value: f64) -> f32 {
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the rotatepixels boundary intentionally narrows native geometry arithmetic to f32"
+)]
+#[must_use]
+pub const fn f64_to_f32(value: f64) -> f32 {
     value as f32
 }

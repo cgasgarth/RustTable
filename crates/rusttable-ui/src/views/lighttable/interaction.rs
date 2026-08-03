@@ -189,10 +189,7 @@ impl CullingZoom {
         let percent = i32::from(self.0)
             .saturating_add(i32::from(delta))
             .clamp(i32::from(Self::FIT_PERCENT), i32::from(Self::MAX_PERCENT));
-        Self::new(match u16::try_from(percent) {
-            Ok(value) => value,
-            Err(_) => Self::MAX_PERCENT,
-        })
+        Self::new(u16::try_from(percent).unwrap_or(Self::MAX_PERCENT))
     }
 }
 
@@ -232,11 +229,11 @@ impl CullingViewport {
         self.pan = self.pan.clamp(bounds);
     }
 
-    pub fn pan_by(&mut self, delta: PanOffset, bounds: PanBounds) {
+    pub const fn pan_by(&mut self, delta: PanOffset, bounds: PanBounds) {
         self.pan = self.pan.saturating_add(delta).clamp(bounds);
     }
 
-    pub fn fit(&mut self) {
+    pub const fn fit(&mut self) {
         self.zoom = CullingZoom::fit();
         self.pan = PanOffset::new(0, 0);
     }
@@ -490,7 +487,10 @@ impl LighttableInteractionState {
         self.ordered_ids.iter().copied()
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The source selection action table keeps focus, range, culling, and publication transitions ordered."
+    )]
     pub fn apply(&mut self, action: LighttableSelectionAction) -> Option<PhotoId> {
         match action {
             LighttableSelectionAction::Select {

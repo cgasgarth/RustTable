@@ -211,7 +211,7 @@ impl DiagnosticEvent {
     }
 
     #[must_use]
-    pub fn code(&self) -> &DiagnosticCode {
+    pub const fn code(&self) -> &DiagnosticCode {
         &self.code
     }
 

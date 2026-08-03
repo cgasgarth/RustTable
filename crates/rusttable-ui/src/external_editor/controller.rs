@@ -1,6 +1,9 @@
 //! Controller for external-editor commands and service updates.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The external-editor controller routes service failures through its typed application port."
+)]
 
 use super::model::{
     ExternalEditorAction, ExternalEditorServiceError, ExternalEditorServicePort,

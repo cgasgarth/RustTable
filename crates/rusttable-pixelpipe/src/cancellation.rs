@@ -1,9 +1,3 @@
-#![allow(
-    clippy::missing_errors_doc,
-    clippy::missing_panics_doc,
-    clippy::missing_fields_in_debug
-)]
-
 use std::collections::BTreeMap;
 
 use std::fmt;
@@ -159,6 +153,11 @@ impl fmt::Debug for CancellationToken {
 }
 
 impl CancellationToken {
+    /// Creates a token in generation one.
+    ///
+    /// # Panics
+    ///
+    /// This cannot panic because generation one is nonzero by construction.
     #[must_use]
     pub fn new() -> Self {
         Self::for_generation(PipelineGeneration::new(1).expect("one is nonzero"))
@@ -232,6 +231,15 @@ impl CancellationToken {
     }
 
     /// Converts an observed cancellation into a typed stage error.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first cancellation reason observed at `stage`.
+    ///
+    /// # Panics
+    ///
+    /// The internal reason cannot disappear between the cancellation check and
+    /// the typed error construction.
     pub fn check(&self, stage: CancellationStage) -> Result<(), CancellationError> {
         if self.is_cancelled() {
             return Err(CancellationError {
@@ -270,6 +278,11 @@ impl CancellationToken {
     }
 
     /// Registers a one-shot resource cleanup callback.
+    ///
+    /// # Panics
+    ///
+    /// The callback is stored exactly once; the internal presence assertion
+    /// cannot fail while the token lock is held.
     pub fn register_cleanup<F>(&self, callback: F) -> CleanupRegistration
     where
         F: FnOnce(CancellationReason) + Send + 'static,
@@ -277,15 +290,16 @@ impl CancellationToken {
         let id = self.0.next_hook.fetch_add(1, Ordering::Relaxed);
         let mut callback = Some(callback);
         let immediate = self.0.state.lock().ok().and_then(|mut state| {
-            if let Some(reason) = state.reason {
-                Some(reason)
-            } else {
-                state.hooks.insert(
-                    id,
-                    Box::new(callback.take().expect("cleanup callback is present")),
-                );
-                None
-            }
+            state.reason.map_or_else(
+                || {
+                    state.hooks.insert(
+                        id,
+                        Box::new(callback.take().expect("cleanup callback is present")),
+                    );
+                    None
+                },
+                Some,
+            )
         });
         if let Some(reason) = immediate {
             callback.take().expect("cleanup callback is present")(reason);
@@ -355,7 +369,7 @@ impl CancellationScope {
     ///
     /// Consumer-specific deadlines are intentionally not inherited: the
     /// shared build remains useful while any registered consumer is active.
-    pub(crate) fn from_shared_token(token: CancellationToken) -> Self {
+    pub(crate) const fn from_shared_token(token: CancellationToken) -> Self {
         Self {
             token,
             stage: CancellationStage::Preparation,
@@ -364,7 +378,7 @@ impl CancellationScope {
     }
 
     #[must_use]
-    pub fn with_deadline(mut self, deadline: CancellationDeadline) -> Self {
+    pub const fn with_deadline(mut self, deadline: CancellationDeadline) -> Self {
         self.deadline = Some(deadline);
         self
     }
@@ -402,6 +416,10 @@ impl CancellationScope {
         self.token.cancel_with_reason(reason);
     }
 
+    /// # Errors
+    ///
+    /// Returns the cancellation reason when the scope deadline or token has
+    /// elapsed.
     pub fn check(&self) -> Result<(), CancellationError> {
         if self.deadline.is_some_and(CancellationDeadline::expired) {
             self.token
@@ -440,6 +458,7 @@ impl fmt::Debug for CleanupRegistration {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("CleanupRegistration")
+            .field("node", &self.node)
             .field("id", &self.id)
             .finish()
     }
@@ -465,6 +484,7 @@ impl fmt::Debug for WorkStartedRegistration {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("WorkStartedRegistration")
+            .field("node", &self.node)
             .field("id", &self.id)
             .finish()
     }
@@ -490,6 +510,18 @@ impl GenerationClock {
         Self(AtomicU64::new(initial.get()))
     }
 
+    /// Advances the clock without wrapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationClockError::Overflow`] when the generation space is
+    /// exhausted or [`GenerationClockError::ConcurrentAdvance`] when another
+    /// caller advances the clock first.
+    ///
+    /// # Panics
+    ///
+    /// The checked nonzero generation invariant makes the constructed
+    /// generation infallible.
     pub fn next(&self) -> Result<PipelineGeneration, GenerationClockError> {
         let current = self.0.load(Ordering::Acquire);
         let next = current
@@ -501,6 +533,12 @@ impl GenerationClock {
             .map_err(|_| GenerationClockError::ConcurrentAdvance)
     }
 
+    /// Returns the latest generation stored in the clock.
+    ///
+    /// # Panics
+    ///
+    /// The clock is initialized only from a nonzero generation and never stores
+    /// zero, so this invariant check cannot fail.
     #[must_use]
     pub fn current(&self) -> PipelineGeneration {
         PipelineGeneration::new(self.0.load(Ordering::Acquire)).expect("clock is nonzero")

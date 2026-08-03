@@ -11,7 +11,7 @@ use super::{
 };
 use crate::raw::RawSourceError;
 
-pub(crate) fn decode_jpegxl_probe(
+pub fn decode_jpegxl_probe(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<ImageProbe, ImageInputError> {
@@ -21,7 +21,7 @@ pub(crate) fn decode_jpegxl_probe(
     Ok(ImageProbe::new(InputFormat::JpegXl, dimensions))
 }
 
-pub(crate) fn decode_legacy_rgba8(
+pub fn decode_legacy_rgba8(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<DecodedImage, ImageInputError> {
@@ -44,7 +44,7 @@ pub(crate) fn decode_legacy_rgba8(
     )
 }
 
-pub(crate) fn decode_jpegxl_frame(
+pub fn decode_jpegxl_frame(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<DecodedFrame, ImageInputError> {
@@ -214,11 +214,7 @@ fn to_rgba8(pixels: &JxlPixelData) -> Result<Vec<u8>, ImageInputError> {
                 value
             }
         };
-        let (red, green, blue) = if let Some(gray) = gray {
-            (gray, gray, gray)
-        } else {
-            (red, green, blue)
-        };
+        let (red, green, blue) = gray.map_or((red, green, blue), |gray| (gray, gray, gray));
         output.extend([
             quantize(unassociate(red)),
             quantize(unassociate(green)),
@@ -229,7 +225,11 @@ fn to_rgba8(pixels: &JxlPixelData) -> Result<Vec<u8>, ImageInputError> {
     Ok(output)
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamp and rounding prove the JPEG XL presentation sample is within u8 0..=255"
+)]
 fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
@@ -333,7 +333,7 @@ fn malformed(message: &str) -> ImageInputError {
     }
 }
 
-fn required_bytes(error: &rusttable_image::ImageViewError) -> usize {
+const fn required_bytes(error: &rusttable_image::ImageViewError) -> usize {
     match error {
         rusttable_image::ImageViewError::BufferTooShort { required, .. } => *required,
         _ => 0,

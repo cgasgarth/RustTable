@@ -342,7 +342,10 @@ impl AnalysisRequest {
     ///
     /// Rejects unspecified color endpoints, excessive fixed precision, and output storage above
     /// the hard analysis memory limit.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The analysis request constructor mirrors the complete source-derived contract"
+    )]
     pub fn new(
         kind: AnalysisKind,
         boundary: NodeBoundary,

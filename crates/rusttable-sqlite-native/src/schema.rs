@@ -33,7 +33,7 @@ impl DarktableSchema {
     /// # Errors
     ///
     /// Returns an error for zero, unsupported future, or otherwise invalid schema versions.
-    pub fn organization_plans(self) -> Result<OrganizationQueryPlans, SchemaError> {
+    pub const fn organization_plans(self) -> Result<OrganizationQueryPlans, SchemaError> {
         if self.library == 0 || self.data == 0 {
             return Err(SchemaError::InvalidVersion {
                 library: self.library,
@@ -122,7 +122,7 @@ impl DarktableSchema {
         })
     }
 
-    fn validate(self) -> Result<(), SchemaError> {
+    const fn validate(self) -> Result<(), SchemaError> {
         if self.library == 0 || self.data == 0 {
             return Err(SchemaError::InvalidVersion {
                 library: self.library,

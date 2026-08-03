@@ -1,4 +1,7 @@
-#![allow(clippy::float_cmp)]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Channel Mixer test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 use rusttable_color::ColorEncoding;
 use rusttable_core::{
@@ -61,7 +64,7 @@ fn channel_mixer_operation(
     .expect("Channel Mixer operation")
 }
 
-fn identity_parameters() -> ChannelMixerParametersV2 {
+const fn identity_parameters() -> ChannelMixerParametersV2 {
     ChannelMixerParametersV2::defaults()
 }
 

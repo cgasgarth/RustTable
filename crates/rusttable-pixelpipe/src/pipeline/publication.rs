@@ -1,11 +1,3 @@
-#![allow(
-    clippy::large_enum_variant,
-    clippy::missing_errors_doc,
-    clippy::missing_fields_in_debug,
-    clippy::result_large_err,
-    clippy::uninlined_format_args
-)]
-
 use std::fmt;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +13,10 @@ pub struct RequestId(NonZeroU64);
 
 impl RequestId {
     /// Creates a nonzero request identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PublicationError::InvalidRequestId`] when `value` is zero.
     pub fn new(value: u64) -> Result<Self, PublicationError> {
         NonZeroU64::new(value)
             .map(Self)
@@ -124,7 +120,7 @@ pub struct PublicationGate {
 
 impl PublicationGate {
     #[must_use]
-    pub fn new(identity: PublicationIdentity, token: CancellationToken) -> Self {
+    pub const fn new(identity: PublicationIdentity, token: CancellationToken) -> Self {
         Self {
             identity,
             token,
@@ -138,6 +134,11 @@ impl PublicationGate {
     }
 
     /// Takes the one cache/UI/file/pixelpipe permit from this gate.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when cancellation, identity validation, or one-shot
+    /// permit ownership rejects the request.
     pub fn authorize(
         &self,
         current: PublicationContext,
@@ -164,8 +165,8 @@ impl PublicationGate {
             .map_err(PublicationError::Cancelled)?;
         if current != self.identity {
             return Err(PublicationError::IdentityMismatch {
-                expected: self.identity,
-                actual: current,
+                expected: Box::new(self.identity),
+                actual: Box::new(current),
             });
         }
         Ok(())
@@ -184,8 +185,10 @@ impl fmt::Debug for PublicationPermit {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PublicationPermit")
-            .field("target", &self.identity.target().tag())
+            .field("identity", &self.identity)
+            .field("token", &self.token)
             .field("used", &self.used)
+            .field("cleanup", &self.cleanup.is_some())
             .finish()
     }
 }
@@ -205,6 +208,11 @@ impl PublicationPermit {
     }
 
     /// Performs the final cancellation/identity check and then publishes once.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when cancellation or identity validation rejects the
+    /// pending publication.
     pub fn commit<T, F>(
         mut self,
         current: PublicationContext,
@@ -218,8 +226,8 @@ impl PublicationPermit {
             .map_err(PublicationError::Cancelled)?;
         if current != self.identity {
             return Err(PublicationError::IdentityMismatch {
-                expected: self.identity,
-                actual: current,
+                expected: Box::new(self.identity),
+                actual: Box::new(current),
             });
         }
         self.used = true;
@@ -250,8 +258,8 @@ pub enum PublicationError {
     AlreadyIssued,
     PermitAlreadyUsed,
     IdentityMismatch {
-        expected: PublicationIdentity,
-        actual: PublicationIdentity,
+        expected: Box<PublicationIdentity>,
+        actual: Box<PublicationIdentity>,
     },
 }
 
@@ -264,8 +272,7 @@ impl fmt::Display for PublicationError {
             Self::PermitAlreadyUsed => formatter.write_str("publication permit was already used"),
             Self::IdentityMismatch { expected, actual } => write!(
                 formatter,
-                "publication identity mismatch: expected {:?}, got {:?}",
-                expected, actual
+                "publication identity mismatch: expected {expected:?}, got {actual:?}"
             ),
         }
     }
@@ -287,10 +294,15 @@ pub struct GpuRetirement {
 
 impl GpuRetirement {
     #[must_use]
-    pub fn new(token: CancellationToken) -> Self {
+    pub const fn new(token: CancellationToken) -> Self {
         Self { token }
     }
 
+    /// Retires the detached resource before it can be observed as stale.
+    ///
+    /// # Errors
+    ///
+    /// Returns the cancellation error if retirement is interrupted.
     pub fn retire(self) -> Result<ResourceRetirementReceipt, CancellationError> {
         let _ = self.token.check(CancellationStage::GpuRetirement);
         Ok(ResourceRetirementReceipt { released: true })

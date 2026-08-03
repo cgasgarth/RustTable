@@ -25,17 +25,17 @@ pub enum Expression {
         format: Option<String>,
     },
     Fallback {
-        primary: Box<Expression>,
-        fallback: Box<Expression>,
+        primary: Box<Self>,
+        fallback: Box<Self>,
     },
     Conditional {
         variable: VariableId,
-        then_branch: Box<Expression>,
-        else_branch: Box<Expression>,
+        then_branch: Box<Self>,
+        else_branch: Box<Self>,
     },
     Transform {
         transform: Transform,
-        value: Box<Expression>,
+        value: Box<Self>,
     },
 }
 

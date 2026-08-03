@@ -22,7 +22,7 @@ const SHADHI_PARAMETERS: [&str; 12] = [
     "shadhi_algo",
 ];
 
-pub(crate) fn compile_relight(
+pub fn compile_relight(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &RELIGHT_PARAMETERS)?;
@@ -40,9 +40,7 @@ pub(crate) fn compile_relight(
     })
 }
 
-pub(crate) fn compile_shadhi(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_shadhi(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &SHADHI_PARAMETERS)?;
     let order = small_u32(operation, "order", 0)?;
     let flags = small_u32(operation, "flags", 127)?;

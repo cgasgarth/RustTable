@@ -203,7 +203,7 @@ fn template_engine_checks_registered_types_and_hash_prefixes() {
         VariableId::Aspect,
         VariableValue::available(TemplateValue::Integer(4)),
     );
-    let aspect = Template::parse("${aspect}").expect("aspect template");
+    let aspect = Template::parse(concat!("${", "aspect}")).expect("aspect template");
     assert!(matches!(
         aspect.evaluate(&wrong_type, None),
         Err(EvaluationError::TypeMismatch {

@@ -45,7 +45,7 @@ fn decode(encoded: &str) -> Vec<u8> {
     output
 }
 
-fn input(limits: DecodeLimits) -> FileImageInput {
+const fn input(limits: DecodeLimits) -> FileImageInput {
     FileImageInput::new(limits)
 }
 

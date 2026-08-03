@@ -188,11 +188,11 @@ fn resolved_reference_inputs_are_read_only_after_resolution() {
     assert!(matches!(error, ReferenceProbeError::DataMismatch { .. }));
 }
 
-fn executable_script() -> &'static str {
+const fn executable_script() -> &'static str {
     "#!/bin/sh\ncase \" $* \" in *\" --version \"*) echo 'darktable 5.7.0';; *\" --help \"*) echo '--configdir --cachedir --datadir --library --disable-opencl --width --height --icc-type --icc --out-ext --core';; esac\n"
 }
 
-fn expected_target() -> &'static str {
+const fn expected_target() -> &'static str {
     if cfg!(target_os = "macos") {
         "aarch64-apple-darwin"
     } else {

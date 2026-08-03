@@ -2,6 +2,10 @@
     clippy::cast_precision_loss,
     reason = "focused shader tests construct exact source-domain LUT coordinates"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "GPU reference assertions preserve the native arithmetic operation order."
+)]
 
 use super::*;
 
@@ -182,7 +186,7 @@ fn validation_bounds_each_buffer_binding_and_aggregate_transient_memory() {
         })
     );
 
-    let mut too_small = limits.clone();
+    let mut too_small = limits;
     too_small.max_storage_buffer_binding_size = LUT_BYTES - 1;
     assert_eq!(
         ValidatedRequest::new(request(&pixels, &lut, &lut, &lut, u64::MAX), &too_small,),

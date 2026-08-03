@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Colisa arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded CPU leaf for Darktable's deprecated `colisa` operation.
 //!
 //! Source lineage: `src/iop/colisa.c`, with exponential extrapolation from
@@ -150,7 +155,7 @@ impl ColisaHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ColisaParametersV1, ColisaError> {
+    pub const fn current(&self) -> Result<ColisaParametersV1, ColisaError> {
         match self {
             Self::V1(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(ColisaError::OpaqueVersion(*version)),
@@ -461,7 +466,7 @@ fn fallible_copy(bytes: &[u8]) -> Result<Vec<u8>, ColisaError> {
     Ok(copied)
 }
 
-fn require_length(bytes: &[u8], expected: usize) -> Result<(), ColisaError> {
+const fn require_length(bytes: &[u8], expected: usize) -> Result<(), ColisaError> {
     if bytes.len() == expected {
         Ok(())
     } else {

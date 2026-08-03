@@ -247,11 +247,11 @@ pub fn resolve_reference(
         cli: document.cli,
         required_flags,
         normalized_log_ruleset: document.normalized_log_ruleset,
-        executable_hash: executable_hash.clone(),
-        data_bundle_hash: data_hash.clone(),
+        executable_hash,
+        data_bundle_hash: data_hash,
         target_triple: document.target.clone(),
-        c_abi_model: document.target.clone(),
-        build_option_hash: document.build_options_hash.clone(),
+        c_abi_model: document.target,
+        build_option_hash: document.build_options_hash,
     })
 }
 
@@ -288,7 +288,7 @@ pub fn verify_reference_unchanged(identity: &ReferenceIdentity) -> Result<(), Re
     Ok(())
 }
 
-pub(crate) fn flags(configured: &[String]) -> Vec<String> {
+pub fn flags(configured: &[String]) -> Vec<String> {
     if configured.is_empty() {
         DEFAULT_FLAGS
             .iter()
@@ -467,7 +467,7 @@ fn validate_target(target: &str, architecture: &str) -> Result<(), ReferenceProb
     Ok(())
 }
 
-fn expected_target() -> &'static str {
+const fn expected_target() -> &'static str {
     if cfg!(target_os = "macos") {
         "aarch64-apple-darwin"
     } else {
@@ -475,7 +475,7 @@ fn expected_target() -> &'static str {
     }
 }
 
-fn default_path() -> &'static str {
+const fn default_path() -> &'static str {
     if cfg!(windows) {
         r"C:\Windows\System32;C:\Windows"
     } else {

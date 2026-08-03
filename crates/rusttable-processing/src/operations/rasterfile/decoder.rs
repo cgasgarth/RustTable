@@ -4,14 +4,14 @@ use super::codec::{
 use rusttable_image::DecodeLimits;
 use rusttable_masks::MaskRaster;
 
-pub(crate) struct DecodedAsset {
+pub struct DecodedAsset {
     pub(crate) format: RasterMaskFormat,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) mask: MaskRaster,
 }
 
-pub(crate) fn decode_asset(
+pub fn decode_asset(
     bytes: &[u8],
     mode: RasterFileChannelMode,
     limits: RasterMaskLimits,
@@ -93,7 +93,10 @@ fn decode_png(
     })
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "PFM token, endian, row-order, and sample validation must preserve source format order"
+)]
 fn decode_pfm(
     bytes: &[u8],
     mode: RasterFileChannelMode,

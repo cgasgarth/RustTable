@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Zones arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Color Zones LUT commitment ported from `src/iop/colorzones.c`.
 //!
 //! Curve interpolation and quantization are delegated to the direct

@@ -14,12 +14,12 @@ const PACKET_ATTRIBUTE: &str = "rusttable.metadata_packet";
 const ALPHA_ATTRIBUTE: &str = "rusttable.alpha_association";
 const COLOR_ATTRIBUTE: &str = "rusttable.color_encoding";
 
-pub(crate) struct Attributes {
+pub struct Attributes {
     pub image: ImageAttributes,
     pub layer: LayerAttributes,
 }
 
-pub(crate) fn build(artifact: &CanonicalArtifact<'_>) -> Result<Attributes, &'static str> {
+pub fn build(artifact: &CanonicalArtifact<'_>) -> Result<Attributes, &'static str> {
     let descriptor = artifact.image().descriptor();
     let size = descriptor.dimensions();
     let mut image = ImageAttributes::with_size((

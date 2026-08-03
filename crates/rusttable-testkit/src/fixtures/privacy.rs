@@ -19,7 +19,7 @@ pub struct PrivacyFinding {
 
 impl PrivacyFinding {
     #[must_use]
-    pub fn kind(&self) -> PrivacyFindingKind {
+    pub const fn kind(&self) -> PrivacyFindingKind {
         self.kind
     }
 
@@ -61,7 +61,7 @@ impl PrivacyReport {
     }
 
     #[must_use]
-    pub fn is_clean(&self) -> bool {
+    pub const fn is_clean(&self) -> bool {
         self.findings.is_empty()
     }
 }
@@ -380,14 +380,14 @@ fn is_tiff(bytes: &[u8]) -> bool {
     matches!(bytes.get(..4), Some(b"II*\0" | b"MM\0*"))
 }
 
-fn is_sensitive_tag(tag: u16) -> bool {
+const fn is_sensitive_tag(tag: u16) -> bool {
     matches!(
         tag,
         0x013b | 0x8298 | 0x8825 | 0x9286 | 0x9c9b | 0x9c9c | 0x9c9d | 0x9c9e | 0x9c9f
     )
 }
 
-fn tiff_tag_name(tag: u16) -> &'static str {
+const fn tiff_tag_name(tag: u16) -> &'static str {
     match tag {
         0x010e => "ImageDescription",
         0x0131 => "Software",

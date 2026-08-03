@@ -92,7 +92,7 @@ impl DiagnosticsGuard {
     }
 
     #[must_use]
-    pub fn receipt(&self) -> DiagnosticsReceipt {
+    pub const fn receipt(&self) -> DiagnosticsReceipt {
         DiagnosticsReceipt {
             schema_version: SCHEMA_VERSION,
             rotation_bytes: ROTATION_BYTES,

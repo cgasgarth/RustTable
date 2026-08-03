@@ -161,7 +161,10 @@ impl fmt::Display for ColorCorrectionParameterError {
 
 impl std::error::Error for ColorCorrectionParameterError {}
 
-fn finite_parameter(field: &'static str, value: f32) -> Result<f32, ColorCorrectionParameterError> {
+const fn finite_parameter(
+    field: &'static str,
+    value: f32,
+) -> Result<f32, ColorCorrectionParameterError> {
     if value.is_finite() {
         Ok(value)
     } else {
@@ -570,16 +573,19 @@ fn separate_rounding_opponent(
     saturation * with_base
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
-    reason = "native commit_params narrows its double division result into an f32 field"
+    reason = "Native commit_params narrows its double division result into an f32 field."
 )]
 fn native_committed_scale(high: f32, low: f32) -> f32 {
     let endpoint_difference = high - low;
     (f64::from(endpoint_difference) / 100.0) as f32
 }
 
-fn ensure_finite_derived(field: &'static str, value: f32) -> Result<(), ColorCorrectionPlanError> {
+const fn ensure_finite_derived(
+    field: &'static str,
+    value: f32,
+) -> Result<(), ColorCorrectionPlanError> {
     if value.is_finite() {
         Ok(())
     } else {

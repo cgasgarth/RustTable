@@ -14,12 +14,12 @@ use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_ui::{DarkroomPanelAction, DarkroomPanelActionHandler, GtkShell};
 
 #[derive(Clone)]
-pub(crate) struct DarkroomPanelBridge {
+pub struct DarkroomPanelBridge {
     controller: Rc<RefCell<GtkDarkroomPanelController>>,
     handler: DarkroomPanelActionHandler,
 }
 
-pub(crate) fn install(
+pub fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
@@ -84,7 +84,7 @@ pub(crate) fn install(
 }
 
 impl DarkroomPanelBridge {
-    pub(crate) fn refresh(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
+    pub fn refresh(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
         let mut controller = self.controller.borrow_mut();
         controller.set_catalog_path(catalog.catalog_path().map(std::path::Path::to_path_buf));
         let target = shell.darkroom_panel_target();
@@ -107,7 +107,7 @@ impl DarkroomPanelBridge {
         }
     }
 
-    pub(crate) fn select(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
+    pub fn select(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
         let Some(target) = shell.darkroom_panel_target() else {
             shell.clear_darkroom_selection("select a photo to view history and snapshots");
             return;
@@ -157,7 +157,7 @@ fn project(
     shell.set_snapshots_projection(projections.snapshots(), handler);
 }
 
-fn refreshes_preview(action: &DarkroomPanelAction) -> bool {
+const fn refreshes_preview(action: &DarkroomPanelAction) -> bool {
     matches!(
         action,
         DarkroomPanelAction::SelectHistory { .. }

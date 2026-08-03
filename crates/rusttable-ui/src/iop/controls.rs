@@ -131,7 +131,7 @@ impl DarkroomParameterControl {
         Ok(())
     }
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParameterValidationError {
     WrongType {
         parameter_id: String,
@@ -197,7 +197,7 @@ pub enum DarkroomControlMessage {
     },
     OperationStack(Box<DarkroomOperationStackUpdateMessage>),
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DarkroomControlFeedback {
     Ready,
     Applied {
@@ -224,7 +224,7 @@ pub enum DarkroomControlFeedback {
         actual: u64,
     },
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DarkroomOperationStackFeedback {
     Applied {
         selection: DarkroomSelection,
@@ -238,7 +238,7 @@ pub enum DarkroomOperationStackFeedback {
         error: OperationStackError,
     },
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DarkroomModuleControlError {
     ZeroOperationId,
     EmptyTitle,
@@ -246,13 +246,13 @@ pub enum DarkroomModuleControlError {
     DescriptorMismatch(Box<DescriptorMismatch>),
     Parameter(ParameterValidationError),
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DescriptorMismatch {
     operation_id: u128,
     operation: DescriptorId,
     descriptor: DescriptorId,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DarkroomControlModelError {
     NoSelection,
     StaleSelection {
@@ -485,12 +485,12 @@ impl DarkroomControlModel {
     pub const fn feedback(&self) -> &DarkroomControlFeedback {
         &self.feedback
     }
-    pub fn select(&mut self, selection: DarkroomSelection, stack_revision: u64) {
+    pub const fn select(&mut self, selection: DarkroomSelection, stack_revision: u64) {
         self.selection = Some(selection);
         self.stack_revision = stack_revision;
         self.feedback = DarkroomControlFeedback::Ready;
     }
-    pub fn clear_selection(&mut self) {
+    pub const fn clear_selection(&mut self) {
         self.selection = None;
         self.feedback = DarkroomControlFeedback::Ready;
     }
@@ -843,7 +843,7 @@ fn vector(
         .iter()
         .try_for_each(|value| scalar(id, *value, minimum, maximum))
 }
-fn value_kind(kind: &ParameterKind) -> DarkroomParameterValueKind {
+const fn value_kind(kind: &ParameterKind) -> DarkroomParameterValueKind {
     match kind {
         ParameterKind::Bool => DarkroomParameterValueKind::Bool,
         ParameterKind::Integer { .. } => DarkroomParameterValueKind::Integer,

@@ -8,7 +8,7 @@ use rusttable_image::{
 use super::{WebPDataLocation, WebPDecodeError, WebPDecodeLimits, WebPDecodeRequest, WebPDecoder};
 use crate::raw::RawSourceError;
 
-pub(crate) fn decode_webp_probe(
+pub fn decode_webp_probe(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<ImageProbe, ImageInputError> {
@@ -18,7 +18,7 @@ pub(crate) fn decode_webp_probe(
     Ok(ImageProbe::new(InputFormat::Webp, header.dimensions))
 }
 
-pub(crate) fn decode_legacy_rgba8(
+pub fn decode_legacy_rgba8(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<DecodedImage, ImageInputError> {
@@ -42,7 +42,7 @@ pub(crate) fn decode_legacy_rgba8(
     })
 }
 
-pub(crate) fn decode_webp_frame(
+pub fn decode_webp_frame(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<DecodedFrame, ImageInputError> {
@@ -206,7 +206,7 @@ fn malformed(message: &str) -> ImageInputError {
     }
 }
 
-fn required_bytes(error: &rusttable_image::ImageViewError) -> usize {
+const fn required_bytes(error: &rusttable_image::ImageViewError) -> usize {
     match error {
         rusttable_image::ImageViewError::BufferTooShort { required, .. } => *required,
         _ => 0,

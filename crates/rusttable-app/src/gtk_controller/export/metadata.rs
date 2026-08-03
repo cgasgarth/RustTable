@@ -12,7 +12,7 @@ use rusttable_metadata::MetadataCategory;
 use rusttable_render::RenderOutput;
 
 #[derive(Debug)]
-pub(crate) enum ExportMetadataError {
+pub enum ExportMetadataError {
     Catalog(String),
     MissingPhoto(PhotoId),
     MissingEdit(rusttable_core::EditId),
@@ -32,15 +32,15 @@ impl fmt::Display for ExportMetadataError {
 
 impl std::error::Error for ExportMetadataError {}
 
-pub(crate) struct ResolvedExportMetadata {
-    pub(crate) metadata: ExportMetadata,
-    pub(crate) receipt: PngMetadataReceipt,
+pub struct ResolvedExportMetadata {
+    pub metadata: ExportMetadata,
+    pub receipt: PngMetadataReceipt,
 }
 
 /// Resolves one owned packet from the imported source, catalog organization,
 /// selected edit, and rendered working/profile evidence. The policy is applied
 /// by `MetadataPacketBuilder` before any format-native serialization occurs.
-pub(crate) fn resolve(
+pub fn resolve(
     catalog_path: &Path,
     photo_id: PhotoId,
     edit_id: rusttable_core::EditId,

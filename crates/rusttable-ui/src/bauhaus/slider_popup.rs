@@ -29,7 +29,7 @@ pub struct SliderRange {
 impl SliderRange {
     /// Creates a range using the source's minimum/maximum ordering.
     #[must_use]
-    pub fn new(minimum: f64, maximum: f64) -> Self {
+    pub const fn new(minimum: f64, maximum: f64) -> Self {
         Self::from_source(source_float(minimum), source_float(maximum))
     }
 
@@ -125,19 +125,24 @@ pub enum ZoomRangeChange {
 /// adapter. Above the header boundary movement is linear; below it the popup
 /// progressively reaches the quadratic fine-tuning scale.
 #[must_use]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The source popup pointer geometry preserves its original floating-point evaluation order."
+)]
 pub fn line_offset(position: f64, scale: f64, x: f64, y: f64, header_fraction: f64) -> f64 {
     let position = source_float(position);
     let scale = source_float(scale);
     let x = source_float(x);
     let header_fraction = source_float(header_fraction);
-    let mut y = source_float(y);
-    let mut offset = x - position;
-    if y > header_fraction {
-        y = (y - header_fraction) / (1.0_f32 - header_fraction);
+    let y = source_float(y);
+    let offset = if y > header_fraction {
+        let y = (y - header_fraction) / (1.0_f32 - header_fraction);
         let y_squared = y * y;
-        offset = (x - y_squared * 0.5_f32 - (1.0_f32 - y_squared) * position)
-            / (0.5_f32 * y_squared / scale + (1.0_f32 - y_squared));
-    }
+        (x - y_squared * 0.5_f32 - (1.0_f32 - y_squared) * position)
+            / (0.5_f32 * y_squared / scale + (1.0_f32 - y_squared))
+    } else {
+        x - position
+    };
 
     f64::from((position + offset).clamp(0.0_f32, 1.0_f32) - position)
 }
@@ -181,6 +186,10 @@ pub fn linear_pointer_position(
 /// source's circular geometry. Within the central dead zone, the position from
 /// popup entry is retained.
 #[must_use]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The source circular popup mapping preserves its original multiply/add order."
+)]
 pub fn full_circle_pointer_position(
     old_position: f64,
     normalized_x: f64,
@@ -201,7 +210,6 @@ pub fn full_circle_pointer_position(
 /// The exclusive-or distinguishes crossing a linear guideline from wrapping
 /// across the discontinuity of a circular slider.
 #[must_use]
-#[allow(clippy::float_cmp)]
 pub fn should_activate_change(
     primary_button_down: bool,
     previous_offset: f64,
@@ -222,6 +230,10 @@ pub fn should_activate_change(
 /// `dt_bauhaus_slider_set` call. The signed factor in the minimum-visible
 /// check is deliberately retained from the pinned source.
 #[must_use]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The source popup zoom preserves value-centered multiply/add evaluation order."
+)]
 pub fn zoom_range(
     ranges: SliderRanges,
     value: f64,
@@ -249,7 +261,7 @@ pub fn zoom_range(
     }
 
     let minimum_visible = 10.0_f32.powf(-source_digits(digits)) / factor;
-    let multiplier = 2.0_f32.powf(zoom / 2.0_f32);
+    let multiplier = (zoom / 2.0_f32).exp2();
     let new_minimum = value - multiplier * (value - ranges.visible.minimum_source());
     let new_maximum = value + multiplier * (ranges.visible.maximum_source() - value);
 
@@ -263,13 +275,19 @@ pub fn zoom_range(
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
-fn source_float(value: f64) -> f32 {
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "GTK numeric inputs are narrowed at the source f32 parameter boundary."
+)]
+const fn source_float(value: f64) -> f32 {
     value as f32
 }
 
-#[allow(clippy::cast_precision_loss)]
-fn source_digits(value: i32) -> f32 {
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "The source slider's decimal-digit count is a small f32 formatting parameter."
+)]
+const fn source_digits(value: i32) -> f32 {
     value as f32
 }
 
@@ -380,7 +398,10 @@ fn wheel_unit(delta: f64) -> i32 {
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "The accumulator clamps the whole scroll amount to the i32 GTK event domain."
+)]
 fn unit_as_i32(amount: f64) -> i32 {
     amount.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
 }

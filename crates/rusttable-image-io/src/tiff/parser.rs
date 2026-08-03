@@ -39,7 +39,7 @@ const TAG_GPS_IFD: u16 = 34_853;
 const TAG_XMP: u16 = 700;
 const TAG_YCBCR_SUBSAMPLING: u16 = 530;
 #[derive(Debug)]
-pub(crate) struct ParsedTiff {
+pub struct ParsedTiff {
     pub header: TiffHeader,
 }
 
@@ -62,7 +62,7 @@ struct Parser<'a> {
     chunk_ranges: Vec<(u64, u64)>,
 }
 
-pub(crate) fn parse(bytes: &[u8], limits: TiffDecodeLimits) -> Result<ParsedTiff, TiffDecodeError> {
+pub fn parse(bytes: &[u8], limits: TiffDecodeLimits) -> Result<ParsedTiff, TiffDecodeError> {
     let source_len = u64::try_from(bytes.len()).map_err(|_| TiffDecodeError::ArithmeticOverflow)?;
     check_limit("source bytes", source_len, limits.max_source_bytes)?;
     let (order, container, first_ifd) = parse_header(bytes)?;
@@ -274,7 +274,10 @@ impl Parser<'_> {
         Ok((entries, next))
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "TIFF page parsing keeps IFD precedence, layout validation, and source-order metadata assembly together"
+    )]
     fn page(
         &mut self,
         index: usize,
@@ -461,7 +464,10 @@ impl Parser<'_> {
             .collect()
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "TIFF chunk parsing keeps strip/tile choice, plane ordering, and checked byte ranges in source-defined order"
+    )]
     fn chunks(
         &mut self,
         entries: &[Entry],
@@ -791,7 +797,7 @@ fn validate_predictor(
     }
 }
 
-fn sample_format(value: u64) -> Result<TiffSampleFormat, TiffDecodeError> {
+const fn sample_format(value: u64) -> Result<TiffSampleFormat, TiffDecodeError> {
     match value {
         // TIFF 6.0 says undefined data is read as unsigned integer data when
         // no more specific interpretation is available, as does the native
@@ -960,7 +966,7 @@ fn usize_to_u64(value: usize) -> Result<u64, TiffDecodeError> {
     u64::try_from(value).map_err(|_| TiffDecodeError::ArithmeticOverflow)
 }
 
-fn check_limit(kind: &'static str, actual: u64, limit: u64) -> Result<(), TiffDecodeError> {
+const fn check_limit(kind: &'static str, actual: u64, limit: u64) -> Result<(), TiffDecodeError> {
     if actual > limit {
         Err(TiffDecodeError::Limit {
             kind,
@@ -976,6 +982,6 @@ fn malformed(message: &str) -> TiffDecodeError {
     TiffDecodeError::Malformed(message.to_owned())
 }
 
-fn unsupported(feature: &'static str, value: u64) -> TiffDecodeError {
+const fn unsupported(feature: &'static str, value: u64) -> TiffDecodeError {
     TiffDecodeError::Unsupported { feature, value }
 }

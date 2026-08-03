@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum MigrationCommand {
+pub enum MigrationCommand {
     SourceMap {
         #[command(subcommand)]
         command: SourceMapCommand,
@@ -14,14 +14,14 @@ pub(crate) enum MigrationCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum SourceMapCommand {
+pub enum SourceMapCommand {
     Verify {
         #[arg(long)]
         issue: i64,
     },
 }
 
-pub(crate) fn run(root: &Path, command: MigrationCommand) -> Result {
+pub fn run(root: &Path, command: MigrationCommand) -> Result {
     match command {
         MigrationCommand::SourceMap { command } => match command {
             SourceMapCommand::Verify { issue } if issue == 257 => {

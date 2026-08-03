@@ -200,13 +200,8 @@ fn fake(
     start_result: Result<(), ServiceError>,
 ) -> FakeService {
     FakeService {
-        descriptor: ServiceDescriptor::new(id, criticality).with_dependencies(
-            dependencies
-                .iter()
-                .copied()
-                .map(ServiceId::from)
-                .collect::<Vec<_>>(),
-        ),
+        descriptor: ServiceDescriptor::new(id, criticality)
+            .with_dependencies(dependencies.iter().copied().map(ServiceId::from)),
         log: Arc::clone(log),
         start_result,
         stop_result: Ok(()),

@@ -727,7 +727,7 @@ fn safe_alias(path: &Path) -> String {
     }
 }
 
-fn map_snapshot_error(error: &SourceSnapshotError) -> RasterImportFailure {
+const fn map_snapshot_error(error: &SourceSnapshotError) -> RasterImportFailure {
     match error {
         SourceSnapshotError::NotRegularFile { .. } => RasterImportFailure::NonRegularSource,
         SourceSnapshotError::SymlinkRejected { .. } => RasterImportFailure::SymlinkRejected,
@@ -742,7 +742,7 @@ fn map_snapshot_error(error: &SourceSnapshotError) -> RasterImportFailure {
     }
 }
 
-fn map_snapshot_read_error(error: &SourceSnapshotReadError) -> RasterImportFailure {
+const fn map_snapshot_read_error(error: &SourceSnapshotReadError) -> RasterImportFailure {
     match error {
         SourceSnapshotReadError::SourceChanged { .. } => RasterImportFailure::SourceChanged,
         SourceSnapshotReadError::MaterializationLimitExceeded { .. } => {
@@ -759,7 +759,7 @@ fn map_snapshot_read_error(error: &SourceSnapshotReadError) -> RasterImportFailu
     }
 }
 
-fn map_reference_error(error: ReferenceSourceError) -> RasterImportFailure {
+const fn map_reference_error(error: ReferenceSourceError) -> RasterImportFailure {
     match error {
         ReferenceSourceError::UnsupportedPathEncoding => {
             RasterImportFailure::UnsupportedPathEncoding
@@ -770,7 +770,7 @@ fn map_reference_error(error: ReferenceSourceError) -> RasterImportFailure {
     }
 }
 
-fn map_catalog_error(error: AtomicRasterCatalogError) -> RasterImportFailure {
+const fn map_catalog_error(error: AtomicRasterCatalogError) -> RasterImportFailure {
     match error {
         AtomicRasterCatalogError::Unavailable => RasterImportFailure::CatalogUnavailable,
         AtomicRasterCatalogError::Conflict => RasterImportFailure::CatalogConflict,
@@ -868,7 +868,7 @@ fn failed_with_evidence(
     receipt
 }
 
-fn format_label(format: InputFormat) -> &'static str {
+const fn format_label(format: InputFormat) -> &'static str {
     match format {
         InputFormat::Jpeg => "jpeg",
         InputFormat::JpegXl => "jpeg-xl",

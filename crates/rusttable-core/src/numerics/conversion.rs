@@ -23,7 +23,11 @@ pub fn f32_to_u8(value: f32, policy: ConversionPolicy) -> Result<u8, NumericalEr
         RoundingPolicy::TowardZero => value.trunc(),
     };
     // The selected range policy proves the rounded value is within `u8` bounds.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "finite range validation proves the rounded conversion is within u8 bounds"
+    )]
     let converted = rounded as u8;
     Ok(converted)
 }
@@ -50,7 +54,7 @@ pub fn canonical_f16_to_f32(bits: u16, policy: NonFinitePolicy) -> Result<f32, N
     normalize_non_finite(f16::from_bits(bits).to_f32(), policy)
 }
 
-fn normalize_non_finite(value: f32, policy: NonFinitePolicy) -> Result<f32, NumericalError> {
+const fn normalize_non_finite(value: f32, policy: NonFinitePolicy) -> Result<f32, NumericalError> {
     match policy {
         NonFinitePolicy::Reject if !value.is_finite() => Err(NumericalError::NonFinite),
         NonFinitePolicy::CanonicalizeNaN if value.is_nan() => Ok(f32::from_bits(0x7fc0_0000)),

@@ -48,12 +48,12 @@ impl EncodedExif {
     }
 
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.bytes.len()
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
 }
@@ -577,7 +577,7 @@ impl Entry<'_> {
         }
     }
 
-    fn field(self) -> Option<MetadataField> {
+    const fn field(self) -> Option<MetadataField> {
         match self.tag {
             TAG_MAKE => Some(MetadataField::CameraMake),
             TAG_MODEL => Some(MetadataField::CameraModel),

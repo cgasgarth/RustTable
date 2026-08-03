@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Censorize arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Lens Correction arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use super::geometry::{LensCorrectionCoordinateError, LensCorrectionPlan};
 use crate::{FiniteF32, LinearRgb};
 use sha2::{Digest, Sha256};
@@ -231,7 +236,7 @@ fn digest_f32(values: &[f32]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LensCorrectionExecution {
     pixels: Vec<LinearRgb>,
     dimensions: crate::RasterDimensions,

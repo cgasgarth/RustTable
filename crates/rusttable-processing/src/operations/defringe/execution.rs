@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Defringe arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -699,10 +703,10 @@ impl DefringePlan {
         let average_edge = analysis
             .as_ref()
             .map_or(33.0, DefringeAnalysis::average_edge_chroma);
-        let base_threshold = match analysis.as_ref() {
-            Some(value) => value.global_threshold(),
-            None => threshold_for(self.config, None),
-        };
+        let base_threshold = analysis.as_ref().map_or_else(
+            || threshold_for(self.config, None),
+            DefringeAnalysis::global_threshold,
+        );
         let width = usize::try_from(self.dimensions.width()).expect("validated width");
         let height = usize::try_from(self.dimensions.height()).expect("validated height");
         let mut output = input.to_vec();
@@ -827,15 +831,13 @@ fn make_analysis(
 }
 
 fn threshold_for(config: DefringeConfig, average: Option<f32>) -> f32 {
-    match average {
-        Some(value) => {
-            (4.0 * config.threshold() * value / DEFRINGE_MAGIC_THRESHOLD_COEFFICIENT).max(0.1)
-        }
-        None => config.threshold().max(0.1),
-    }
+    average.map_or_else(
+        || config.threshold().max(0.1),
+        |value| (4.0 * config.threshold() * value / DEFRINGE_MAGIC_THRESHOLD_COEFFICIENT).max(0.1),
+    )
 }
 
-fn sample_index_for(samples_wish: usize) -> usize {
+const fn sample_index_for(samples_wish: usize) -> usize {
     if samples_wish > 89 {
         12
     } else if samples_wish > 55 {
@@ -851,7 +853,7 @@ fn sample_index_for(samples_wish: usize) -> usize {
     }
 }
 
-fn fib_count(index: usize) -> usize {
+const fn fib_count(index: usize) -> usize {
     FIBONACCI[index] as usize
 }
 

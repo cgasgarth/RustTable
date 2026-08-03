@@ -18,7 +18,7 @@ fn seed(path: &std::path::Path) {
     }
 }
 
-fn photo(id: u128) -> PhotoId {
+const fn photo(id: u128) -> PhotoId {
     PhotoId::new(id).unwrap()
 }
 

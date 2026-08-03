@@ -50,7 +50,11 @@ impl CfaDescriptor {
     }
 
     #[must_use]
-    pub fn after_orientation(self, source: ImageDimensions, orientation: Orientation) -> Self {
+    pub const fn after_orientation(
+        self,
+        source: ImageDimensions,
+        orientation: Orientation,
+    ) -> Self {
         Self {
             pattern: self.pattern,
             phase: self
@@ -99,7 +103,7 @@ impl CfaPattern {
     }
 
     #[must_use]
-    pub fn phase_after_orientation(
+    pub const fn phase_after_orientation(
         self,
         phase: CfaPhase,
         source: ImageDimensions,

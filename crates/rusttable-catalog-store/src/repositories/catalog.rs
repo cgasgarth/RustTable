@@ -905,7 +905,7 @@ fn stage_import(
     Ok(())
 }
 
-fn map_repository_error(error: &RepositoryError) -> AtomicCatalogStoreError {
+const fn map_repository_error(error: &RepositoryError) -> AtomicCatalogStoreError {
     match error {
         RepositoryError::Unavailable => AtomicCatalogStoreError::Unavailable,
         RepositoryError::CommitFailure => AtomicCatalogStoreError::CommitFailed,
@@ -916,7 +916,7 @@ fn map_repository_error(error: &RepositoryError) -> AtomicCatalogStoreError {
     }
 }
 
-fn map_edit_error(error: &EditRepositoryError) -> AtomicCatalogStoreError {
+const fn map_edit_error(error: &EditRepositoryError) -> AtomicCatalogStoreError {
     match error {
         EditRepositoryError::Unavailable => AtomicCatalogStoreError::Unavailable,
         EditRepositoryError::CommitFailure => AtomicCatalogStoreError::CommitFailed,
@@ -931,7 +931,9 @@ fn map_edit_error(error: &EditRepositoryError) -> AtomicCatalogStoreError {
     }
 }
 
-fn map_history_error(error: &rusttable_catalog::HistoryRepositoryError) -> AtomicCatalogStoreError {
+const fn map_history_error(
+    error: &rusttable_catalog::HistoryRepositoryError,
+) -> AtomicCatalogStoreError {
     match error {
         rusttable_catalog::HistoryRepositoryError::Unavailable => {
             AtomicCatalogStoreError::Unavailable

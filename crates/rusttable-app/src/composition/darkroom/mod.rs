@@ -3,8 +3,8 @@
 mod edit;
 mod panels;
 
-pub(crate) use edit::install as install_edit;
-pub(crate) use panels::install as install_panels;
+pub use edit::install as install_edit;
+pub use panels::install as install_panels;
 
 use std::cell::RefCell;
 use std::rc::Rc;

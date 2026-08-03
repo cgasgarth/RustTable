@@ -18,22 +18,22 @@ use sha2::{Digest, Sha256};
 
 use crate::{PINNED_DARKTABLE_COMMIT, Result};
 
-pub(crate) const SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-mode-source-map.toml";
+pub const SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-mode-source-map.toml";
 const SOURCE_MAP_SCHEMA: &str = "rusttable.pixelpipe-mode-source-map.v1";
 
 #[derive(Debug, Args)]
-pub(crate) struct ModeMatrixArgs {
+pub struct ModeMatrixArgs {
     #[arg(long)]
-    pub(crate) fixture: String,
+    pub fixture: String,
     #[arg(long)]
-    pub(crate) all_purposes: bool,
+    pub all_purposes: bool,
     #[arg(long)]
-    pub(crate) all_quality: bool,
+    pub all_quality: bool,
     #[arg(long)]
-    pub(crate) verify_no_export_degradation: bool,
+    pub verify_no_export_degradation: bool,
 }
 
-pub(crate) fn run(root: &Path, arguments: &ModeMatrixArgs) -> Result {
+pub fn run(root: &Path, arguments: &ModeMatrixArgs) -> Result {
     if arguments.fixture != "corpus.raster.png.16-alpha"
         || !arguments.all_purposes
         || !arguments.all_quality
@@ -163,29 +163,33 @@ fn fixture_snapshot(
     .map_err(|error| error.to_string())?;
     let stack = OperationStackSnapshot::new(OperationStackTemplate::raster_basic())
         .apply(StackCommand::Insert {
-            operation: OperationInstance::new(
-                1,
-                exposure_descriptor().id,
-                vec![0, 1],
-                StackStage::SceneLinear,
-                false,
-                true,
-            )
-            .map_err(|error| error.to_string())?,
+            operation: Box::new(
+                OperationInstance::new(
+                    1,
+                    exposure_descriptor().id,
+                    vec![0, 1],
+                    StackStage::SceneLinear,
+                    false,
+                    true,
+                )
+                .map_err(|error| error.to_string())?,
+            ),
             position: InsertPosition::End,
         })
         .map_err(|error| error.to_string())?
         .snapshot
         .apply(StackCommand::Insert {
-            operation: OperationInstance::new(
-                2,
-                rgb_gain_descriptor().id,
-                vec![1, 0],
-                StackStage::CreativeAndTone,
-                false,
-                true,
-            )
-            .map_err(|error| error.to_string())?,
+            operation: Box::new(
+                OperationInstance::new(
+                    2,
+                    rgb_gain_descriptor().id,
+                    vec![1, 0],
+                    StackStage::CreativeAndTone,
+                    false,
+                    true,
+                )
+                .map_err(|error| error.to_string())?,
+            ),
             position: InsertPosition::End,
         })
         .map_err(|error| error.to_string())?
@@ -209,8 +213,11 @@ fn fixture_snapshot(
     .map_err(|error| error.to_string())
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn verify_mode_source_map(root: &Path, issue: i64) -> Result {
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-derived pixelpipe mode source-map validation together"
+)]
+pub fn verify_mode_source_map(root: &Path, issue: i64) -> Result {
     if issue != 271 {
         return Err(format!(
             "pixelpipe mode source map: unsupported issue {issue}"
