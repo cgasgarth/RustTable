@@ -285,9 +285,9 @@ pub use registry::closure::{
     RegistryClosureError,
 };
 pub use registry::{
-    BUILTIN_OPERATIONS, CpuFactory, DefinitionAvailability, DeviceCapabilitySnapshot,
-    ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
-    OperationCapability, OperationDefinition, OperationDefinitionFactory,
+    BUILTIN_OPERATIONS, CpuExecutionRoute, CpuFactory, DefinitionAvailability,
+    DeviceCapabilitySnapshot, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
+    MigrationBinding, OperationCapability, OperationDefinition, OperationDefinitionFactory,
     OperationMaterializationError, OperationUiAvailability, PreparedCpuOperation,
     RegistryBuildError, RegistryLookupError, RegistrySnapshot, RegistryValidationError,
     builtin_registry,

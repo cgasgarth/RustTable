@@ -38,6 +38,12 @@ use super::parameters::{
 pub const PROFILE_MATRIX_ORIENTATION: &str =
     "matrix_in is row-major (non-transposed) and its row 1 supplies ProPhoto Y";
 
+const PROPHOTO_MATRIX_IN: [[f32; 3]; 3] = [
+    [0.7976749, 0.1351917, 0.0313534],
+    [0.2880402, 0.7118741, 0.0000857],
+    [0.0, 0.0, 0.8252100],
+];
+
 /// Explicit numeric evidence for the native ProPhoto working-profile lookup.
 /// The leaf never substitutes camera luminance when this evidence is absent.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,6 +61,12 @@ pub struct ToneCurveProfileEvidence {
 }
 
 impl ToneCurveProfileEvidence {
+    /// Returns the exact linear profile selected by native Tone Curve RGB mode.
+    #[must_use]
+    pub fn prophoto() -> Self {
+        Self::new_linear(PROPHOTO_MATRIX_IN)
+    }
+
     #[must_use]
     pub fn new_linear(matrix_in: [[f32; 3]; 3]) -> Self {
         Self {
@@ -94,21 +106,7 @@ impl ToneCurveProfileEvidence {
             return Err(ToneCurveProfileError::NonFiniteMatrix);
         }
         if self.nonlinearlut {
-            if self.lut_size < 2
-                || self.lut_in.iter().any(|lut| {
-                    lut.len() != self.lut_size || lut.iter().any(|value| !value.is_finite())
-                })
-            {
-                return Err(ToneCurveProfileError::InvalidLut);
-            }
-            if self
-                .unbounded_coeffs_in
-                .iter()
-                .flatten()
-                .any(|value| !value.is_finite())
-            {
-                return Err(ToneCurveProfileError::NonFiniteCoefficients);
-            }
+            return Err(ToneCurveProfileError::UnsupportedNonlinearEvidence);
         }
         Ok(())
     }
@@ -150,6 +148,7 @@ pub enum ToneCurveProfileError {
     NonFiniteMatrix,
     InvalidLut,
     NonFiniteCoefficients,
+    UnsupportedNonlinearEvidence,
 }
 
 impl fmt::Display for ToneCurveProfileError {
@@ -158,6 +157,9 @@ impl fmt::Display for ToneCurveProfileError {
             Self::NonFiniteMatrix => "Tone Curve profile matrix is non-finite",
             Self::InvalidLut => "Tone Curve profile LUT size or samples are invalid",
             Self::NonFiniteCoefficients => "Tone Curve profile coefficients are non-finite",
+            Self::UnsupportedNonlinearEvidence => {
+                "Tone Curve nonlinear profile evidence is unsupported"
+            }
         })
     }
 }
@@ -266,6 +268,17 @@ impl CompiledToneCurve {
     }
 }
 
+#[must_use]
+pub const fn requires_profile_evidence(parameters: &ToneCurveParametersV5) -> bool {
+    matches!(
+        (
+            parameters.tonecurve_autoscale_ab,
+            parameters.preserve_colors,
+        ),
+        (ToneCurveAutoscale::AutomaticRgb, PreserveColors::Luminance)
+    )
+}
+
 /// Compiles all native tables in the exact `commit_params()` order:
 /// curves, sampling, Lab scaling, XYZ/RGB derivation, then exponential fits.
 pub fn compile_parameters(
@@ -280,13 +293,6 @@ pub fn compile_parameters(
             .validate()
             .map_err(CurveCompileError::InvalidProfile)?;
     }
-    if parameters.tonecurve_autoscale_ab == ToneCurveAutoscale::AutomaticRgb
-        && parameters.preserve_colors == PreserveColors::Luminance
-        && profile.is_none()
-    {
-        return Err(CurveCompileError::MissingProfileEvidence);
-    }
-
     // 1-2. Build all three curves and sample all three 65536-entry tables.
     let mut tables = [
         sample_parameters(parameters, 0)?,

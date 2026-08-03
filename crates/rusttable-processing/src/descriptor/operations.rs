@@ -548,6 +548,268 @@ fn color_reconstruction_io() -> InputOutputContract {
     }
 }
 
+/// Descriptor for the Lab D50 Highpass neighborhood path.
+#[must_use]
+#[expect(
+    clippy::missing_panics_doc,
+    reason = "the static descriptor identity is validated at construction"
+)]
+pub fn highpass_descriptor() -> OperationDescriptor {
+    let image = lab_image_predicate();
+    OperationDescriptor {
+        id: DescriptorId::new("highpass", "rusttable.highpass", 1, 1, 1).expect("static ID"),
+        parameters: vec![
+            scalar_processing_parameter("sharpness", 0.0, 100.0, 50.0, "percent"),
+            scalar_processing_parameter("contrast", 0.0, 100.0, 50.0, "percent"),
+        ],
+        flags: OperationFlags::HISTORY_VISIBLE
+            .insert(OperationFlags::STYLE_ELIGIBLE)
+            .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::DETERMINISTIC_CPU)
+            .insert(OperationFlags::COLOR)
+            .insert(OperationFlags::BLENDING),
+        stage: "frequential-lab-d50".to_owned(),
+        roi: RoiKind::Neighborhood,
+        tiling: TilingContract {
+            overlap_pixels: 0,
+            alignment_pixels: 1,
+            minimum_tile_edge: 1,
+            preferred_tile_edge: 256,
+            temporary_multiplier_milli: 2_100,
+            input_multiplier_milli: 1_000,
+            output_multiplier_milli: 1_000,
+        },
+        capability: CapabilityContract {
+            cpu_supported: true,
+            gpu_tier: None,
+            required_features: Vec::new(),
+            required_formats: vec!["rgba32float".to_owned()],
+            deterministic_cpu: true,
+            deterministic_gpu: false,
+            fallback_to_cpu: true,
+            precision: "native scalar f32 Lab D50 box-filter".to_owned(),
+            modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
+        },
+        io: InputOutputContract {
+            input: image.clone(),
+            output: image,
+            derives_output_encoding: false,
+        },
+        mask_blend: MaskBlendContract {
+            consumes_mask: false,
+            publishes_mask: false,
+            blend_if: false,
+            geometry: false,
+            analysis: false,
+        },
+        migration: MigrationContract {
+            source_versions: vec![1],
+            target_version: 1,
+            opaque_unknown_allowed: true,
+        },
+        ui: None,
+    }
+}
+
+/// Descriptor for the Lab D50 Tone Curve path.
+#[must_use]
+#[expect(
+    clippy::missing_panics_doc,
+    reason = "the static descriptor identity is validated at construction"
+)]
+pub fn tonecurve_descriptor() -> OperationDescriptor {
+    let defaults = crate::operations::common::encode_native_payload_chunks(
+        &crate::operations::tonecurve::ToneCurveParametersV5::default().to_bytes(),
+    );
+    let parameters = defaults
+        .into_iter()
+        .enumerate()
+        .map(|(index, default)| native_payload_parameter(index, default, 5))
+        .collect::<Vec<_>>();
+    let image = lab_image_predicate();
+    OperationDescriptor {
+        id: DescriptorId::new("tonecurve", "rusttable.tonecurve", 5, 5, 1).expect("static ID"),
+        parameters,
+        flags: OperationFlags::HISTORY_VISIBLE
+            .insert(OperationFlags::STYLE_ELIGIBLE)
+            .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::DETERMINISTIC_CPU)
+            .insert(OperationFlags::COLOR)
+            .insert(OperationFlags::BLENDING),
+        stage: "frequential-lab-d50".to_owned(),
+        roi: RoiKind::Identity,
+        tiling: TilingContract {
+            overlap_pixels: 0,
+            alignment_pixels: 1,
+            minimum_tile_edge: 1,
+            preferred_tile_edge: 256,
+            temporary_multiplier_milli: 1_000,
+            input_multiplier_milli: 1_000,
+            output_multiplier_milli: 1_000,
+        },
+        capability: CapabilityContract {
+            cpu_supported: true,
+            gpu_tier: None,
+            required_features: Vec::new(),
+            required_formats: vec!["rgba32float".to_owned()],
+            deterministic_cpu: true,
+            deterministic_gpu: false,
+            fallback_to_cpu: true,
+            precision: "native scalar f32 Lab D50 LUT".to_owned(),
+            modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
+        },
+        io: InputOutputContract {
+            input: image.clone(),
+            output: image,
+            derives_output_encoding: false,
+        },
+        mask_blend: MaskBlendContract {
+            consumes_mask: false,
+            publishes_mask: false,
+            blend_if: false,
+            geometry: false,
+            analysis: false,
+        },
+        migration: MigrationContract {
+            source_versions: vec![1, 3, 4, 5],
+            target_version: 5,
+            opaque_unknown_allowed: true,
+        },
+        ui: None,
+    }
+}
+
+/// Descriptor for the bounded tileable linear-RGB Base Curve path.
+#[must_use]
+#[expect(
+    clippy::missing_panics_doc,
+    reason = "the static descriptor identity is validated at construction"
+)]
+pub fn basecurve_descriptor() -> OperationDescriptor {
+    let default = crate::operations::common::encode_native_payload_chunks(
+        &crate::operations::basecurve::BasecurveParameters::defaults().to_bytes(),
+    );
+    let parameters = default
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| native_payload_parameter(index, value, 6))
+        .collect::<Vec<_>>();
+    let image = linear_rgb_image_predicate();
+    OperationDescriptor {
+        id: DescriptorId::new("basecurve", "rusttable.basecurve", 6, 6, 1).expect("static ID"),
+        parameters,
+        flags: OperationFlags::HISTORY_VISIBLE
+            .insert(OperationFlags::STYLE_ELIGIBLE)
+            .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::DETERMINISTIC_CPU)
+            .insert(OperationFlags::COLOR),
+        stage: "scene-linear-rgb".to_owned(),
+        roi: RoiKind::Identity,
+        tiling: TilingContract {
+            overlap_pixels: 0,
+            alignment_pixels: 1,
+            minimum_tile_edge: 1,
+            preferred_tile_edge: 256,
+            temporary_multiplier_milli: 2_000,
+            input_multiplier_milli: 1_000,
+            output_multiplier_milli: 1_000,
+        },
+        capability: CapabilityContract {
+            cpu_supported: true,
+            gpu_tier: None,
+            required_features: Vec::new(),
+            required_formats: vec!["rgba32float".to_owned()],
+            deterministic_cpu: true,
+            deterministic_gpu: false,
+            fallback_to_cpu: true,
+            precision: "native scalar f32 linear RGB LUT".to_owned(),
+            modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
+        },
+        io: InputOutputContract {
+            input: image.clone(),
+            output: image,
+            derives_output_encoding: false,
+        },
+        mask_blend: MaskBlendContract {
+            consumes_mask: false,
+            publishes_mask: false,
+            blend_if: false,
+            geometry: false,
+            analysis: false,
+        },
+        migration: MigrationContract {
+            source_versions: vec![1, 2, 3, 4, 5, 6],
+            target_version: 6,
+            opaque_unknown_allowed: true,
+        },
+        ui: None,
+    }
+}
+
+fn scalar_processing_parameter(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    default: f64,
+    unit: &str,
+) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: id.to_owned(),
+        kind: ParameterKind::Scalar { minimum, maximum },
+        default: ParameterDefault::Scalar(default),
+        required: false,
+        introduced_version: 1,
+        removed_version: None,
+        unit: Some(unit.to_owned()),
+        step: Some(0.1),
+        precision: 1,
+        role: ParameterRole::Processing,
+        cache_affecting: true,
+        animatable: true,
+        ui_hint: Some("slider".to_owned()),
+        condition: None,
+    }
+}
+
+fn native_payload_parameter(index: usize, default: String, version: u16) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: format!("payload_{index}"),
+        kind: ParameterKind::Text {
+            maximum_bytes: 4_096,
+        },
+        default: ParameterDefault::Text(default),
+        required: false,
+        introduced_version: version,
+        removed_version: None,
+        unit: None,
+        step: None,
+        precision: 0,
+        role: ParameterRole::Processing,
+        cache_affecting: true,
+        animatable: false,
+        ui_hint: None,
+        condition: None,
+    }
+}
+
+fn lab_image_predicate() -> ImagePredicate {
+    ImagePredicate {
+        channels: 4,
+        alpha: AlphaPolicy::Preserve,
+        encodings: vec![ColorEncoding::LabD50],
+        nonfinite: NonFinitePolicy::Reject,
+    }
+}
+
+fn linear_rgb_image_predicate() -> ImagePredicate {
+    ImagePredicate {
+        channels: 4,
+        alpha: AlphaPolicy::Preserve,
+        encodings: vec![ColorEncoding::LinearSrgbD65],
+        nonfinite: NonFinitePolicy::Reject,
+    }
+}
+
 pub fn default_io_contract() -> InputOutputContract {
     let image = ImagePredicate {
         channels: 3,

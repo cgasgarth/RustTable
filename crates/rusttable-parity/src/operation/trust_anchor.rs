@@ -24,14 +24,14 @@ const MANIFEST_RGB_GAIN_NAME: &str = "rgb_gain";
 const GENERATED_RGB_GAIN_ALIAS: &str = "rgbgain";
 
 const EXPECTED_ARCHITECTURE_RECORDS: usize = 93;
-const EXPECTED_TRUSTED_RECORDS: usize = 54;
-const EXPECTED_MANIFEST_TRUSTED_RECORDS: usize = 52;
+const EXPECTED_TRUSTED_RECORDS: usize = 57;
+const EXPECTED_MANIFEST_TRUSTED_RECORDS: usize = 55;
 const EXPECTED_REGISTRY_ONLY_TRUSTED_RECORDS: usize = 2;
-const EXPECTED_MANIFEST_UNANCHORED_RECORDS: usize = 41;
+const EXPECTED_MANIFEST_UNANCHORED_RECORDS: usize = 38;
 // This is a cross-domain summary only: the two registry-only trusted contracts are included in
-// the 54-contract population but do not replace native manifest rows.  Keep it separate from the
-// 41 ordinary unanchored manifest records above.
-const EXPECTED_CROSS_DOMAIN_UNANCHORED_SUMMARY: usize = 39;
+// the 57-contract population but do not replace native manifest rows. Keep it separate from the
+// 38 ordinary unanchored manifest records above.
+const EXPECTED_CROSS_DOMAIN_UNANCHORED_SUMMARY: usize = 36;
 
 const GENERATED_COMPATIBILITY_ALIASES: &[(&str, &str)] = &[
     (MANIFEST_LENS_NAME, TRUSTED_LENS_NAME),
@@ -44,7 +44,6 @@ const GENERATED_COMPATIBILITY_ALIASES: &[(&str, &str)] = &[
 /// introduced record cannot silently acquire an Implemented status.
 const OPAQUE_DEFERRED_MANIFEST_NAMES: &[&str] = &[
     "atrous",
-    "basecurve",
     "bilat",
     "bilateral",
     "blurs",
@@ -66,7 +65,6 @@ const OPAQUE_DEFERRED_MANIFEST_NAMES: &[&str] = &[
     "gamma",
     "globaltonemap",
     "hazeremoval",
-    "highpass",
     "hotpixels",
     "lowlight",
     "lowpass",
@@ -80,7 +78,6 @@ const OPAQUE_DEFERRED_MANIFEST_NAMES: &[&str] = &[
     "rawprepare",
     "rgbcurve",
     "sigmoid",
-    "tonecurve",
     "toneequal",
     "tonemap",
     "zonesystem",
@@ -374,6 +371,151 @@ pub const TRUSTED_OPERATIONS: &[TrustedOperationContract] = &[
                 },
             ],
             evidence_identity: "f91171523d9920d7ccf4a564cbe16c6fc7710add90b0d4e565192d29f8b92ed1",
+        },
+    },
+    TrustedOperationContract {
+        compatibility_name: "basecurve",
+        rust_id: "rusttable.basecurve",
+        descriptor_version: 6,
+        parameter_version: 6,
+        implementation_version: 1,
+        native: TrustedRecord {
+            source_commit: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            source_snapshot: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            module_version: 6,
+            parameter_size: 520,
+            parameter_layout_hash: "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8",
+            native_order: Some(92),
+            reference_path: Some("src/iop/basecurve.c"),
+            source_abi_model: "x86_64-unknown-linux-gnu",
+            abi_identity: "ffc80e7d80332f183509039a2288d22fee2cfac55db8e8914b68d4a032ab3de3",
+            codec_identity: "d094e1f7a0866843983ea47771c3a250837f7ff699365362800ad31d50f99b18",
+            parameter_versions: &[
+                TrustedVersion {
+                    version: 1,
+                    byte_size: 52,
+                    layout_hash: "d63cecbb050f267481218175459f98ea7a9f05db1237f70cb3c6fc4d52c0987f",
+                    decoder: "rusttable.basecurve.decode.v1",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 2,
+                    byte_size: 504,
+                    layout_hash: "350774dd5d29c1c8eefa2d2c06a61d28063d709962cf3d52100a6958d8c49a3f",
+                    decoder: "rusttable.basecurve.decode.v2",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 3,
+                    byte_size: 512,
+                    layout_hash: "4c7e8161b209f41a8997c4bb70a273ea5e69f11299daa19774c672f6fbdc5d2d",
+                    decoder: "rusttable.basecurve.decode.v3",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 4,
+                    byte_size: 512,
+                    layout_hash: "4c7e8161b209f41a8997c4bb70a273ea5e69f11299daa19774c672f6fbdc5d2d",
+                    decoder: "rusttable.basecurve.decode.v4",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 5,
+                    byte_size: 516,
+                    layout_hash: "6b7ca6858c6aa91e9f9b90b38828a9a66ec52ca43b31d429815491782ba12001",
+                    decoder: "rusttable.basecurve.decode.v5",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 6,
+                    byte_size: 520,
+                    layout_hash: "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8",
+                    decoder: "rusttable.basecurve.decode.v6",
+                    opaque_blocking: false,
+                    abi_identity: "ffc80e7d80332f183509039a2288d22fee2cfac55db8e8914b68d4a032ab3de3",
+                    codec_identity: "d094e1f7a0866843983ea47771c3a250837f7ff699365362800ad31d50f99b18",
+                },
+            ],
+            evidence_identity: "0f03a0c515c10e087814d2765a6935696d3621bb567a4dff40fbe82313dbcfcc",
+        },
+        audited: TrustedRecord {
+            source_commit: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            source_snapshot: "d8628e8103989bc4ef06dbfb9fd01f3809f884bf",
+            module_version: 6,
+            parameter_size: 520,
+            parameter_layout_hash: "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8",
+            native_order: None,
+            reference_path: None,
+            source_abi_model: "x86_64-unknown-linux-gnu",
+            abi_identity: "ffc80e7d80332f183509039a2288d22fee2cfac55db8e8914b68d4a032ab3de3",
+            codec_identity: "d094e1f7a0866843983ea47771c3a250837f7ff699365362800ad31d50f99b18",
+            parameter_versions: &[
+                TrustedVersion {
+                    version: 1,
+                    byte_size: 52,
+                    layout_hash: "d63cecbb050f267481218175459f98ea7a9f05db1237f70cb3c6fc4d52c0987f",
+                    decoder: "rusttable.basecurve.decode.v1",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 2,
+                    byte_size: 504,
+                    layout_hash: "350774dd5d29c1c8eefa2d2c06a61d28063d709962cf3d52100a6958d8c49a3f",
+                    decoder: "rusttable.basecurve.decode.v2",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 3,
+                    byte_size: 512,
+                    layout_hash: "4c7e8161b209f41a8997c4bb70a273ea5e69f11299daa19774c672f6fbdc5d2d",
+                    decoder: "rusttable.basecurve.decode.v3",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 4,
+                    byte_size: 512,
+                    layout_hash: "4c7e8161b209f41a8997c4bb70a273ea5e69f11299daa19774c672f6fbdc5d2d",
+                    decoder: "rusttable.basecurve.decode.v4",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 5,
+                    byte_size: 516,
+                    layout_hash: "6b7ca6858c6aa91e9f9b90b38828a9a66ec52ca43b31d429815491782ba12001",
+                    decoder: "rusttable.basecurve.decode.v5",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 6,
+                    byte_size: 520,
+                    layout_hash: "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8",
+                    decoder: "rusttable.basecurve.decode.v6",
+                    opaque_blocking: false,
+                    abi_identity: "ffc80e7d80332f183509039a2288d22fee2cfac55db8e8914b68d4a032ab3de3",
+                    codec_identity: "d094e1f7a0866843983ea47771c3a250837f7ff699365362800ad31d50f99b18",
+                },
+            ],
+            evidence_identity: "0f03a0c515c10e087814d2765a6935696d3621bb567a4dff40fbe82313dbcfcc",
         },
     },
     TrustedOperationContract {
@@ -2213,6 +2355,57 @@ pub const TRUSTED_OPERATIONS: &[TrustedOperationContract] = &[
         },
     },
     TrustedOperationContract {
+        compatibility_name: "highpass",
+        rust_id: "rusttable.highpass",
+        descriptor_version: 1,
+        parameter_version: 1,
+        implementation_version: 1,
+        native: TrustedRecord {
+            source_commit: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            source_snapshot: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            module_version: 1,
+            parameter_size: 8,
+            parameter_layout_hash: "63d81ca88d8255603f54e7e660198dc3f59d43d8f94d0a3564005c4f58bf4f0c",
+            native_order: Some(68),
+            reference_path: Some("src/iop/highpass.c"),
+            source_abi_model: "x86_64-unknown-linux-gnu",
+            abi_identity: "b89aceff81335954d0d4a170ea77a486407e84d1b8a9eae913bd7784299b47d3",
+            codec_identity: "5a3da642766fedbc22359f8aa1aff025d2d251b4071f10a78b5ddcb6c2d62e5c",
+            parameter_versions: &[TrustedVersion {
+                version: 1,
+                byte_size: 8,
+                layout_hash: "d28caef95b9206275ded40c6fbad0f2c25aca47dca471562e85e72f59f024a0d",
+                decoder: "generated.bytes.decode.v1",
+                opaque_blocking: false,
+                abi_identity: "b89aceff81335954d0d4a170ea77a486407e84d1b8a9eae913bd7784299b47d3",
+                codec_identity: "5a3da642766fedbc22359f8aa1aff025d2d251b4071f10a78b5ddcb6c2d62e5c",
+            }],
+            evidence_identity: "f6d0fe2d411ce77b473c9a23947aa6aa8998ec801715ce8a2ef9926c0c3d0da7",
+        },
+        audited: TrustedRecord {
+            source_commit: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            source_snapshot: "d8628e8103989bc4ef06dbfb9fd01f3809f884bf",
+            module_version: 1,
+            parameter_size: 8,
+            parameter_layout_hash: "16e017dcdff0e8e3c63ac96055fbf1c4d283a7f640600cb94495fa8e8c65451d",
+            native_order: None,
+            reference_path: None,
+            source_abi_model: "x86_64-unknown-linux-gnu",
+            abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            parameter_versions: &[TrustedVersion {
+                version: 1,
+                byte_size: 8,
+                layout_hash: "d28caef95b9206275ded40c6fbad0f2c25aca47dca471562e85e72f59f024a0d",
+                decoder: "opaque",
+                opaque_blocking: true,
+                abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            }],
+            evidence_identity: "f6d0fe2d411ce77b473c9a23947aa6aa8998ec801715ce8a2ef9926c0c3d0da7",
+        },
+    },
+    TrustedOperationContract {
         compatibility_name: "invert",
         rust_id: "rusttable.invert",
         descriptor_version: 2,
@@ -3600,6 +3793,115 @@ pub const TRUSTED_OPERATIONS: &[TrustedOperationContract] = &[
                 },
             ],
             evidence_identity: "a6ac0d5dd65a583779971895c85ef244837900eb2ada3920563675e433020743",
+        },
+    },
+    TrustedOperationContract {
+        compatibility_name: "tonecurve",
+        rust_id: "rusttable.tonecurve",
+        descriptor_version: 5,
+        parameter_version: 5,
+        implementation_version: 1,
+        native: TrustedRecord {
+            source_commit: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            source_snapshot: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            module_version: 5,
+            parameter_size: 520,
+            parameter_layout_hash: "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332",
+            native_order: Some(73),
+            reference_path: Some("src/iop/tonecurve.c"),
+            source_abi_model: "x86_64-unknown-linux-gnu",
+            abi_identity: "bd47e62aef28f7f325af80385c944aed1cfa7515c7e137da7bf0963d0f26d85c",
+            codec_identity: "61256607a96be3dd832c9dbc1ce160a436b8f08ffca415024572d9851fcc4dad",
+            parameter_versions: &[
+                TrustedVersion {
+                    version: 1,
+                    byte_size: 52,
+                    layout_hash: "d63cecbb050f267481218175459f98ea7a9f05db1237f70cb3c6fc4d52c0987f",
+                    decoder: "rusttable.tonecurve.decode.v1",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 3,
+                    byte_size: 512,
+                    layout_hash: "d52e3e3aa3c5f8c3fa1afd20dc36a5382b4b20bc6ccda90fad496c32a79c93ac",
+                    decoder: "rusttable.tonecurve.decode.v3",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 4,
+                    byte_size: 516,
+                    layout_hash: "8257087257a3dc8981ce6ea4a7a24f0a7d1c16805f10a6aae4b2c714cfd2b31a",
+                    decoder: "rusttable.tonecurve.decode.v4",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 5,
+                    byte_size: 520,
+                    layout_hash: "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332",
+                    decoder: "rusttable.tonecurve.decode.v5",
+                    opaque_blocking: false,
+                    abi_identity: "bd47e62aef28f7f325af80385c944aed1cfa7515c7e137da7bf0963d0f26d85c",
+                    codec_identity: "61256607a96be3dd832c9dbc1ce160a436b8f08ffca415024572d9851fcc4dad",
+                },
+            ],
+            evidence_identity: "6f4198c4c2fb4d637e62431748900ec23e3967f4e93a72c07a07acb3833e17f8",
+        },
+        audited: TrustedRecord {
+            source_commit: "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+            source_snapshot: "d8628e8103989bc4ef06dbfb9fd01f3809f884bf",
+            module_version: 5,
+            parameter_size: 520,
+            parameter_layout_hash: "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332",
+            native_order: None,
+            reference_path: None,
+            source_abi_model: "x86_64-unknown-linux-gnu",
+            abi_identity: "bd47e62aef28f7f325af80385c944aed1cfa7515c7e137da7bf0963d0f26d85c",
+            codec_identity: "61256607a96be3dd832c9dbc1ce160a436b8f08ffca415024572d9851fcc4dad",
+            parameter_versions: &[
+                TrustedVersion {
+                    version: 1,
+                    byte_size: 52,
+                    layout_hash: "d63cecbb050f267481218175459f98ea7a9f05db1237f70cb3c6fc4d52c0987f",
+                    decoder: "rusttable.tonecurve.decode.v1",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 3,
+                    byte_size: 512,
+                    layout_hash: "d52e3e3aa3c5f8c3fa1afd20dc36a5382b4b20bc6ccda90fad496c32a79c93ac",
+                    decoder: "rusttable.tonecurve.decode.v3",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 4,
+                    byte_size: 516,
+                    layout_hash: "8257087257a3dc8981ce6ea4a7a24f0a7d1c16805f10a6aae4b2c714cfd2b31a",
+                    decoder: "rusttable.tonecurve.decode.v4",
+                    opaque_blocking: false,
+                    abi_identity: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                    codec_identity: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                },
+                TrustedVersion {
+                    version: 5,
+                    byte_size: 520,
+                    layout_hash: "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332",
+                    decoder: "rusttable.tonecurve.decode.v5",
+                    opaque_blocking: false,
+                    abi_identity: "bd47e62aef28f7f325af80385c944aed1cfa7515c7e137da7bf0963d0f26d85c",
+                    codec_identity: "61256607a96be3dd832c9dbc1ce160a436b8f08ffca415024572d9851fcc4dad",
+                },
+            ],
+            evidence_identity: "6f4198c4c2fb4d637e62431748900ec23e3967f4e93a72c07a07acb3833e17f8",
         },
     },
     TrustedOperationContract {
@@ -5028,7 +5330,7 @@ fn validate_architecture_manifest_names(
         .count();
     // The two registry-only aliases are trusted contracts without native manifest rows. Keep them
     // in the trusted-contract total while counting only manifest-backed records here. The
-    // cross-domain 54/39 summary is intentionally separate from the native 52/41 row split.
+    // cross-domain 57/36 summary is intentionally separate from the native 55/38 row split.
     let manifest_unanchored_count = expected.len().saturating_sub(anchored_count);
     let registry_only_count = trusted_contract_count.saturating_sub(anchored_count);
     let cross_domain_unanchored_summary = expected.len().saturating_sub(trusted_contract_count);
@@ -5313,4 +5615,39 @@ pub fn validate_trusted_registry_entries(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trusted_operation;
+
+    #[test]
+    fn tonal_contracts_pin_native_and_legacy_parameter_sizes() {
+        for (name, expected_sizes) in [
+            ("basecurve", &[52, 504, 512, 512, 516, 520][..]),
+            ("tonecurve", &[52, 512, 516, 520][..]),
+        ] {
+            let contract = trusted_operation(name).expect("tonal trust contract");
+            assert_eq!(
+                contract.native.parameter_size,
+                *expected_sizes.last().unwrap()
+            );
+            assert_eq!(
+                contract
+                    .native
+                    .parameter_versions
+                    .iter()
+                    .map(|version| version.byte_size)
+                    .collect::<Vec<_>>(),
+                expected_sizes
+            );
+            assert!(
+                contract
+                    .native
+                    .parameter_versions
+                    .iter()
+                    .all(|version| !version.opaque_blocking)
+            );
+        }
+    }
 }

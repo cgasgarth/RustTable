@@ -14,10 +14,11 @@ mod organization;
 pub use accounting::{OrganizationAccountingEntry, SOURCE_ACCOUNTING};
 pub use history::{
     CompatHistory, CompatHistoryHash, CompatHistoryStep, CompatModuleInstance, CompatModuleOrder,
-    DARKTABLE_ORDER_RULES, DarktableOperationManifest, EnabledState, HistoryDecodeOptions,
-    HistoryDecoder, HistoryLimits, HistoryOrderSource, HistorySelection, ModuleInstanceId,
-    ModuleOrderEntry, ModuleOrderRule, ModuleOrderVersion, OpaquePayload, OperationCompatibility,
-    OperationIdentity,
+    DARKTABLE_BLEND_PARAMETER_BYTES, DARKTABLE_BLEND_VERSION, DARKTABLE_ORDER_RULES,
+    DarktableOperationManifest, EnabledState, HistoryDecodeOptions, HistoryDecoder, HistoryLimits,
+    HistoryOrderSource, HistorySelection, ModuleInstanceId, ModuleOrderEntry, ModuleOrderRule,
+    ModuleOrderVersion, OpaquePayload, OperationCompatibility, OperationIdentity,
+    identity_blend_v14_bytes, is_identity_blend_v14,
 };
 pub use organization::{
     ColorLabel, ColorLabelRecord, DarktableRating, DecodeOptions, Finding, FindingCode,

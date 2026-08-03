@@ -1,9 +1,9 @@
 //! Bounded Basecurve CPU leaf ported from `src/iop/basecurve.c`.
 //!
-//! This module deliberately is not exposed through the processing registry yet. Its
-//! public surface is the source-faithful history/default/curve/CPU contract that an
-//! integration owner can route later. Exposure fusion, GPU, GTK, masks, blending,
-//! and production routing remain explicitly unavailable.
+//! The bounded production surface includes history/default/curve/CPU contracts,
+//! registry routing, and specialized CPU pixelpipe dispatch. GPU, GTK, masks,
+//! outer blending, preset integration, and exposure fusion remain explicitly
+//! unavailable.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -21,6 +21,7 @@
     clippy::struct_field_names,
     clippy::large_types_passed_by_value,
     clippy::match_same_arms,
+    clippy::must_use_candidate,
     clippy::unreadable_literal,
     clippy::unused_self,
     dead_code,
@@ -39,6 +40,7 @@ use std::sync::Arc;
 use rusttable_processing::common::curve_tools::{
     Curve, CurveAnchor, CurveBounds, CurveError, CurveType, sample_curve_v1,
 };
+use rusttable_processing::{RgbChannel, WorkingFrameDescriptor};
 
 mod presets;
 pub mod source_map;
@@ -48,6 +50,43 @@ pub use presets::{
     BasecurvePresetRegistration, basecurve_camera_presets, basecurve_presets, check_camera,
     init_presets, match_pattern, reload_defaults,
 };
+
+/// Checked v6 parameters carried by the processing graph.
+#[derive(Debug, Clone, Copy)]
+pub struct BasecurveConfig {
+    parameters: BasecurveParameters,
+}
+
+impl BasecurveConfig {
+    #[must_use]
+    pub const fn new(parameters: BasecurveParameters) -> Self {
+        Self { parameters }
+    }
+
+    #[must_use]
+    pub const fn parameters(self) -> BasecurveParameters {
+        self.parameters
+    }
+
+    #[must_use]
+    pub fn payload(self) -> [u8; BASECURVE_V6_PARAMETER_BYTES] {
+        self.parameters.to_bytes()
+    }
+}
+
+impl PartialEq for BasecurveConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.payload() == other.payload()
+    }
+}
+
+impl Eq for BasecurveConfig {}
+
+impl std::hash::Hash for BasecurveConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.payload().hash(state);
+    }
+}
 
 pub const BASECURVE_COMPATIBILITY_ID: &str = "basecurve";
 pub const BASECURVE_RUST_ID: &str = "rusttable.basecurve";
@@ -605,6 +644,8 @@ pub enum BasecurveCompileError {
     UnsupportedExposureFusion { steps: i32 },
     InvalidNodeCount { count: i32 },
     InvalidCurveType { curve_type: i32 },
+    InvalidExtrapolationEndpoint,
+    NonFiniteExtrapolationCoefficient { coefficient: usize },
     Curve(CurveError),
     UnexpectedSampleCount { expected: usize, actual: usize },
     AllocationFailed { required_bytes: usize },
@@ -624,6 +665,12 @@ impl fmt::Display for BasecurveCompileError {
             Self::InvalidCurveType { curve_type } => write!(
                 formatter,
                 "Basecurve interpolation type {curve_type} is unsupported"
+            ),
+            Self::InvalidExtrapolationEndpoint => formatter
+                .write_str("Basecurve extrapolation endpoint must be finite and strictly positive"),
+            Self::NonFiniteExtrapolationCoefficient { coefficient } => write!(
+                formatter,
+                "Basecurve extrapolation coefficient {coefficient} is non-finite"
             ),
             Self::Curve(source) => {
                 write!(formatter, "Basecurve curve compilation failed: {source}")
@@ -670,6 +717,7 @@ pub struct BasecurveCapabilities {
     pub gtk: bool,
     pub consumes_masks: bool,
     pub outer_blending: DeferredCapability,
+    /// Registry, typed history, and specialized CPU pixelpipe routing.
     pub production_routing: DeferredCapability,
     pub tiling: BasecurveTiling,
 }
@@ -683,7 +731,7 @@ impl BasecurveCapabilities {
             gtk: false,
             consumes_masks: false,
             outer_blending: DeferredCapability::Deferred,
-            production_routing: DeferredCapability::Deferred,
+            production_routing: DeferredCapability::Supported,
             tiling: BasecurveTiling {
                 factor_milli: 2_000,
                 overlap_pixels: 0,
@@ -711,9 +759,13 @@ impl BasecurveCapabilities {
     }
 
     pub const fn require_production_routing(self) -> Result<(), BasecurveExecutionError> {
-        Err(BasecurveExecutionError::UnsupportedCapability(
-            "Basecurve production routing is deferred",
-        ))
+        if matches!(self.production_routing, DeferredCapability::Supported) {
+            Ok(())
+        } else {
+            Err(BasecurveExecutionError::UnsupportedCapability(
+                "Basecurve production routing is unavailable",
+            ))
+        }
     }
 }
 
@@ -742,6 +794,10 @@ impl BasecurvePlan {
             .copied()
             .map(|node| CurveAnchor::new(node.x, node.y))
             .collect();
+        let last_x = anchors[count as usize - 1].x();
+        if !last_x.is_finite() || last_x <= 0.0 {
+            return Err(BasecurveCompileError::InvalidExtrapolationEndpoint);
+        }
         let curve = Curve::new(curve_type, CurveBounds::unit(), &anchors)
             .map_err(BasecurveCompileError::Curve)?;
         let samples = sample_curve_v1(&curve, LUT_RESOLUTION_U32, LUT_RESOLUTION_U32)
@@ -763,10 +819,12 @@ impl BasecurvePlan {
                 .map(|sample| f32::from(sample) / LUT_RESOLUTION as f32),
         );
         let table: Arc<[f32]> = Arc::from(table);
-        let last_x = anchors[count as usize - 1].x();
         let x = [0.7 * last_x, 0.8 * last_x, 0.9 * last_x, last_x];
         let y = x.map(|value| table[lookup_index(value)]);
         let coefficients = estimate_exp(x, y);
+        if let Some(coefficient) = coefficients.iter().position(|value| !value.is_finite()) {
+            return Err(BasecurveCompileError::NonFiniteExtrapolationCoefficient { coefficient });
+        }
         Ok(Self {
             parameters,
             table,
@@ -804,6 +862,9 @@ impl BasecurvePlan {
         profile: Option<&BasecurveProfileEvidence>,
         cancelled: F,
     ) -> Result<Vec<BasecurvePixel>, BasecurveExecutionError> {
+        if self.parameters.preserve_colors == DT_RGB_NORM_LUMINANCE && profile.is_none() {
+            return Err(BasecurveExecutionError::MissingProfileEvidence);
+        }
         if cancelled() {
             return Err(BasecurveExecutionError::Cancelled);
         }
@@ -834,7 +895,22 @@ impl BasecurvePlan {
                     profile,
                 )
             };
+            for (channel, value) in channels[..3].iter().copied().enumerate() {
+                if !value.is_finite() {
+                    return Err(BasecurveExecutionError::NonFiniteOutput {
+                        pixel: index,
+                        channel: match channel {
+                            0 => RgbChannel::Red,
+                            1 => RgbChannel::Green,
+                            _ => RgbChannel::Blue,
+                        },
+                    });
+                }
+            }
             output.push(BasecurvePixel::from_channels(channels));
+        }
+        if cancelled() {
+            return Err(BasecurveExecutionError::Cancelled);
         }
         Ok(output)
     }
@@ -971,6 +1047,8 @@ impl BasecurvePixel {
 pub enum BasecurveExecutionError {
     Cancelled,
     AllocationFailed { required_bytes: usize },
+    NonFiniteOutput { pixel: usize, channel: RgbChannel },
+    MissingProfileEvidence,
     UnsupportedCapability(&'static str),
 }
 
@@ -982,6 +1060,13 @@ impl fmt::Display for BasecurveExecutionError {
                 formatter,
                 "Basecurve output allocation of {required_bytes} bytes failed"
             ),
+            Self::NonFiniteOutput { pixel, channel } => write!(
+                formatter,
+                "Basecurve produced a non-finite {channel:?} at pixel {pixel}"
+            ),
+            Self::MissingProfileEvidence => {
+                formatter.write_str("Basecurve RGB luminance requires working-profile evidence")
+            }
             Self::UnsupportedCapability(reason) => {
                 write!(formatter, "unsupported Basecurve capability: {reason}")
             }
@@ -1058,10 +1143,11 @@ impl fmt::Display for BasecurveProfileError {
 
 impl std::error::Error for BasecurveProfileError {}
 
-/// Explicit ICC evidence required by the native working-profile luminance path.
+/// Explicit evidence required by the native working-profile luminance path.
 ///
-/// `WorkingFrameDescriptor` is intentionally not accepted here: it carries no
-/// ICC LUTs or unbounded coefficients and therefore cannot justify this path.
+/// A selected linear `WorkingFrameDescriptor` can provide matrix-only evidence;
+/// native nonlinear TRC branches still require explicit ICC LUTs and unbounded
+/// coefficients and must not be inferred from the frame descriptor.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BasecurveProfileEvidence {
     matrix_in: [[f32; 3]; 3],
@@ -1072,6 +1158,20 @@ pub struct BasecurveProfileEvidence {
 }
 
 impl BasecurveProfileEvidence {
+    /// Resolves the selected linear working frame without inventing ICC data.
+    #[must_use]
+    pub fn from_working_frame(frame: WorkingFrameDescriptor) -> Option<Self> {
+        let matrix_in = frame.matrix_in()?;
+        Self::new(
+            matrix_in,
+            std::array::from_fn(|_| vec![-1.0]),
+            [[0.0; 3]; 3],
+            0,
+            false,
+        )
+        .ok()
+    }
+
     pub fn new(
         matrix_in: [[f32; 3]; 3],
         lut_in: [Vec<f32>; 3],
@@ -1079,16 +1179,23 @@ impl BasecurveProfileEvidence {
         lutsize: usize,
         nonlinearlut: bool,
     ) -> Result<Self, BasecurveProfileError> {
-        if lutsize == 0 {
+        let reads_lut = nonlinearlut
+            && lut_in
+                .iter()
+                .any(|values| values.first().is_some_and(|value| *value >= 0.0));
+        if reads_lut && lutsize == 0 {
             return Err(BasecurveProfileError::ZeroLutSize);
         }
-        if lutsize < 2 {
+        if reads_lut && lutsize < 2 {
             return Err(BasecurveProfileError::LutSizeTooSmall { actual: lutsize });
         }
-        if matrix_in.iter().flatten().any(|value| !value.is_finite()) {
+        if matrix_in[1].iter().any(|value| !value.is_finite()) {
             return Err(BasecurveProfileError::MatrixNonFinite);
         }
         for (channel, coefficients) in unbounded_coeffs_in.into_iter().enumerate() {
+            if !nonlinearlut || !lut_in[channel].first().is_some_and(|value| *value >= 0.0) {
+                continue;
+            }
             for (coefficient, value) in coefficients.into_iter().enumerate() {
                 if !value.is_finite() {
                     return Err(BasecurveProfileError::CoefficientNonFinite {
@@ -1099,7 +1206,7 @@ impl BasecurveProfileEvidence {
             }
         }
         for (channel, values) in lut_in.iter().enumerate() {
-            if values.first().is_some_and(|value| *value >= 0.0) {
+            if nonlinearlut && values.first().is_some_and(|value| *value >= 0.0) {
                 if values.len() < lutsize {
                     return Err(BasecurveProfileError::LutTooShort {
                         channel,
@@ -1161,10 +1268,10 @@ impl BasecurveProfileEvidence {
     }
 }
 
-/// Explicitly rejects the tempting but incorrect profile inference boundary.
+/// Explicitly rejects incomplete nonlinear profile inference from a frame.
 pub const fn unsupported_working_frame_profile()
 -> Result<BasecurveProfileEvidence, BasecurveProfileError> {
     Err(BasecurveProfileError::UnsupportedCapability(
-        "WorkingFrameDescriptor does not carry native ICC LUT evidence",
+        "WorkingFrameDescriptor does not carry native ICC LUT evidence for nonlinear TRC",
     ))
 }

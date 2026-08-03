@@ -126,6 +126,45 @@ impl WorkingFrameDescriptor {
         self.provenance
     }
 
+    /// Returns matrix evidence for a selected linear RGB working profile.
+    ///
+    /// The working frame is already linear, so this deliberately exposes only
+    /// matrix evidence. It never manufactures ICC LUT samples or promotes a
+    /// fallback frame into a selected profile.
+    #[must_use]
+    pub fn matrix_in(self) -> Option<[[f32; 3]; 3]> {
+        if self.provenance != WorkingProfileProvenance::Selected
+            || self.transfer != TransferFunction::Linear
+        {
+            return None;
+        }
+        let matrix = if let Some(space) = self.encoding.builtin() {
+            space.primaries()?;
+            space.to_xyz_matrix()?
+        } else if matches!(self.encoding, ColorEncoding::External(_)) {
+            let pair = |value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)| {
+                (value.0.get(), value.1.get())
+            };
+            rusttable_color::rgb_to_xyz_matrix(
+                [
+                    pair(self.primaries.red()),
+                    pair(self.primaries.green()),
+                    pair(self.primaries.blue()),
+                ],
+                self.white_point,
+            )
+            .ok()?
+        } else {
+            return None;
+        };
+        let rows = matrix.rows();
+        Some([
+            [rows[0], rows[1], rows[2]],
+            [rows[3], rows[4], rows[5]],
+            [rows[6], rows[7], rows[8]],
+        ])
+    }
+
     #[must_use]
     /// # Panics
     ///

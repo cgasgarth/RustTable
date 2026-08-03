@@ -38,16 +38,46 @@ pub const RESPONSIBILITIES: &[Responsibility] = &[
     Responsibility {
         native_symbol: "process_cl",
         source: "data/kernels/basic.cl",
-        status: "GPU unavailable; CPU/OpenCL threshold mismatch is not approximated",
+        status: "deferred: GPU unavailable; CPU/OpenCL threshold mismatch is not approximated",
     },
     Responsibility {
         native_symbol: "gui_init/gui_changed",
         source: "src/iop/tonecurve.c",
-        status: "GTK/UI deferred and not projected through generic controls",
+        status: "deferred: GTK/UI is not projected through generic controls",
     },
     Responsibility {
-        native_symbol: "registry/history/pixelpipe/blending/presets",
-        source: "src/iop/tonecurve.c and integration hubs",
-        status: "deferred outside operation-local ownership",
+        native_symbol: "production registry / operation descriptor",
+        source: "src/iop/tonecurve.c and processing integration hubs",
+        status: "implemented",
+    },
+    Responsibility {
+        native_symbol: "typed history import",
+        source: "src/iop/tonecurve.c and production history route",
+        status: "implemented",
+    },
+    Responsibility {
+        native_symbol: "CPU pixelpipe dispatch",
+        source: "processing evaluator and pixelpipe integration hubs",
+        status: "implemented",
+    },
+    Responsibility {
+        native_symbol: "snapshot identity",
+        source: "processing operation configuration and pixelpipe snapshot",
+        status: "implemented",
+    },
+    Responsibility {
+        native_symbol: "presets",
+        source: "src/iop/tonecurve.c and shared preset owners",
+        status: "deferred",
+    },
+    Responsibility {
+        native_symbol: "runtime mask coverage / operation opacity",
+        source: "shared pixelpipe owners",
+        status: "implemented by the dedicated Lab D50 CPU route",
+    },
+    Responsibility {
+        native_symbol: "imported native blend/mask payloads",
+        source: "src/develop/blend.c and production import owners",
+        status: "deferred: opaque native blend/mask blobs are not materialized or interpreted",
     },
 ];

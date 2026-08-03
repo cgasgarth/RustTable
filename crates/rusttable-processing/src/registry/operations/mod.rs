@@ -9,22 +9,22 @@ mod clipping;
 mod liquify;
 mod rasterfile;
 use super::{
-    CpuFactory, CpuPrepare, DefinitionAvailability, ExecutionBackend, FactoryError, GpuBinding,
-    ImplementationIdentity, MigrationBinding, OperationCapability, OperationDefinition,
-    OperationUiAvailability, PreparedCpuOperation, REGISTRY_BUILD_ID, REGISTRY_SCHEMA,
-    RegistryValidationError, RoiKind,
+    CpuExecutionRoute, CpuFactory, CpuPrepare, DefinitionAvailability, ExecutionBackend,
+    FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding, OperationCapability,
+    OperationDefinition, OperationUiAvailability, PreparedCpuOperation, REGISTRY_BUILD_ID,
+    REGISTRY_SCHEMA, RegistryValidationError, RoiKind,
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
-    DescriptorId, OperationDescriptor, OperationFlags, agx_descriptor, bloom_descriptor,
-    channelmixer_descriptor, colorcontrast_descriptor, colormapping_descriptor,
+    DescriptorId, OperationDescriptor, OperationFlags, agx_descriptor, basecurve_descriptor,
+    bloom_descriptor, channelmixer_descriptor, colorcontrast_descriptor, colormapping_descriptor,
     colortransfer_descriptor, colorzones_descriptor, crop_descriptor, dither_descriptor,
     enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
-    graduatednd_descriptor, grain_descriptor, invert_descriptor, levels_descriptor,
-    linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor, rgblevels_descriptor,
-    rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor, sharpen_descriptor,
-    soften_descriptor, temperature_descriptor, velvia_descriptor, vibrance_descriptor,
-    vignette_descriptor,
+    graduatednd_descriptor, grain_descriptor, highpass_descriptor, invert_descriptor,
+    levels_descriptor, linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor,
+    rgblevels_descriptor, rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor,
+    sharpen_descriptor, soften_descriptor, temperature_descriptor, tonecurve_descriptor,
+    velvia_descriptor, vibrance_descriptor, vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -38,6 +38,7 @@ pub(super) fn unavailable(reason: &str) -> OperationCapability {
         backend: ExecutionBackend::Cpu,
         available: false,
         reason: Some(reason.to_owned()),
+        cpu_route: None,
     }
 }
 pub(super) fn validate_definition(
@@ -71,6 +72,7 @@ pub(super) fn validate_definition(
                             .descriptor
                             .flags
                             .contains(OperationFlags::ANALYSIS)
+                    || cpu.execute.is_some() != cpu.execution_route.generic_executor_available()
             }))
     {
         findings.push(RegistryValidationError::CapabilityMismatch(
@@ -178,6 +180,38 @@ pub(super) fn hex(bytes: &[u8; 32]) -> String {
 pub fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     super::reconstruction::operation_descriptor_for(operation)
 }
+fn prepare_basecurve(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_basecurve(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_highpass(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_highpass(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_tonecurve(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare_without_executor(
+        ProcessingOperation::compile_tonecurve(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+    )
+}
+
 fn prepare_exposure(
     operation: &Operation,
     descriptor: &DescriptorId,
@@ -689,6 +723,83 @@ pub fn graduatednd_definition() -> OperationDefinition {
     )
 }
 
+pub fn basecurve_definition() -> OperationDefinition {
+    geometry_definition(
+        basecurve_descriptor(),
+        prepare_basecurve,
+        &[
+            "iop.basecurve.params.v1-v6",
+            "iop.basecurve.cpu.linear-rgb-lut",
+            "iop.basecurve.cpu.nonfusion-full-frame",
+            "iop.basecurve.alpha-preserve",
+            "iop.basecurve.profile-evidence-branch",
+            "iop.basecurve.exposure-fusion-deferred",
+            "iop.basecurve.gpu-unavailable",
+            "iop.basecurve.ui-unavailable",
+        ],
+        RoiKind::Identity,
+        (1..6).map(|version| {
+            MigrationBinding::new(
+                version,
+                version + 1,
+                format!("basecurve.migration.v{version}-v{}", version + 1),
+            )
+        }),
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Base Curve GTK controls and preset workflow are not ported".to_owned(),
+    })
+}
+
+pub fn highpass_definition() -> OperationDefinition {
+    routed_geometry_definition(
+        highpass_descriptor(),
+        prepare_highpass,
+        &[
+            "iop.highpass.params.v1",
+            "iop.highpass.cpu.lab-d50-box-filter",
+            "iop.highpass.cpu.eight-box-passes",
+            "iop.highpass.cpu.dynamic-overlap",
+            "iop.highpass.alpha-zero-publication",
+            "iop.highpass.gpu-unavailable",
+            "iop.highpass.ui-unavailable",
+        ],
+        RoiKind::Neighborhood,
+        std::iter::empty(),
+        CpuExecutionRoute::LabD50Pixelpipe,
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Highpass GTK controls are not ported".to_owned(),
+    })
+}
+
+pub fn tonecurve_definition() -> OperationDefinition {
+    routed_geometry_definition(
+        tonecurve_descriptor(),
+        prepare_tonecurve,
+        &[
+            "iop.tonecurve.params.v1-v5",
+            "iop.tonecurve.cpu.lab-d50-lut",
+            "iop.tonecurve.cpu.autoscale-and-lut",
+            "iop.tonecurve.cpu.alpha-preserve",
+            "iop.tonecurve.runtime-mask-coverage-and-opacity",
+            "iop.tonecurve.imported-native-blend-mask-deferred",
+            "iop.tonecurve.gpu-unavailable",
+            "iop.tonecurve.ui-unavailable",
+        ],
+        RoiKind::Identity,
+        [
+            MigrationBinding::new(1, 5, "tonecurve.migration.v1-v5"),
+            MigrationBinding::new(3, 5, "tonecurve.migration.v3-v5"),
+            MigrationBinding::new(4, 5, "tonecurve.migration.v4-v5"),
+        ],
+        CpuExecutionRoute::LabD50Pixelpipe,
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Tone Curve GTK controls and histogram workflow are not ported".to_owned(),
+    })
+}
+
 pub fn agx_definition() -> OperationDefinition {
     geometry_definition(
         agx_descriptor(),
@@ -1103,6 +1214,37 @@ pub fn temperature_definition() -> OperationDefinition {
     )
 }
 
+fn routed_geometry_definition(
+    descriptor: OperationDescriptor,
+    prepare: CpuPrepare,
+    evidence: &'static [&'static str],
+    roi: RoiKind,
+    migrations: impl IntoIterator<Item = MigrationBinding>,
+    execution_route: CpuExecutionRoute,
+) -> OperationDefinition {
+    let tileable = descriptor.flags.contains(OperationFlags::TILEABLE);
+    let full_image_analysis = descriptor.flags.contains(OperationFlags::ANALYSIS);
+    let compatibility = descriptor.id.compatibility_name.clone();
+    OperationDefinition::new(
+        descriptor,
+        Some(CpuFactory::new_routed(
+            prepare,
+            execution_route,
+            roi,
+            tileable,
+            full_image_analysis,
+        )),
+        None,
+        migrations.into_iter().collect(),
+        ImplementationIdentity::new(
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+            1,
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+        ),
+        evidence.iter().map(|id| (*id).to_owned()).collect(),
+    )
+}
+
 fn geometry_definition(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
@@ -1410,10 +1552,13 @@ macro_rules! builtin_operations {
             $crate::registry::sharpen_definition,
             $crate::registry::clahe_definition,
             $crate::registry::dither_definition,
+            $crate::registry::highpass_definition,
             $crate::registry::grain_definition,
             $crate::registry::colortransfer_definition,
             $crate::registry::colormapping_definition,
             $crate::registry::rgblevels_definition,
+            $crate::registry::basecurve_definition,
+            $crate::registry::tonecurve_definition,
             $crate::registry::agx_definition,
             $crate::registry::levels_definition,
             $crate::registry::relight_definition,

@@ -82,6 +82,78 @@ fn applies_registered_edits_through_the_production_cpu_pixelpipe() {
 }
 
 #[test]
+fn promoted_cpu_operations_reach_preview_service_without_gpu_claims() {
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("fixtures/corpus/assets/raster-png-16-alpha.png");
+    let promoted_edit = edit([
+        Operation::new(
+            OperationId::new(5).expect("valid operation ID"),
+            OperationKey::new("rusttable.basecurve").expect("valid operation key"),
+            true,
+            [],
+        )
+        .expect("valid Base Curve operation"),
+        Operation::new(
+            OperationId::new(6).expect("valid operation ID"),
+            OperationKey::new("rusttable.highpass").expect("valid operation key"),
+            true,
+            [
+                (
+                    ParameterName::new("sharpness").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(50.0).expect("finite parameter")),
+                ),
+                (
+                    ParameterName::new("contrast").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(50.0).expect("finite parameter")),
+                ),
+            ],
+        )
+        .expect("valid Highpass operation"),
+        Operation::new(
+            OperationId::new(7).expect("valid operation ID"),
+            OperationKey::new("rusttable.tonecurve").expect("valid operation key"),
+            true,
+            [],
+        )
+        .expect("valid Tone Curve operation"),
+    ]);
+    let service = PreviewService::new(
+        DecodeLimits::new(32 * 1024 * 1024, 4096, 4096, 16_777_216, 64 * 1024 * 1024)
+            .expect("valid limits"),
+        PreviewBounds::new(64, 64).expect("valid bounds"),
+    );
+    let source_limits = ImportSourceLimits::new(32 * 1024 * 1024).expect("source cap");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&source, source_limits)
+        .expect("fixture snapshot");
+    let bytes = snapshot.materialize(source_limits).expect("fixture bytes");
+
+    let source = service
+        .render_bytes(&bytes, &edit([]))
+        .expect("source-alpha baseline renders");
+    let output = service
+        .render_bytes(&bytes, &promoted_edit)
+        .expect("promoted operations render");
+
+    assert!(!output.image().pixels().is_empty());
+    let (pixels, remainder) = output.image().pixels().as_chunks::<4>();
+    let (source_pixels, source_remainder) = source.image().pixels().as_chunks::<4>();
+    assert!(remainder.is_empty());
+    assert!(source_remainder.is_empty());
+    assert_eq!(pixels.len(), source_pixels.len());
+    assert!(source_pixels.iter().any(|pixel| pixel[3] != 0));
+    assert!(
+        pixels
+            .iter()
+            .zip(source_pixels)
+            .all(|(pixel, source)| pixel[3] == source[3]),
+        "promoted Lab operations must preserve the source alpha channel"
+    );
+    assert_eq!(output.provenance().source_edit_id(), promoted_edit.id());
+}
+
+#[test]
 fn raw_preview_and_export_share_one_linear_frame_boundary() {
     let fixture = deterministic_compressed_raf();
     let edit = edit([]);

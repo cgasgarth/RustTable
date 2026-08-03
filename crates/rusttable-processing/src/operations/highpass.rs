@@ -2,10 +2,9 @@
 //!
 //! Source lineage: `src/iop/highpass.c`, `src/common/box_filters.h`,
 //! `src/common/box_filters.cc`, and `data/kernels/highpass.cl` from the pinned
-//! Darktable baseline. This file intentionally stops at the operation-local
-//! parameter, tiling, CPU, and backend-contract boundary. Registry, history
-//! materialization, GPU dispatch, pixelpipe routing, blending, and GTK
-//! integration remain deferred to their owning hubs.
+//! Darktable baseline. The production surface includes registry, history, and
+//! pixelpipe CPU routing; GPU dispatch, blending extensions, and GTK integration
+//! remain explicitly unavailable.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -14,6 +13,7 @@
     clippy::cast_sign_loss,
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
+    clippy::must_use_candidate,
     reason = "the source contract fixes native f32-to-integer and raster arithmetic"
 )]
 #![expect(

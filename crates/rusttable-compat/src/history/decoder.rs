@@ -108,9 +108,8 @@ impl HistoryDecoder {
         let mut steps = Vec::with_capacity(raw_history.len());
         let mut payload_bytes = 0_usize;
         let mut name_bytes = 0_usize;
-        let mut instance_sources = BTreeMap::<(Vec<u8>, i64, Vec<u8>), SourceRowKey>::new();
-        let mut instance_ids = BTreeMap::<(Vec<u8>, i64, Vec<u8>), ModuleInstanceId>::new();
-        let mut seen_instance_keys = BTreeMap::<(Vec<u8>, i64), Vec<u8>>::new();
+        let mut instance_sources = BTreeMap::<(Vec<u8>, i64), SourceRowKey>::new();
+        let mut instance_ids = BTreeMap::<(Vec<u8>, i64), ModuleInstanceId>::new();
         for raw in raw_history {
             let source = SourceRowKey::new("main.history", raw.source_row);
             let operation_raw = raw.operation.clone().unwrap_or_default();
@@ -172,32 +171,14 @@ impl HistoryDecoder {
                     "multi_name is retained as bytes but is not valid UTF-8",
                 );
             }
-            let instance_key = (operation_raw.clone(), priority, name.clone());
-            let instance_key_without_name = (operation_raw.clone(), priority);
-            if let Some(previous_name) =
-                seen_instance_keys.insert(instance_key_without_name, name.clone())
-                && previous_name != name
-            {
-                finding(
-                    &mut findings,
-                    FindingCode::DuplicateInstanceKey,
-                    Severity::Blocking,
-                    raw.source_row,
-                    "operation and multi_priority identify more than one multi_name",
-                );
-            }
+            // Native identity is operation plus priority. `multi_name` is mutable
+            // metadata on that instance, so a later rename must not split its rows.
+            let instance_key = (operation_raw.clone(), priority);
             let first_source = *instance_sources
                 .entry(instance_key.clone())
                 .or_insert(source);
             let instance_id = *instance_ids.entry(instance_key).or_insert_with(|| {
-                module_instance_id(
-                    schema,
-                    image_id,
-                    &operation_raw,
-                    priority,
-                    &name,
-                    first_source,
-                )
+                module_instance_id(schema, image_id, &operation_raw, priority, first_source)
             });
             let operation_params = OpaquePayload::from_optional(raw.operation_params.as_deref());
             let blend_params = OpaquePayload::from_optional(raw.blend_params.as_deref());
@@ -243,7 +224,7 @@ impl HistoryDecoder {
         }
         validate_numbers(&steps, &mut findings);
         validate_history_end(history_end, &steps, &mut findings);
-        let instances = build_instances(&steps, &instance_ids, &instance_sources);
+        let instances = build_instances(&steps);
         let selection = HistorySelection {
             history_end,
             selected_rows: steps
@@ -256,6 +237,7 @@ impl HistoryDecoder {
                 .filter(|step| !step.selected)
                 .map(|step| step.source)
                 .collect(),
+            active_rows: native_active_rows(&steps),
         };
         let module_order = order::decode_module_order(
             image_id,
@@ -279,11 +261,11 @@ impl HistoryDecoder {
             history_end,
             &mut findings,
         );
+        let has_blocking_finding = findings
+            .iter()
+            .any(|finding| finding.severity == Severity::Blocking);
         findings.truncate(self.options.limits.max_findings);
-        let executable = order_proven
-            && !findings
-                .iter()
-                .any(|finding| finding.severity == Severity::Blocking);
+        let executable = order_proven && !has_blocking_finding;
         CompatHistory {
             schema,
             image_id,
@@ -306,17 +288,15 @@ fn module_instance_id(
     image_id: i64,
     operation: &[u8],
     priority: i64,
-    name: &[u8],
     source: SourceRowKey,
 ) -> ModuleInstanceId {
     let mut hasher = Sha256::new();
-    hasher.update(b"rusttable.darktable.history.instance.v1");
+    hasher.update(b"rusttable.darktable.history.instance.v2");
     hasher.update(schema.library().to_le_bytes());
     hasher.update(schema.data().to_le_bytes());
     hasher.update(image_id.to_le_bytes());
     update_bytes(&mut hasher, operation);
     hasher.update(priority.to_le_bytes());
-    update_bytes(&mut hasher, name);
     hasher.update(source.row().to_le_bytes());
     ModuleInstanceId(hasher.finalize().into())
 }
@@ -324,6 +304,33 @@ fn module_instance_id(
 fn update_bytes(hasher: &mut Sha256, bytes: &[u8]) {
     hasher.update((bytes.len() as u64).to_le_bytes());
     hasher.update(bytes);
+}
+
+fn native_active_rows(steps: &[CompatHistoryStep]) -> Vec<SourceRowKey> {
+    let mut max_num_by_key = BTreeMap::<(Vec<u8>, i64), i64>::new();
+    for step in steps.iter().filter(|step| step.selected) {
+        max_num_by_key
+            .entry((
+                step.operation.raw_name.clone(),
+                step.multi_priority.unwrap_or(0),
+            ))
+            .and_modify(|max_num| *max_num = (*max_num).max(step.num))
+            .or_insert(step.num);
+    }
+    steps
+        .iter()
+        .filter(|step| {
+            step.selected
+                && matches!(step.enabled, EnabledState::Enabled)
+                && max_num_by_key
+                    .get(&(
+                        step.operation.raw_name.clone(),
+                        step.multi_priority.unwrap_or(0),
+                    ))
+                    .is_some_and(|max_num| *max_num == step.num)
+        })
+        .map(|step| step.source)
+        .collect()
 }
 
 fn validate_numbers(steps: &[CompatHistoryStep], findings: &mut Vec<Finding>) {
@@ -386,11 +393,7 @@ fn validate_history_end(
     }
 }
 
-fn build_instances(
-    steps: &[CompatHistoryStep],
-    instance_ids: &BTreeMap<(Vec<u8>, i64, Vec<u8>), ModuleInstanceId>,
-    instance_sources: &BTreeMap<(Vec<u8>, i64, Vec<u8>), SourceRowKey>,
-) -> Vec<CompatModuleInstance> {
+fn build_instances(steps: &[CompatHistoryStep]) -> Vec<CompatModuleInstance> {
     let mut grouped = BTreeMap::<ModuleInstanceId, Vec<&CompatHistoryStep>>::new();
     for step in steps {
         grouped.entry(step.instance_id).or_default().push(step);
@@ -400,19 +403,24 @@ fn build_instances(
         .map(|(id, mut grouped_steps)| {
             grouped_steps.sort_by_key(|step| step.source.row());
             let first = grouped_steps[0];
+            let metadata = grouped_steps
+                .iter()
+                .filter(|step| step.selected)
+                .max_by_key(|step| (step.num, step.source.row()))
+                .copied()
+                .unwrap_or(first);
             CompatModuleInstance {
                 id,
                 operation: first.operation.clone(),
-                multi_priority: first.multi_priority,
-                multi_name: first.multi_name.clone(),
-                multi_name_display: String::from_utf8(first.multi_name.bytes.clone()).ok(),
-                multi_name_hand_edited: first.multi_name_hand_edited,
+                multi_priority: metadata.multi_priority,
+                multi_name: metadata.multi_name.clone(),
+                multi_name_display: String::from_utf8(metadata.multi_name.bytes.clone()).ok(),
+                multi_name_hand_edited: metadata.multi_name_hand_edited,
                 first_source: first.source,
                 history_sources: grouped_steps.iter().map(|step| step.source).collect(),
             }
         })
         .collect::<Vec<_>>();
-    let _ = (instance_ids, instance_sources);
     instances.sort_by_key(|instance| (instance.first_source.row(), instance.id));
     instances
 }

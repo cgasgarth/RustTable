@@ -16,16 +16,28 @@ pub enum BasecurvePortStatus {
 
 pub const BASECURVE_SOURCE_MAP: &[BasecurveSourceMapEntry] = &[
     BasecurveSourceMapEntry {
-        native_symbol: "dt_iop_basecurve_params_t / legacy_params",
+        native_symbol: "dt_iop_basecurve_params_t",
         native_file: "src/iop/basecurve.c",
-        rust_symbol: "BasecurveParameters / BasecurveHistory::decode",
+        rust_symbol: "BasecurveParameters",
         status: BasecurvePortStatus::Ported,
     },
     BasecurveSourceMapEntry {
-        native_symbol: "init / set_presets / reload_defaults / _match / _check_camera",
+        native_symbol: "legacy_params",
         native_file: "src/iop/basecurve.c",
-        rust_symbol: "BasecurveParameters::defaults / init_presets / reload_defaults / match_pattern / check_camera",
+        rust_symbol: "BasecurveHistory::decode",
         status: BasecurvePortStatus::Ported,
+    },
+    BasecurveSourceMapEntry {
+        native_symbol: "init / reload_defaults / _match / _check_camera",
+        native_file: "src/iop/basecurve.c",
+        rust_symbol: "BasecurveParameters::defaults / reload_defaults / match_pattern / check_camera",
+        status: BasecurvePortStatus::Ported,
+    },
+    BasecurveSourceMapEntry {
+        native_symbol: "set_presets / init_presets",
+        native_file: "src/iop/basecurve.c",
+        rust_symbol: "Basecurve preset integration",
+        status: BasecurvePortStatus::ExplicitlyDeferred,
     },
     BasecurveSourceMapEntry {
         native_symbol: "commit_params",
@@ -58,15 +70,51 @@ pub const BASECURVE_SOURCE_MAP: &[BasecurveSourceMapEntry] = &[
         status: BasecurvePortStatus::Ported,
     },
     BasecurveSourceMapEntry {
+        native_symbol: "production registry / operation descriptor",
+        native_file: "src/iop/basecurve.c and processing integration hubs",
+        rust_symbol: "basecurve_definition / basecurve_descriptor",
+        status: BasecurvePortStatus::Ported,
+    },
+    BasecurveSourceMapEntry {
+        native_symbol: "typed history import",
+        native_file: "src/iop/basecurve.c and production history route",
+        rust_symbol: "BasecurveHistory / darktable history decoder",
+        status: BasecurvePortStatus::Ported,
+    },
+    BasecurveSourceMapEntry {
+        native_symbol: "CPU pixelpipe dispatch",
+        native_file: "src/iop/basecurve.c and pixelpipe integration hubs",
+        rust_symbol: "BasecurvePlan / CPU evaluator dispatch",
+        status: BasecurvePortStatus::Ported,
+    },
+    BasecurveSourceMapEntry {
+        native_symbol: "snapshot identity",
+        native_file: "src/iop/basecurve.c and pixelpipe snapshot integration",
+        rust_symbol: "BasecurveConfig payload identity",
+        status: BasecurvePortStatus::Ported,
+    },
+    BasecurveSourceMapEntry {
         native_symbol: "process_fusion / process_cl_fusion",
         native_file: "src/iop/basecurve.c; data/kernels/basecurve.cl",
         rust_symbol: "BasecurveCompileError::UnsupportedExposureFusion",
         status: BasecurvePortStatus::ExplicitlyDeferred,
     },
     BasecurveSourceMapEntry {
-        native_symbol: "process_cl / GUI callbacks / application registration",
+        native_symbol: "process_cl",
         native_file: "src/iop/basecurve.c; data/kernels/basecurve.cl",
-        rust_symbol: "BasecurveCapabilities (gpu=false, gtk=false, production_routing=deferred)",
+        rust_symbol: "BasecurveCapabilities::require_gpu",
+        status: BasecurvePortStatus::ExplicitlyDeferred,
+    },
+    BasecurveSourceMapEntry {
+        native_symbol: "GUI callbacks",
+        native_file: "src/iop/basecurve.c",
+        rust_symbol: "BasecurveCapabilities::require_gtk",
+        status: BasecurvePortStatus::ExplicitlyDeferred,
+    },
+    BasecurveSourceMapEntry {
+        native_symbol: "masks / outer blending",
+        native_file: "src/iop/basecurve.c; src/develop/blend.c",
+        rust_symbol: "BasecurveCapabilities::require_masks",
         status: BasecurvePortStatus::ExplicitlyDeferred,
     },
 ];

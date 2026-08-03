@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "d8fafd961aade92ba597fd4d182e9a0d211925e03fc1be5482924c2f93bc0e88"
+snapshot_hash = "6508f383eed456d2a398d8932880d21aafbdc42b2890e52819e2a4773419597b"
 
 [[operation]]
 rust_id = "rusttable.agx"
@@ -15,6 +15,14 @@ rust_id = "rusttable.ashift"
 compatibility_name = "ashift"
 descriptor_version = 1
 parameter_version = 5
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.basecurve"
+compatibility_name = "basecurve"
+descriptor_version = 6
+parameter_version = 6
 implementation_version = 1
 status = "available"
 
@@ -219,6 +227,14 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.highpass"
+compatibility_name = "highpass"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.invert"
 compatibility_name = "invert"
 descriptor_version = 2
@@ -375,6 +391,14 @@ rust_id = "rusttable.temperature"
 compatibility_name = "temperature"
 descriptor_version = 1
 parameter_version = 4
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.tonecurve"
+compatibility_name = "tonecurve"
+descriptor_version = 5
+parameter_version = 5
 implementation_version = 1
 status = "available"
 

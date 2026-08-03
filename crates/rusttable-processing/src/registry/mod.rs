@@ -33,11 +33,36 @@ pub type CpuExecute = fn(
     pixel_index_offset: usize,
 ) -> Result<(), EvaluationError>;
 
+/// Selects the owner of a prepared operation's numerical execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpuExecutionRoute {
+    /// The operation is executable by the generic processing evaluator.
+    GenericEvaluator,
+    /// The operation is executable by the Lab D50 pixelpipe route.
+    LabD50Pixelpipe,
+}
+
+impl CpuExecutionRoute {
+    #[must_use]
+    pub const fn generic_executor_available(self) -> bool {
+        matches!(self, Self::GenericEvaluator)
+    }
+
+    #[must_use]
+    pub const fn deferred_reason(self) -> &'static str {
+        match self {
+            Self::GenericEvaluator => "the generic CPU executor is not bound",
+            Self::LabD50Pixelpipe => "operation requires the Lab D50 pixelpipe route",
+        }
+    }
+}
+
 /// Safe, owned CPU factory binding.
 #[derive(Clone, Copy)]
 pub struct CpuFactory {
     prepare: CpuPrepare,
-    execute: CpuExecute,
+    execute: Option<CpuExecute>,
+    execution_route: CpuExecutionRoute,
     roi: RoiKind,
     tileable: bool,
     full_image_analysis: bool,
@@ -47,6 +72,7 @@ impl fmt::Debug for CpuFactory {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("CpuFactory")
+            .field("execution_route", &self.execution_route)
             .field("roi", &self.roi)
             .field("tileable", &self.tileable)
             .field("full_image_analysis", &self.full_image_analysis)
@@ -65,7 +91,26 @@ impl CpuFactory {
     ) -> Self {
         Self {
             prepare,
-            execute,
+            execute: Some(execute),
+            execution_route: CpuExecutionRoute::GenericEvaluator,
+            roi,
+            tileable,
+            full_image_analysis,
+        }
+    }
+
+    #[must_use]
+    pub const fn new_routed(
+        prepare: CpuPrepare,
+        execution_route: CpuExecutionRoute,
+        roi: RoiKind,
+        tileable: bool,
+        full_image_analysis: bool,
+    ) -> Self {
+        Self {
+            prepare,
+            execute: None,
+            execution_route,
             roi,
             tileable,
             full_image_analysis,
@@ -85,6 +130,11 @@ impl CpuFactory {
     #[must_use]
     pub const fn full_image_analysis(self) -> bool {
         self.full_image_analysis
+    }
+
+    #[must_use]
+    pub const fn execution_route(self) -> CpuExecutionRoute {
+        self.execution_route
     }
 }
 
@@ -345,6 +395,14 @@ impl OperationDefinition {
     }
 
     #[must_use]
+    pub const fn cpu_execution_route(&self) -> Option<CpuExecutionRoute> {
+        match self.cpu {
+            Some(cpu) => Some(cpu.execution_route()),
+            None => None,
+        }
+    }
+
+    #[must_use]
     pub const fn gpu(&self) -> Option<&GpuBinding> {
         self.gpu.as_ref()
     }
@@ -429,6 +487,9 @@ pub struct OperationCapability {
     pub backend: ExecutionBackend,
     pub available: bool,
     pub reason: Option<String>,
+    /// CPU preparation remains available even when execution belongs to a
+    /// specialized pixelpipe route rather than the generic evaluator.
+    pub cpu_route: Option<CpuExecutionRoute>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -613,13 +674,14 @@ impl fmt::Display for RegistryLookupError {
 impl std::error::Error for RegistryLookupError {}
 
 /// Owned preparation returned by a CPU factory.  The descriptor ID and
-/// executor travel together, preventing a prepared value from being sent to a
-/// different operation's executor.
+/// execution route travel together, preventing a prepared value from being
+/// sent to a different operation's executor.
 #[derive(Debug, Clone)]
 pub struct PreparedCpuOperation {
     descriptor: DescriptorId,
     operation: ProcessingOperation,
-    execute: CpuExecute,
+    execute: Option<CpuExecute>,
+    execution_route: CpuExecutionRoute,
 }
 
 impl PartialEq for PreparedCpuOperation {
@@ -647,11 +709,20 @@ impl PreparedCpuOperation {
         &self.descriptor
     }
 
-    /// Executes the owned preparation with its registry-bound executor.
+    #[must_use]
+    pub const fn execution_route(&self) -> CpuExecutionRoute {
+        self.execution_route
+    }
+
+    /// Executes the owned preparation with its registry-bound generic executor.
+    ///
+    /// Specialized routes are deliberately not approximated at this boundary;
+    /// their numerical owner is exposed through [`Self::execution_route`].
     ///
     /// # Errors
     ///
-    /// Returns the deterministic arithmetic error reported by the operation executor.
+    /// Returns the deterministic arithmetic error reported by the operation executor,
+    /// or a typed route error when the operation belongs to a specialized pixelpipe.
     pub fn execute(
         &self,
         step_index: PipelineStepIndex,
@@ -659,13 +730,35 @@ impl PreparedCpuOperation {
         dimensions: crate::RasterDimensions,
         pixel_index_offset: usize,
     ) -> Result<(), EvaluationError> {
-        (self.execute)(self, step_index, pixels, dimensions, pixel_index_offset)
+        let Some(execute) = self.execute else {
+            return Err(EvaluationError::OperationExecution {
+                step_index,
+                operation_id: self.operation.operation_id(),
+                reason: self.execution_route.deferred_reason().to_owned(),
+            });
+        };
+        execute(self, step_index, pixels, dimensions, pixel_index_offset)
     }
 
     pub(crate) fn prepare(
         operation: ProcessingOperation,
         descriptor: &DescriptorId,
         execute: CpuExecute,
+    ) -> Result<Self, FactoryError> {
+        Self::prepare_with_executor(operation, descriptor, Some(execute))
+    }
+
+    pub(crate) fn prepare_without_executor(
+        operation: ProcessingOperation,
+        descriptor: &DescriptorId,
+    ) -> Result<Self, FactoryError> {
+        Self::prepare_with_executor(operation, descriptor, None)
+    }
+
+    fn prepare_with_executor(
+        operation: ProcessingOperation,
+        descriptor: &DescriptorId,
+        execute: Option<CpuExecute>,
     ) -> Result<Self, FactoryError> {
         let actual = operation_descriptor_for(&operation);
         if actual != *descriptor {
@@ -678,11 +771,17 @@ impl PreparedCpuOperation {
             descriptor: descriptor.clone(),
             operation,
             execute,
+            execution_route: CpuExecutionRoute::GenericEvaluator,
         })
     }
 
-    pub(crate) const fn with_executor(mut self, execute: CpuExecute) -> Self {
+    pub(crate) const fn with_executor(
+        mut self,
+        execute: Option<CpuExecute>,
+        execution_route: CpuExecutionRoute,
+    ) -> Self {
         self.execute = execute;
+        self.execution_route = execution_route;
         self
     }
 }
@@ -849,7 +948,7 @@ impl RegistrySnapshot {
                 source: Box::new(source),
             }
         })?;
-        Ok(prepared.with_executor(cpu.execute))
+        Ok(prepared.with_executor(cpu.execute, cpu.execution_route))
     }
 
     #[must_use]
@@ -866,6 +965,7 @@ impl RegistrySnapshot {
                 backend: ExecutionBackend::Cpu,
                 available: false,
                 reason: definition.availability.reason().map(str::to_owned),
+                cpu_route: None,
             });
         }
         if !definition.descriptor.io.input.encodings.contains(&encoding)
@@ -905,9 +1005,10 @@ impl RegistrySnapshot {
                 backend: ExecutionBackend::Gpu,
                 available: true,
                 reason: None,
+                cpu_route: definition.cpu_execution_route(),
             });
         }
-        if definition.cpu.is_some() {
+        if let Some(cpu) = definition.cpu {
             return Some(OperationCapability {
                 backend: if device.gpu_available && definition.gpu.is_some() {
                     ExecutionBackend::CpuFallback
@@ -920,6 +1021,7 @@ impl RegistrySnapshot {
                 } else {
                     None
                 },
+                cpu_route: Some(cpu.execution_route()),
             });
         }
         Some(unavailable("no CPU factory is available"))
@@ -1040,16 +1142,17 @@ pub static BUILTIN_OPERATIONS: &[OperationDefinitionFactory] = crate::builtin_op
 pub use basicadj::basicadj_definition;
 pub use masks::{mask_manager_definition, retouch_definition};
 pub use operations::{
-    agx_definition, bloom_definition, censorize_definition, channelmixer_definition,
-    clahe_definition, clipping_definition, colorcontrast_definition, colormapping_definition,
-    colortransfer_definition, colorzones_definition, crop_definition, defringe_definition,
-    dither_definition, enlargecanvas_definition, exposure_definition, finalscale_definition,
-    flip_definition, graduatednd_definition, grain_definition, invert_definition,
-    lenscorrection_definition, levels_definition, linear_offset_definition, liquify_definition,
-    perspective_definition, rasterfile_definition, relight_definition, rgb_gain_definition,
-    rgblevels_definition, rotatepixels_definition, scalepixels_definition, shadhi_definition,
-    sharpen_definition, soften_definition, temperature_definition, velvia_definition,
-    vibrance_definition, vignette_definition,
+    agx_definition, basecurve_definition, bloom_definition, censorize_definition,
+    channelmixer_definition, clahe_definition, clipping_definition, colorcontrast_definition,
+    colormapping_definition, colortransfer_definition, colorzones_definition, crop_definition,
+    defringe_definition, dither_definition, enlargecanvas_definition, exposure_definition,
+    finalscale_definition, flip_definition, graduatednd_definition, grain_definition,
+    highpass_definition, invert_definition, lenscorrection_definition, levels_definition,
+    linear_offset_definition, liquify_definition, perspective_definition, rasterfile_definition,
+    relight_definition, rgb_gain_definition, rgblevels_definition, rotatepixels_definition,
+    scalepixels_definition, shadhi_definition, sharpen_definition, soften_definition,
+    temperature_definition, tonecurve_definition, velvia_definition, vibrance_definition,
+    vignette_definition,
 };
 use operations::{hex, snapshot_hash, unavailable, validate_definition};
 pub use spots::spots_definition;

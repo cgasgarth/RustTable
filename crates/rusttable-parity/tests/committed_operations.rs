@@ -10,7 +10,6 @@ use rusttable_parity::{
 const PINNED_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
 const OPAQUE_DEFERRED: &[&str] = &[
     "atrous",
-    "basecurve",
     "bilat",
     "bilateral",
     "blurs",
@@ -32,7 +31,6 @@ const OPAQUE_DEFERRED: &[&str] = &[
     "gamma",
     "globaltonemap",
     "hazeremoval",
-    "highpass",
     "hotpixels",
     "lowlight",
     "lowpass",
@@ -46,7 +44,6 @@ const OPAQUE_DEFERRED: &[&str] = &[
     "rawprepare",
     "rgbcurve",
     "sigmoid",
-    "tonecurve",
     "toneequal",
     "tonemap",
     "zonesystem",
@@ -1460,7 +1457,7 @@ fn architecture_trust_accounting_keeps_aliases_and_opaque_records_explicit() {
                 .is_some_and(rusttable_parity::is_independently_trusted_manifest_name)
         })
         .count();
-    assert_eq!(trusted_manifest_count, 52);
+    assert_eq!(trusted_manifest_count, 55);
     let registry_only_count = entries
         .iter()
         .filter(|entry| {
@@ -1471,13 +1468,13 @@ fn architecture_trust_accounting_keeps_aliases_and_opaque_records_explicit() {
         })
         .count();
     assert_eq!(registry_only_count, 2);
-    assert_eq!(trusted_manifest_count + registry_only_count, 54);
-    assert_eq!(manifest_entries.len() - trusted_manifest_count, 41);
-    // This 39 is a cross-domain summary, not a partition of native manifest rows: the two
-    // registry-only trusted contracts do not replace any of the 41 ordinary manifest records.
+    assert_eq!(trusted_manifest_count + registry_only_count, 57);
+    assert_eq!(manifest_entries.len() - trusted_manifest_count, 38);
+    // This 36 is a cross-domain summary, not a partition of native manifest rows: the two
+    // registry-only trusted contracts do not replace any of the 38 ordinary manifest records.
     assert_eq!(
         manifest_entries.len() - trusted_manifest_count - registry_only_count,
-        39
+        36
     );
     let accounting = manifest_entries
         .iter()

@@ -1,10 +1,9 @@
-//! Darktable history rows decoded without overclaiming executable parity.
+//! Darktable history rows decoded with fail-closed executable eligibility.
 //!
-//! `rusttable-compat` intentionally preserves operation payloads without
-//! depending on the processing crate. This import-layer bridge is where the
-//! pinned module version and opaque bytes become typed parameters. It does not
-//! emit an executable operation until Darktable's blend/mask and multi-instance
-//! payloads are also understood.
+//! `rusttable-compat` preserves operation payloads without depending on the
+//! processing crate. This import-layer bridge turns supported current payloads
+//! into typed parameters and emits executable target rows only after native
+//! order, instance, and identity-blend evidence is proven.
 //!
 //! The Color Reconstruction payload decoder mirrors `legacy_params` and the
 //! v1/v2/v3 declarations in `src/iop/colorreconstruction.c`; its byte order is
@@ -35,9 +34,12 @@ pub use rusttable_compat::soften::DecodedSoftenHistoryStep;
 use rusttable_compat::soften::{
     SoftenHistoryDecodeFindingCode, SoftenHistoryStepDecode, decode_soften_history_step,
 };
-use rusttable_compat::{CompatHistoryStep, EnabledState};
+use rusttable_compat::{CompatHistory, CompatHistoryStep, EnabledState, is_identity_blend_v14};
 use rusttable_processing::operations::agx::{
     AGX_COMPATIBILITY_ID, AGX_PARAMETER_BYTES_V7, AGX_SCHEMA_VERSION, AgxConfig, AgxHistory,
+};
+use rusttable_processing::operations::basecurve::{
+    BASECURVE_SCHEMA_VERSION, BasecurveConfig, BasecurveHistory, BasecurveParameters,
 };
 use rusttable_processing::operations::bloom::{BLOOM_PARAMETER_BYTES, BloomConfig, BloomHistory};
 use rusttable_processing::operations::colorcontrast::{
@@ -63,12 +65,18 @@ use rusttable_processing::operations::enlargecanvas::{
     ENLARGECANVAS_PARAMETER_BYTES, EnlargeCanvasConfig, EnlargeCanvasHistoryParameters,
     decode_history as decode_enlargecanvas_history,
 };
+use rusttable_processing::operations::highpass::{
+    HIGHPASS_SCHEMA_VERSION, HighpassConfig, HighpassHistory, HighpassParametersV1,
+};
 use rusttable_processing::operations::levels::{
     LEVELS_COMPATIBILITY_ID, LEVELS_PARAMETER_BYTES_V2, LEVELS_SCHEMA_VERSION, LevelsConfig,
     LevelsHistory,
 };
 use rusttable_processing::operations::rgblevels::{
     RGBLEVELS_COMPATIBILITY_ID, RGBLEVELS_PARAMETER_BYTES, RgbLevelsConfig, RgbLevelsHistory,
+};
+use rusttable_processing::operations::tonecurve::{
+    PARAMETER_VERSION as TONECURVE_SCHEMA_VERSION, ToneCurveConfig, ToneCurveHistory,
 };
 use rusttable_processing::operations::velvia::{
     VELVIA_V2_PARAMETER_BYTES, VelviaConfig, VelviaHistory,
@@ -95,6 +103,15 @@ const COLORRECONSTRUCTION_V2_PARAMETER_BYTES: usize =
 const COLORRECONSTRUCTION_V3_PARAMETER_BYTES: usize = 4 * size_of::<f32>() + size_of::<i32>();
 const ENLARGECANVAS_COMPATIBILITY_NAME: &str = "enlargecanvas";
 const VIBRANCE_COMPATIBILITY_NAME: &str = "vibrance";
+const BASECURVE_COMPATIBILITY_NAME: &str = "basecurve";
+const HIGHPASS_COMPATIBILITY_NAME: &str = "highpass";
+const TONECURVE_COMPATIBILITY_NAME: &str = "tonecurve";
+
+// `src/develop/blend.h` assigns Lab=2, display RGB=3, and scene RGB=4.
+// Native module initialization and commit replace NONE with these operation defaults.
+const DEVELOP_BLEND_CS_LAB: i32 = 2;
+const DEVELOP_BLEND_CS_RGB_DISPLAY: i32 = 3;
+const DEVELOP_BLEND_CS_RGB_SCENE: i32 = 4;
 
 /// Stable reason an imported history row remains opaque.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -347,6 +364,44 @@ pub struct DecodedColorZonesHistoryStep {
     pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
+/// One Highpass row whose parameters and identity blend are executable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedHighpassHistoryStep {
+    pub source: CompatHistoryStep,
+    pub config: HighpassConfig,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters:
+        [u8; rusttable_processing::operations::highpass::HIGHPASS_PARAMETER_BYTES],
+    pub migrated: bool,
+    pub execution_blocker: Option<DarktableHistoryDecodeFinding>,
+}
+
+/// One Tone Curve row whose parameters and identity blend are executable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedToneCurveHistoryStep {
+    pub source: CompatHistoryStep,
+    pub config: ToneCurveConfig,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters: [u8; rusttable_processing::operations::tonecurve::PARAMETER_BYTES],
+    pub migrated: bool,
+    pub execution_blocker: Option<DarktableHistoryDecodeFinding>,
+}
+
+/// One Base Curve row whose parameters and identity blend are executable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedBasecurveHistoryStep {
+    pub source: CompatHistoryStep,
+    pub config: BasecurveConfig,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters:
+        [u8; rusttable_processing::operations::basecurve::BASECURVE_V6_PARAMETER_BYTES],
+    pub migrated: bool,
+    pub execution_blocker: Option<DarktableHistoryDecodeFinding>,
+}
+
 /// Typed-but-pending result or a byte-preserving unsupported row.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DarktableHistoryStepDecode {
@@ -399,6 +454,21 @@ pub enum DarktableHistoryStepDecode {
     /// Vibrance core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
     VibrancePendingBlend(DecodedVibranceHistoryStep),
+    /// Highpass core parameters are decoded, while history-level eligibility or
+    /// blend identity remains pending.
+    HighpassPendingBlend(DecodedHighpassHistoryStep),
+    /// Highpass is executable only after whole-history order validation.
+    HighpassExecutable(DecodedHighpassHistoryStep),
+    /// Tone Curve core parameters are decoded, while history-level eligibility or
+    /// blend identity remains pending.
+    ToneCurvePendingBlend(DecodedToneCurveHistoryStep),
+    /// Tone Curve is executable only after whole-history order validation.
+    ToneCurveExecutable(DecodedToneCurveHistoryStep),
+    /// Base Curve core parameters are decoded, while history-level eligibility or
+    /// blend identity remains pending.
+    BasecurvePendingBlend(DecodedBasecurveHistoryStep),
+    /// Base Curve is executable only after whole-history order validation.
+    BasecurveExecutable(DecodedBasecurveHistoryStep),
     /// The complete compatibility row remains available for a future port.
     Preserved {
         /// Exact original compatibility record.
@@ -437,6 +507,9 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
         Some(SOFTEN_COMPATIBILITY_NAME) => decode_soften_import_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
         Some(VIBRANCE_COMPATIBILITY_NAME) => decode_vibrance_history_step(step),
+        Some(BASECURVE_COMPATIBILITY_NAME) => decode_basecurve_history_step(step, false),
+        Some(HIGHPASS_COMPATIBILITY_NAME) => decode_highpass_history_step(step, false),
+        Some(TONECURVE_COMPATIBILITY_NAME) => decode_tonecurve_history_step(step, false),
         _ => preserved(
             step,
             DarktableHistoryDecodeFindingCode::UnsupportedOperation,
@@ -1452,6 +1525,252 @@ fn decode_vibrance_history_step(step: &CompatHistoryStep) -> DarktableHistorySte
             ),
         },
     })
+}
+
+fn decode_highpass_history_step(
+    step: &CompatHistoryStep,
+    allow_execute: bool,
+) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Highpass") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match HighpassHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(HighpassHistory::V1(parameters)) => parameters,
+        Ok(HighpassHistory::Opaque { .. }) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!("Darktable Highpass v{source_version} parameters remain unsupported"),
+            );
+        }
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Highpass v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let config = match HighpassConfig::try_from(history) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!("Darktable Highpass parameters are not executable: {error}"),
+            );
+        }
+    };
+    let decoded = DecodedHighpassHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters: HighpassParametersV1::new(config.sharpness(), config.contrast())
+            .to_bytes(),
+        migrated: source_version != HIGHPASS_SCHEMA_VERSION,
+        execution_blocker: (!allow_execute
+            || source_version != HIGHPASS_SCHEMA_VERSION
+            || !target_row_blend_eligible(step, HIGHPASS_COMPATIBILITY_NAME))
+        .then(|| pending_target_blend_finding(step, HIGHPASS_COMPATIBILITY_NAME)),
+    };
+    if decoded.execution_blocker.is_none() {
+        DarktableHistoryStepDecode::HighpassExecutable(decoded)
+    } else {
+        DarktableHistoryStepDecode::HighpassPendingBlend(decoded)
+    }
+}
+
+fn decode_tonecurve_history_step(
+    step: &CompatHistoryStep,
+    allow_execute: bool,
+) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Tone Curve") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match ToneCurveHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Tone Curve v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let parameters = history.current().clone();
+    if let Err(error) = parameters.validate() {
+        return preserved(
+            step,
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+            format!("Darktable Tone Curve parameters are not executable: {error}"),
+        );
+    }
+    if let Err(error) =
+        rusttable_processing::operations::tonecurve::compile_parameters(&parameters, None)
+    {
+        return preserved(
+            step,
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+            format!("Darktable Tone Curve parameters cannot be compiled: {error}"),
+        );
+    }
+    let config = ToneCurveConfig::new(parameters.clone());
+    let decoded = DecodedToneCurveHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters: parameters.to_bytes(),
+        migrated: source_version != TONECURVE_SCHEMA_VERSION,
+        execution_blocker: (!allow_execute
+            || source_version != TONECURVE_SCHEMA_VERSION
+            || !target_row_blend_eligible(step, TONECURVE_COMPATIBILITY_NAME))
+        .then(|| pending_target_blend_finding(step, TONECURVE_COMPATIBILITY_NAME)),
+    };
+    if decoded.execution_blocker.is_none() {
+        DarktableHistoryStepDecode::ToneCurveExecutable(decoded)
+    } else {
+        DarktableHistoryStepDecode::ToneCurvePendingBlend(decoded)
+    }
+}
+
+fn decode_basecurve_history_step(
+    step: &CompatHistoryStep,
+    allow_execute: bool,
+) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Base Curve") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match BasecurveHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Base Curve v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let parameters: BasecurveParameters = history.current();
+    let config = BasecurveConfig::new(parameters);
+    if let Err(error) =
+        rusttable_processing::operations::basecurve::BasecurvePlan::compile(parameters)
+    {
+        return preserved(
+            step,
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+            format!("Darktable Base Curve parameters are not executable: {error}"),
+        );
+    }
+    let decoded = DecodedBasecurveHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters: parameters.to_bytes(),
+        migrated: source_version != BASECURVE_SCHEMA_VERSION,
+        execution_blocker: (!allow_execute
+            || source_version != BASECURVE_SCHEMA_VERSION
+            || !target_row_blend_eligible(step, BASECURVE_COMPATIBILITY_NAME))
+        .then(|| pending_target_blend_finding(step, BASECURVE_COMPATIBILITY_NAME)),
+    };
+    if decoded.execution_blocker.is_none() {
+        DarktableHistoryStepDecode::BasecurveExecutable(decoded)
+    } else {
+        DarktableHistoryStepDecode::BasecurvePendingBlend(decoded)
+    }
+}
+
+fn target_row_blend_eligible(step: &CompatHistoryStep, operation: &str) -> bool {
+    let priority = step.multi_priority.unwrap_or(0);
+    let effective_name = !step.multi_name.bytes.is_empty()
+        && (priority > 0 || step.multi_name_hand_edited.unwrap_or(0) != 0);
+    let identity_blend = match operation {
+        BASECURVE_COMPATIBILITY_NAME => [DEVELOP_BLEND_CS_RGB_DISPLAY, DEVELOP_BLEND_CS_RGB_SCENE]
+            .into_iter()
+            .any(|blend_cst| {
+                is_identity_blend_v14(&step.blend_params, step.blend_version, blend_cst)
+            }),
+        HIGHPASS_COMPATIBILITY_NAME | TONECURVE_COMPATIBILITY_NAME => {
+            is_identity_blend_v14(&step.blend_params, step.blend_version, DEVELOP_BLEND_CS_LAB)
+        }
+        _ => return false,
+    };
+    matches!(step.enabled, EnabledState::Enabled)
+        && step.selected
+        && priority == 0
+        && !effective_name
+        && identity_blend
+}
+
+fn pending_target_blend_finding(
+    step: &CompatHistoryStep,
+    operation: &str,
+) -> DarktableHistoryDecodeFinding {
+    DarktableHistoryDecodeFinding {
+        code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+        detail: format!(
+            "Darktable {operation} row is retained pending selected priority-zero single-instance metadata, native order proof, and exact v14 identity blend bytes (version {:?})",
+            step.blend_version
+        ),
+    }
+}
+
+/// Decodes all rows while allowing the three promoted operations to become
+/// executable only when the owning history proves their order and instance.
+#[must_use]
+pub fn decode_history_steps(history: &CompatHistory) -> Vec<DarktableHistoryStepDecode> {
+    history
+        .steps
+        .iter()
+        .map(|step| match step.operation.name.as_deref() {
+            Some(BASECURVE_COMPATIBILITY_NAME) => decode_basecurve_history_step(
+                step,
+                target_history_is_executable(history, step, BASECURVE_COMPATIBILITY_NAME),
+            ),
+            Some(HIGHPASS_COMPATIBILITY_NAME) => decode_highpass_history_step(
+                step,
+                target_history_is_executable(history, step, HIGHPASS_COMPATIBILITY_NAME),
+            ),
+            Some(TONECURVE_COMPATIBILITY_NAME) => decode_tonecurve_history_step(
+                step,
+                target_history_is_executable(history, step, TONECURVE_COMPATIBILITY_NAME),
+            ),
+            _ => decode_history_step(step),
+        })
+        .collect()
+}
+
+fn target_history_is_executable(
+    history: &CompatHistory,
+    step: &CompatHistoryStep,
+    operation: &str,
+) -> bool {
+    if !history.executable
+        || !history.order_proven
+        || !history.selection.active_rows.contains(&step.source)
+        || !target_row_blend_eligible(step, operation)
+    {
+        return false;
+    }
+    let instances = history
+        .instances
+        .iter()
+        .filter(|instance| instance.operation.name.as_deref() == Some(operation))
+        .collect::<Vec<_>>();
+    instances.len() == 1
+        && instances[0].id == step.instance_id
+        && history.operation_order.contains(&step.instance_id)
 }
 
 fn decoded_row_header(

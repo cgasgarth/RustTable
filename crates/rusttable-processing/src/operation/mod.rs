@@ -1,5 +1,6 @@
 use crate::operations::{
     agx::AgxConfig,
+    basecurve::BasecurveConfig,
     basicadj::BasicAdjConfig,
     bloom::BloomConfig,
     channelmixer::ChannelMixerConfig,
@@ -19,6 +20,7 @@ use crate::operations::{
     flip::{FlipConfig, FlipMode, OrientationBits},
     graduatednd::GraduatedNdConfig,
     highlights::HighlightsConfig,
+    highpass::HighpassConfig,
     invert::InvertConfig,
     lenscorrection::LensCorrectionConfig,
     levels::LevelsConfig,
@@ -34,6 +36,7 @@ use crate::operations::{
     soften::SoftenConfig,
     spots::SpotsParametersV2,
     temperature::{TemperatureConfig, WhiteBalanceSource},
+    tonecurve::ToneCurveConfig,
     velvia::VelviaConfig,
     vibrance::VibranceConfig,
     vignette::VignetteConfig,
@@ -123,6 +126,15 @@ pub struct ProcessingOperation {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProcessingOperationKind {
+    Basecurve {
+        config: BasecurveConfig,
+    },
+    Highpass {
+        config: HighpassConfig,
+    },
+    ToneCurve {
+        config: ToneCurveConfig,
+    },
     Agx {
         config: AgxConfig,
     },
@@ -386,6 +398,15 @@ impl ProcessingOperation {
             kind: ProcessingOperationKind::Exposure { stops, black },
         })
     }
+    pub(crate) fn compile_basecurve(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_basecurve(operation)
+    }
+    pub(crate) fn compile_highpass(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_highpass(operation)
+    }
+    pub(crate) fn compile_tonecurve(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_tonecurve(operation)
+    }
     pub(crate) fn compile_agx(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_agx(operation)
     }
@@ -630,6 +651,10 @@ impl ProcessingOperation {
                         "sharpen could not resolve its dynamic neighborhood overlap",
                     )
                 })
+            }
+            ProcessingOperationKind::Highpass { config } => {
+                crate::operations::highpass::HighpassPlan::tiling(*config, roi_scale, piece_iscale)
+                    .map(|tiling| tiling.overlap)
             }
             ProcessingOperationKind::Soften { config } => {
                 crate::operations::soften::SoftenPlan::overlap_pixels(
@@ -1085,6 +1110,112 @@ pub fn compile_rotatepixels(
         opacity: compile_opacity(operation)?,
         kind: ProcessingOperationKind::RotatePixels { config },
     })
+}
+
+fn compile_basecurve(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    let defaults = crate::operations::common::encode_native_payload_chunks(
+        &crate::operations::basecurve::BasecurveParameters::defaults().to_bytes(),
+    );
+    let chunks = native_payload_chunks(operation, &defaults)?;
+    let bytes = crate::operations::common::decode_native_payload_chunks(
+        &chunks.iter().map(String::as_str).collect::<Vec<_>>(),
+        crate::operations::basecurve::BASECURVE_V6_PARAMETER_BYTES,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let parameters = crate::operations::basecurve::BasecurveParameters::from_bytes(&bytes)
+        .map_err(|error| invalid_parameters(operation, error))?;
+    crate::operations::basecurve::BasecurvePlan::compile(parameters)
+        .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Basecurve {
+            config: BasecurveConfig::new(parameters),
+        },
+    })
+}
+
+fn compile_highpass(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &["sharpness", "contrast"])?;
+    let config = HighpassConfig::new(
+        parameter_f32(
+            operation,
+            "sharpness",
+            f64::from(crate::operations::highpass::HIGHPASS_DEFAULT_SHARPNESS),
+        )?,
+        parameter_f32(
+            operation,
+            "contrast",
+            f64::from(crate::operations::highpass::HIGHPASS_DEFAULT_CONTRAST),
+        )?,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Highpass { config },
+    })
+}
+
+fn compile_tonecurve(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    let defaults = crate::operations::common::encode_native_payload_chunks(
+        &crate::operations::tonecurve::ToneCurveParametersV5::default().to_bytes(),
+    );
+    let chunks = native_payload_chunks(operation, &defaults)?;
+    let bytes = crate::operations::common::decode_native_payload_chunks(
+        &chunks.iter().map(String::as_str).collect::<Vec<_>>(),
+        crate::operations::tonecurve::PARAMETER_BYTES,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let parameters = crate::operations::tonecurve::ToneCurveParametersV5::from_bytes(&bytes)
+        .map_err(|error| invalid_parameters(operation, error))?;
+    crate::operations::tonecurve::compile_parameters(&parameters, None)
+        .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::ToneCurve {
+            config: ToneCurveConfig::new(parameters),
+        },
+    })
+}
+
+fn native_payload_chunks(
+    operation: &Operation,
+    defaults: &[String],
+) -> Result<Vec<String>, OperationCompileError> {
+    let expected = (0..defaults.len())
+        .map(|index| format!("payload_{index}"))
+        .collect::<Vec<_>>();
+    if let Some((parameter, _)) = operation
+        .parameters()
+        .find(|(name, _)| !expected.iter().any(|expected| expected == name.as_str()))
+    {
+        return Err(OperationCompileError::UnexpectedParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter: parameter.clone(),
+        });
+    }
+    expected
+        .into_iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let parameter = ParameterName::new(name).expect("generated native payload parameter");
+            match operation.parameter(&parameter) {
+                Some(ParameterValue::Text(value)) => Ok(value.as_str().to_owned()),
+                Some(_) => Err(OperationCompileError::WrongParameterType {
+                    operation_id: operation.id(),
+                    key: operation.key().clone(),
+                    parameter,
+                }),
+                None => Ok(defaults[index].clone()),
+            }
+        })
+        .collect()
 }
 
 pub fn reject_unexpected(

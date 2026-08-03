@@ -17,7 +17,10 @@ const COLORMAPPING_SNAPSHOT_KIND_TAG: u8 = 37;
 const RELIGHT_SNAPSHOT_KIND_TAG: u8 = 38;
 const VIGNETTE_SNAPSHOT_KIND_TAG: u8 = 39;
 const GRADUATED_ND_SNAPSHOT_KIND_TAG: u8 = 40;
-const SNAPSHOT_KIND_TAGS: [u8; 41] = [
+const BASECURVE_SNAPSHOT_KIND_TAG: u8 = 41;
+const HIGHPASS_SNAPSHOT_KIND_TAG: u8 = 42;
+const TONECURVE_SNAPSHOT_KIND_TAG: u8 = 43;
+const SNAPSHOT_KIND_TAGS: [u8; 44] = [
     0,
     1,
     2,
@@ -59,6 +62,9 @@ const SNAPSHOT_KIND_TAGS: [u8; 41] = [
     RELIGHT_SNAPSHOT_KIND_TAG,
     VIGNETTE_SNAPSHOT_KIND_TAG,
     GRADUATED_ND_SNAPSHOT_KIND_TAG,
+    BASECURVE_SNAPSHOT_KIND_TAG,
+    HIGHPASS_SNAPSHOT_KIND_TAG,
+    TONECURVE_SNAPSHOT_KIND_TAG,
 ];
 const _: () = assert!(snapshot_kind_tags_are_unique(&SNAPSHOT_KIND_TAGS));
 
@@ -733,6 +739,19 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
         ProcessingOperationKind::Sharpen { config } => {
             hasher.update([SHARPEN_SNAPSHOT_KIND_TAG]);
             hasher.update(config.parameters().to_bytes());
+        }
+        ProcessingOperationKind::Basecurve { config } => {
+            hasher.update([BASECURVE_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.payload());
+        }
+        ProcessingOperationKind::Highpass { config } => {
+            hasher.update([HIGHPASS_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.sharpness().to_bits().to_le_bytes());
+            hasher.update(config.contrast().to_bits().to_le_bytes());
+        }
+        ProcessingOperationKind::ToneCurve { config } => {
+            hasher.update([TONECURVE_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.payload());
         }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
