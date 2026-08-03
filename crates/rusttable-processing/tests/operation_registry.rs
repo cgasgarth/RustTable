@@ -3,8 +3,9 @@ use rusttable_core::{
 };
 use rusttable_processing::descriptor::OperationFlags;
 use rusttable_processing::{
-    DefinitionAvailability, FactoryError, OperationDefinition, OperationUiAvailability,
-    ProcessingOperationKind, RegistryClosure, RegistryValidationError, builtin_registry,
+    CpuExecutionRoute, DefinitionAvailability, EvaluationError, FactoryError, FiniteF32, LinearRgb,
+    OperationDefinition, OperationUiAvailability, PipelineStepIndex, ProcessingOperationKind,
+    RasterDimensions, RegistryClosure, RegistryValidationError, builtin_registry,
 };
 
 #[test]
@@ -53,6 +54,140 @@ fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
         }),
     )
     .expect("operation")
+}
+
+#[test]
+fn tonecurve_materializes_but_routes_execution_to_lab_pixelpipe() {
+    let registry = builtin_registry();
+    let definition = registry
+        .definition("rusttable.tonecurve")
+        .expect("Tone Curve definition");
+    assert!(definition.availability().is_available());
+    assert_eq!(
+        definition.cpu_execution_route(),
+        Some(CpuExecutionRoute::LabD50Pixelpipe)
+    );
+    assert!(
+        !definition
+            .cpu()
+            .expect("Tone Curve CPU factory")
+            .execution_route()
+            .generic_executor_available()
+    );
+
+    let capability = registry
+        .capability(
+            "rusttable.tonecurve",
+            &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+            rusttable_color::ColorEncoding::LabD50,
+            Some("preview"),
+        )
+        .expect("Tone Curve capability");
+    assert!(capability.available);
+    assert_eq!(capability.cpu_route, definition.cpu_execution_route());
+
+    let operation = registry
+        .materialize_operation(
+            "rusttable.tonecurve",
+            OperationId::new(52).expect("operation ID"),
+        )
+        .expect("Tone Curve materialization remains available");
+    let prepared = registry
+        .prepare_cpu(&operation)
+        .expect("Tone Curve preparation");
+    assert_eq!(
+        prepared.execution_route(),
+        CpuExecutionRoute::LabD50Pixelpipe
+    );
+    let finite = FiniteF32::new(0.25).expect("finite pixel");
+    let mut pixels = [LinearRgb::new(finite, finite, finite)];
+    let error = prepared
+        .execute(
+            PipelineStepIndex::new(0),
+            &mut pixels,
+            RasterDimensions::new(1, 1).expect("dimensions"),
+            0,
+        )
+        .expect_err("generic evaluation must not approximate the Lab route");
+    assert!(error.to_string().contains("Lab D50 pixelpipe route"));
+}
+
+#[test]
+fn highpass_materializes_but_routes_execution_to_lab_pixelpipe() {
+    let registry = builtin_registry();
+    let definition = registry
+        .definition("rusttable.highpass")
+        .expect("Highpass definition");
+    assert!(definition.availability().is_available());
+    assert_eq!(
+        definition.descriptor().roi,
+        rusttable_processing::descriptor::RoiKind::Neighborhood
+    );
+    assert_eq!(
+        definition.cpu_execution_route(),
+        Some(CpuExecutionRoute::LabD50Pixelpipe)
+    );
+    assert!(
+        !definition
+            .cpu()
+            .expect("Highpass CPU factory")
+            .execution_route()
+            .generic_executor_available()
+    );
+    assert!(
+        definition
+            .evidence_ids()
+            .contains(&"iop.highpass.cpu.lab-d50-box-filter".to_owned())
+    );
+    assert_eq!(
+        definition.ui_availability(),
+        &OperationUiAvailability::Unavailable {
+            reason: "Highpass GTK controls are not ported".to_owned(),
+        }
+    );
+
+    let capability = registry
+        .capability(
+            "rusttable.highpass",
+            &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+            rusttable_color::ColorEncoding::LabD50,
+            Some("preview"),
+        )
+        .expect("Highpass capability");
+    assert!(capability.available);
+    assert_eq!(capability.cpu_route, definition.cpu_execution_route());
+
+    let operation = registry
+        .materialize_operation(
+            "rusttable.highpass",
+            OperationId::new(53).expect("operation ID"),
+        )
+        .expect("Highpass materialization remains available");
+    let prepared = registry
+        .prepare_cpu(&operation)
+        .expect("Highpass preparation");
+    assert_eq!(
+        prepared.execution_route(),
+        CpuExecutionRoute::LabD50Pixelpipe
+    );
+    let finite = FiniteF32::new(0.25).expect("finite pixel");
+    let mut pixels = [LinearRgb::new(finite, finite, finite)];
+    let error = prepared
+        .execute(
+            PipelineStepIndex::new(0),
+            &mut pixels,
+            RasterDimensions::new(1, 1).expect("dimensions"),
+            0,
+        )
+        .expect_err("generic evaluation must not approximate the Lab route");
+    assert_eq!(
+        error,
+        EvaluationError::OperationExecution {
+            step_index: PipelineStepIndex::new(0),
+            operation_id: operation.id(),
+            reason: "operation requires the Lab D50 pixelpipe route".to_owned(),
+        }
+    );
 }
 
 #[test]

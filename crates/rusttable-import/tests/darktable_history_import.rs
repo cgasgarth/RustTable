@@ -1,11 +1,14 @@
 use rusttable_compat::{
-    CompatHistory, CompatHistoryStep, DarktableOperationManifest, HistoryDecodeOptions,
-    HistoryDecoder, HistoryLimits, HistoryOrderSource,
+    CompatHistory, CompatHistoryStep, DARKTABLE_BLEND_PARAMETER_BYTES, DarktableOperationManifest,
+    HistoryDecodeOptions, HistoryDecoder, HistoryLimits, HistoryOrderSource,
+    identity_blend_v14_bytes,
 };
 use rusttable_import::darktable::{
     DarktableHistoryDecodeFindingCode, DarktableHistoryStepDecode, decode_history_step,
+    decode_history_steps,
 };
 use rusttable_processing::operations::agx::{AgxConfig, AgxParametersV7};
+use rusttable_processing::operations::basecurve::BasecurveParameters;
 use rusttable_processing::operations::bloom::{
     BLOOM_PARAMETER_BYTES, BloomConfig, BloomParametersV1,
 };
@@ -31,10 +34,12 @@ use rusttable_processing::operations::crop::{
 use rusttable_processing::operations::enlargecanvas::{
     CanvasColor, ENLARGECANVAS_PARAMETER_BYTES, EnlargeCanvasParametersV1,
 };
+use rusttable_processing::operations::highpass::HighpassParametersV1;
 use rusttable_processing::operations::levels::{
     LevelsConfig, LevelsMode, LevelsParametersV1, LevelsParametersV2,
 };
 use rusttable_processing::operations::rgblevels::{RgbLevelsConfig, RgbLevelsParametersV1};
+use rusttable_processing::operations::tonecurve::{PreserveColors, ToneCurveParametersV5};
 use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
@@ -45,6 +50,7 @@ use rusttable_processing::{
 use rusttable_sqlite_native::{
     DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow, RawModuleOrderRow,
 };
+use sha2::Digest;
 
 const BLOOM_V1_DEFAULT_NATIVE_LE: &[u8; BLOOM_PARAMETER_BYTES] =
     include_bytes!("fixtures/bloom-v1-default.bin");
@@ -79,6 +85,9 @@ const VIBRANCE_V2_NATIVE_LE: [u8; 4] = [
 ];
 const ENLARGECANVAS_V1_NATIVE_LE: &[u8; ENLARGECANVAS_PARAMETER_BYTES] =
     include_bytes!("../../../fixtures/corpus/assets/operation-enlargecanvas-params-v1.bin");
+const DARKTABLE_BLEND_CS_LAB: i32 = 2;
+const DARKTABLE_BLEND_CS_RGB_DISPLAY: i32 = 3;
+const DARKTABLE_BLEND_CS_RGB_SCENE: i32 = 4;
 
 #[test]
 fn agx_v7_and_legacy_rows_materialize_canonical_typed_parameters() {
@@ -1207,6 +1216,39 @@ fn vibrance_finite_outlier_decodes_while_unknown_malformed_and_nonfinite_stay_ex
 }
 
 #[test]
+fn tonecurve_profile_dependent_rows_remain_typed_pending_without_runtime_profile() {
+    let parameters = ToneCurveParametersV5 {
+        preserve_colors: PreserveColors::Luminance,
+        ..ToneCurveParametersV5::default()
+    };
+    let payload = parameters.to_bytes().to_vec();
+    let source = history_step(b"tonecurve", Some(5), Some(1), payload.clone());
+
+    let DarktableHistoryStepDecode::ToneCurvePendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("valid profile-dependent Tone Curve rows must remain typed pending");
+    };
+    assert_eq!(imported.config.parameters(), &parameters);
+    assert_eq!(imported.canonical_parameters, parameters.to_bytes());
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(
+        imported
+            .execution_blocker
+            .as_ref()
+            .expect("single-row import remains pending")
+            .code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+
+    let mut malformed = parameters.to_bytes();
+    malformed[480..484].copy_from_slice(&1_i32.to_le_bytes());
+    assert_preserved_exact(
+        &history_step(b"tonecurve", Some(5), Some(1), malformed.to_vec()),
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+}
+
+#[test]
 fn unsupported_operation_and_invalid_row_state_remain_exact() {
     assert_preserved(
         &history_step(b"future", Some(2), Some(1), vec![4, 5, 6]),
@@ -1452,6 +1494,391 @@ fn production_manifest_recognizes_enlargecanvas_history_name_and_typed_payload()
     ));
 }
 
+#[test]
+fn promoted_history_ignores_automatic_priority_zero_instance_labels() {
+    let mut row = raw_history_row(
+        41,
+        0,
+        b"basecurve",
+        Some(6),
+        Some(1),
+        BasecurveParameters::defaults().to_bytes().to_vec(),
+    );
+    row.blend_params = Some(identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_DISPLAY));
+    row.blend_version = Some(14);
+    row.multi_priority = Some(0);
+    row.multi_name = Some(b"preset-label".to_vec());
+    row.multi_name_hand_edited = Some(0);
+    let history = built_in_history(vec![row]);
+
+    assert!(history.executable);
+    assert!(history.steps[0].selected);
+    assert_eq!(history.steps[0].multi_name.bytes, b"preset-label");
+    assert_eq!(history.steps[0].multi_name_hand_edited, Some(0));
+    assert!(matches!(
+        decode_history_steps(&history).as_slice(),
+        [DarktableHistoryStepDecode::BasecurveExecutable(decoded)]
+            if decoded.enabled
+                && decoded.source.selected
+                && decoded.source.multi_priority == Some(0)
+                && decoded.source.multi_name.bytes == b"preset-label"
+                && decoded.source.multi_name_hand_edited == Some(0)
+                && decoded.execution_blocker.is_none()
+    ));
+}
+
+#[test]
+fn promoted_history_requires_exact_current_identity_blend_and_order_proof() {
+    let mut row = raw_history_row(
+        41,
+        0,
+        b"basecurve",
+        Some(6),
+        Some(1),
+        BasecurveParameters::defaults().to_bytes().to_vec(),
+    );
+    row.blend_params = Some(identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_DISPLAY));
+    row.blend_version = Some(14);
+    row.multi_priority = Some(0);
+    row.multi_name = None;
+    let history = built_in_history(vec![row]);
+    assert!(history.order_proven);
+    assert!(history.executable);
+    assert!(matches!(
+        decode_history_steps(&history).as_slice(),
+        [DarktableHistoryStepDecode::BasecurveExecutable(decoded)]
+            if decoded.source.blend_version == Some(14)
+                && decoded.execution_blocker.is_none()
+    ));
+
+    let mut malformed = history.steps[0].clone();
+    malformed.blend_params.bytes[0] ^= 1;
+    malformed.blend_params.sha256 = sha2::Sha256::digest(&malformed.blend_params.bytes).into();
+    let mut malformed_history = history;
+    malformed_history.steps[0] = malformed;
+    assert!(matches!(
+        decode_history_steps(&malformed_history).as_slice(),
+        [DarktableHistoryStepDecode::BasecurvePendingBlend(decoded)]
+            if decoded.execution_blocker.is_some()
+    ));
+}
+
+#[test]
+fn promoted_history_executes_only_the_latest_selected_repeated_row() {
+    let payload = BasecurveParameters::defaults().to_bytes().to_vec();
+    let mut older = raw_history_row(41, 0, b"basecurve", Some(6), Some(1), payload);
+    older.blend_params = Some(identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_DISPLAY));
+    older.blend_version = Some(14);
+    older.multi_priority = Some(0);
+    older.multi_name = None;
+    let mut newer = older.clone();
+    newer.source_row = 42;
+    newer.num = 1;
+    let history = built_in_history(vec![older, newer]);
+
+    assert_eq!(history.selection.active_rows.len(), 1);
+    assert_eq!(history.selection.active_rows[0].row(), 42);
+    let decoded = decode_history_steps(&history);
+    assert!(matches!(
+        &decoded[0],
+        DarktableHistoryStepDecode::BasecurvePendingBlend(row)
+            if row.execution_blocker.is_some()
+    ));
+    assert!(matches!(
+        &decoded[1],
+        DarktableHistoryStepDecode::BasecurveExecutable(row)
+            if row.execution_blocker.is_none()
+    ));
+}
+
+#[test]
+fn promoted_history_uses_latest_enabled_row_after_a_same_priority_rename() {
+    let payload = BasecurveParameters::defaults().to_bytes().to_vec();
+    let mut older = raw_history_row(41, 0, b"basecurve", Some(6), Some(1), payload);
+    older.blend_params = Some(identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_DISPLAY));
+    older.blend_version = Some(14);
+    older.multi_priority = Some(0);
+    older.multi_name = Some(b"old-name".to_vec());
+
+    let mut renamed = older.clone();
+    renamed.source_row = 42;
+    renamed.num = 1;
+    renamed.multi_name = Some(b"renamed".to_vec());
+
+    let mut latest = older.clone();
+    latest.source_row = 43;
+    latest.num = 2;
+    latest.multi_name = None;
+
+    let history = built_in_history(vec![older, renamed, latest]);
+
+    assert_eq!(history.instances.len(), 1);
+    assert_eq!(history.steps[0].multi_name.bytes, b"old-name");
+    assert_eq!(history.steps[1].multi_name.bytes, b"renamed");
+    assert_eq!(history.steps[0].instance_id, history.steps[1].instance_id);
+    assert!(history.instances[0].multi_name.bytes.is_empty());
+    assert_eq!(history.selection.active_rows[0].row(), 43);
+    let decoded = decode_history_steps(&history);
+    assert!(matches!(
+        &decoded[0],
+        DarktableHistoryStepDecode::BasecurvePendingBlend(row)
+            if row.execution_blocker.is_some()
+    ));
+    assert!(matches!(
+        &decoded[1],
+        DarktableHistoryStepDecode::BasecurvePendingBlend(row)
+            if row.execution_blocker.is_some()
+    ));
+    assert!(matches!(
+        &decoded[2],
+        DarktableHistoryStepDecode::BasecurveExecutable(row)
+            if row.execution_blocker.is_none()
+    ));
+}
+
+#[test]
+fn promoted_history_keeps_an_older_row_pending_when_the_newest_row_is_disabled() {
+    let mut older = raw_history_row(
+        41,
+        0,
+        b"basecurve",
+        Some(6),
+        Some(1),
+        BasecurveParameters::defaults().to_bytes().to_vec(),
+    );
+    older.blend_params = Some(identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_DISPLAY));
+    older.blend_version = Some(14);
+    older.multi_priority = Some(0);
+    older.multi_name = None;
+    let mut newer = older.clone();
+    newer.source_row = 42;
+    newer.num = 1;
+    newer.enabled = Some(0);
+    let history = built_in_history(vec![older, newer]);
+
+    let decoded = decode_history_steps(&history);
+    assert!(matches!(
+        &decoded[0],
+        DarktableHistoryStepDecode::BasecurvePendingBlend(row)
+            if row.execution_blocker.is_some()
+    ));
+    assert!(matches!(
+        &decoded[1],
+        DarktableHistoryStepDecode::BasecurvePendingBlend(row)
+            if !row.enabled && row.execution_blocker.is_some()
+    ));
+}
+
+#[test]
+fn promoted_operations_accept_their_native_normalized_identity_colorspace() {
+    let cases = [
+        (
+            "basecurve",
+            6_i64,
+            BasecurveParameters::defaults().to_bytes().to_vec(),
+            DARKTABLE_BLEND_CS_RGB_DISPLAY,
+        ),
+        (
+            "tonecurve",
+            5_i64,
+            ToneCurveParametersV5::default().to_bytes().to_vec(),
+            DARKTABLE_BLEND_CS_LAB,
+        ),
+        (
+            "highpass",
+            1_i64,
+            HighpassParametersV1::defaults().to_bytes().to_vec(),
+            DARKTABLE_BLEND_CS_LAB,
+        ),
+    ];
+
+    for (operation, module, parameters, blend_cst) in cases {
+        let history = built_in_history(vec![promoted_identity_row(
+            operation, module, parameters, blend_cst,
+        )]);
+        let decoded = decode_history_steps(&history);
+        assert!(
+            matches!(
+                decoded.as_slice(),
+                [DarktableHistoryStepDecode::BasecurveExecutable(_)
+                    | DarktableHistoryStepDecode::ToneCurveExecutable(_)
+                    | DarktableHistoryStepDecode::HighpassExecutable(_)]
+            ),
+            "{operation} must accept its normalized identity colorspace"
+        );
+    }
+}
+
+#[expect(
+    clippy::excessive_precision,
+    reason = "Regression fixture mirrors the native -6.64385619f blend default exactly."
+)]
+#[test]
+fn basecurve_accepts_exact_display_and_scene_rgb_identity_blends() {
+    const BLENDIF_BOOST_FACTORS_OFFSET: usize = 324;
+
+    let scene_blend = identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_SCENE);
+    assert_eq!(scene_blend.len(), DARKTABLE_BLEND_PARAMETER_BYTES);
+    let scene_boost = (-6.643_856_19_f32).to_le_bytes();
+    for index in 0..16 {
+        let expected = if matches!(index, 8 | 9 | 12 | 13) {
+            scene_boost
+        } else {
+            0.0_f32.to_le_bytes()
+        };
+        let offset = BLENDIF_BOOST_FACTORS_OFFSET + index * 4;
+        assert_eq!(
+            &scene_blend[offset..offset + 4],
+            expected.as_slice(),
+            "unexpected native scene-RGB boost at index {index}"
+        );
+    }
+
+    for blend_cst in [DARKTABLE_BLEND_CS_RGB_DISPLAY, DARKTABLE_BLEND_CS_RGB_SCENE] {
+        let expected_blend = identity_blend_v14_bytes(blend_cst);
+        let history = built_in_history(vec![promoted_identity_row(
+            "basecurve",
+            6,
+            BasecurveParameters::defaults().to_bytes().to_vec(),
+            blend_cst,
+        )]);
+        let decoded = decode_history_steps(&history);
+        let [DarktableHistoryStepDecode::BasecurveExecutable(decoded)] = decoded.as_slice() else {
+            panic!("Base Curve must accept its exact RGB identity blend {blend_cst}");
+        };
+        assert_eq!(decoded.source.blend_params.bytes, expected_blend);
+        assert_eq!(
+            decoded.source.blend_params.len(),
+            DARKTABLE_BLEND_PARAMETER_BYTES
+        );
+        assert!(decoded.source.blend_params.present);
+        let expected_sha256: [u8; 32] = sha2::Sha256::digest(&expected_blend).into();
+        assert_eq!(decoded.source.blend_params.sha256, expected_sha256);
+    }
+}
+
+#[test]
+fn promoted_operations_reject_wrong_identity_colorspaces_but_retain_the_row() {
+    let cases = [
+        (
+            "basecurve",
+            6_i64,
+            BasecurveParameters::defaults().to_bytes().to_vec(),
+            DARKTABLE_BLEND_CS_RGB_DISPLAY,
+            DARKTABLE_BLEND_CS_LAB,
+        ),
+        (
+            "tonecurve",
+            5_i64,
+            ToneCurveParametersV5::default().to_bytes().to_vec(),
+            DARKTABLE_BLEND_CS_LAB,
+            DARKTABLE_BLEND_CS_RGB_DISPLAY,
+        ),
+        (
+            "highpass",
+            1_i64,
+            HighpassParametersV1::defaults().to_bytes().to_vec(),
+            DARKTABLE_BLEND_CS_LAB,
+            DARKTABLE_BLEND_CS_RGB_DISPLAY,
+        ),
+    ];
+
+    for (operation, module, parameters, expected_cst, actual_cst) in cases {
+        let expected_blend = identity_blend_v14_bytes(actual_cst);
+        let history = built_in_history(vec![promoted_identity_row(
+            operation, module, parameters, actual_cst,
+        )]);
+        let decoded = decode_history_steps(&history);
+        match decoded.as_slice() {
+            [DarktableHistoryStepDecode::BasecurvePendingBlend(row)] => {
+                assert_eq!(row.source.blend_params.bytes, expected_blend);
+            }
+            [DarktableHistoryStepDecode::ToneCurvePendingBlend(row)] => {
+                assert_eq!(row.source.blend_params.bytes, expected_blend);
+            }
+            [DarktableHistoryStepDecode::HighpassPendingBlend(row)] => {
+                assert_eq!(row.source.blend_params.bytes, expected_blend);
+            }
+            other => panic!("{operation} unexpectedly decoded as {other:?}"),
+        }
+        assert_ne!(
+            actual_cst, expected_cst,
+            "test case must use a colorspace different from the operation"
+        );
+    }
+}
+
+#[test]
+fn named_masked_and_nonidentity_rows_remain_pending_with_opaque_blend_bytes() {
+    let mut named = promoted_identity_row(
+        "basecurve",
+        6,
+        BasecurveParameters::defaults().to_bytes().to_vec(),
+        DARKTABLE_BLEND_CS_RGB_DISPLAY,
+    );
+    named.multi_name = Some(b"hand-edited".to_vec());
+    named.multi_name_hand_edited = Some(1);
+
+    let mut masked = promoted_identity_row(
+        "basecurve",
+        6,
+        BasecurveParameters::defaults().to_bytes().to_vec(),
+        DARKTABLE_BLEND_CS_RGB_DISPLAY,
+    );
+    masked.blend_params = Some({
+        let mut bytes = identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_DISPLAY);
+        bytes[0..4].copy_from_slice(&1_u32.to_le_bytes()); // DEVELOP_MASK_ENABLED
+        bytes
+    });
+
+    let mut nonidentity = promoted_identity_row(
+        "basecurve",
+        6,
+        BasecurveParameters::defaults().to_bytes().to_vec(),
+        DARKTABLE_BLEND_CS_RGB_DISPLAY,
+    );
+    nonidentity.blend_params = Some({
+        let mut bytes = identity_blend_v14_bytes(DARKTABLE_BLEND_CS_RGB_DISPLAY);
+        bytes[8..12].copy_from_slice(&0x02_u32.to_le_bytes()); // DEVELOP_BLEND_LIGHTEN
+        bytes
+    });
+
+    for row in [named, masked, nonidentity] {
+        let expected_blend = row.blend_params.clone().expect("synthetic blend payload");
+        let expected_sha256 = sha2::Sha256::digest(&expected_blend);
+        let decoded = decode_history_steps(&built_in_history(vec![row]));
+        let [DarktableHistoryStepDecode::BasecurvePendingBlend(decoded)] = decoded.as_slice()
+        else {
+            panic!("non-identity basecurve row must remain pending");
+        };
+        assert_eq!(decoded.source.blend_params.bytes, expected_blend);
+        assert_eq!(
+            decoded.source.blend_params.sha256.as_slice(),
+            expected_sha256.as_slice()
+        );
+    }
+}
+
+fn promoted_identity_row(
+    operation: &str,
+    module: i64,
+    operation_params: Vec<u8>,
+    blend_cst: i32,
+) -> RawHistoryRow {
+    let mut row = raw_history_row(
+        41,
+        0,
+        operation.as_bytes(),
+        Some(module),
+        Some(1),
+        operation_params,
+    );
+    row.blend_params = Some(identity_blend_v14_bytes(blend_cst));
+    row.blend_version = Some(14);
+    row.multi_name = None;
+    row
+}
+
 fn history_step(
     operation: &[u8],
     module: Option<i64>,
@@ -1495,6 +1922,7 @@ fn manifest() -> DarktableOperationManifest {
     manifest.insert("colorzones", 5, [1, 2, 3, 4, 5], None);
     manifest.insert("velvia", 2, [1, 2], None);
     manifest.insert("vibrance", 2, [2], None);
+    manifest.insert("tonecurve", 5, [1, 3, 4, 5], None);
     manifest
 }
 

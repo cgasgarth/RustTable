@@ -6,6 +6,7 @@
 //! pipeline.
 
 pub mod agx;
+pub mod basecurve;
 pub mod basicadj;
 pub mod bloom;
 pub mod borders;
@@ -33,6 +34,7 @@ pub mod flip;
 pub mod graduatednd;
 pub mod grain;
 pub mod highlights;
+pub mod highpass;
 pub mod invert;
 pub mod lenscorrection;
 pub mod levels;
@@ -53,6 +55,7 @@ pub mod sharpen;
 pub mod soften;
 pub mod spots;
 pub mod temperature;
+pub mod tonecurve;
 pub mod velvia;
 pub mod vibrance;
 pub mod vignette;

@@ -111,6 +111,24 @@ owner = "crates/rusttable-processing/src/registry/color.rs"
 status = "replaced"
 
 [[operation]]
+rust_id = "rusttable.basecurve"
+manifest_name = "basecurve"
+owner = "crates/rusttable-processing/src/registry/operations/mod.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.highpass"
+manifest_name = "highpass"
+owner = "crates/rusttable-processing/src/registry/operations/mod.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.tonecurve"
+manifest_name = "tonecurve"
+owner = "crates/rusttable-processing/src/registry/operations/mod.rs"
+status = "replaced"
+
+[[operation]]
 rust_id = "rusttable.watermark"
 manifest_name = "watermark"
 owner = "crates/rusttable-processing/src/registry/operations/mod.rs"

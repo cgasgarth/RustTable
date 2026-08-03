@@ -654,6 +654,8 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
                 | rusttable_processing::ProcessingOperationKind::Levels { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
+                | rusttable_processing::ProcessingOperationKind::Highpass { .. }
+                | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
         );
         has_active_lab_operation |= is_lab_operation;
         has_active_continuous_lab_operation |= matches!(
@@ -661,6 +663,8 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
             rusttable_processing::ProcessingOperationKind::Sharpen { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
+                | rusttable_processing::ProcessingOperationKind::Highpass { .. }
+                | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
         );
         all_active_operations_are_lab &= is_lab_operation;
     }
@@ -683,6 +687,8 @@ fn is_pure_lab_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bo
                         | rusttable_processing::ProcessingOperationKind::Levels { .. }
                         | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
                         | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
+                        | rusttable_processing::ProcessingOperationKind::Highpass { .. }
+                        | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
                 )
         })
 }
@@ -709,6 +715,8 @@ const fn operation_uses_lab_stage(kind: &rusttable_processing::ProcessingOperati
             | rusttable_processing::ProcessingOperationKind::Levels { .. }
             | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
             | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
+            | rusttable_processing::ProcessingOperationKind::Highpass { .. }
+            | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
     )
 }
 
@@ -770,6 +778,10 @@ fn working_to_lab_channels(
     Ok(lab)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the Lab point chain keeps native stage transitions and cancellation boundaries together"
+)]
 fn execute_lab_point_chain(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
@@ -845,6 +857,20 @@ fn execute_lab_point_chain(
         if let rusttable_processing::ProcessingOperationKind::Sharpen { config } = operation.kind()
         {
             execute_sharpen_lab(
+                *config,
+                &mut output,
+                dimensions,
+                request.scale_context(),
+                mask,
+                opacity,
+                node,
+                scope,
+            )?;
+            continue;
+        }
+        if let rusttable_processing::ProcessingOperationKind::Highpass { config } = operation.kind()
+        {
+            execute_highpass_lab(
                 *config,
                 &mut output,
                 dimensions,
@@ -1062,6 +1088,9 @@ fn execute_lab_point_operation(
         }
         rusttable_processing::ProcessingOperationKind::Vibrance { config } => {
             Ok(execute_lab_vibrance(*config, output, mask, opacity))
+        }
+        rusttable_processing::ProcessingOperationKind::ToneCurve { config } => {
+            execute_lab_tonecurve(config, output, mask, opacity, context)
         }
         _ => execute_lab_registered_rgb_stage(output, context),
     }
@@ -1356,6 +1385,117 @@ fn registered_stage_allocation_error(
 
 #[expect(
     clippy::too_many_arguments,
+    reason = "the highpass boundary carries mutable pixels, scale, mask, node identity, and cancellation"
+)]
+fn execute_highpass_lab(
+    config: rusttable_processing::operations::highpass::HighpassConfig,
+    output: &mut [[f32; 4]],
+    dimensions: RasterDimensions,
+    scale: crate::CpuPixelpipeScaleContext,
+    mask: Option<&[f32]>,
+    opacity: f32,
+    node: &rusttable_processing::OperationGraphNode,
+    scope: Option<&CancellationScope>,
+) -> Result<(), CpuPixelpipeError> {
+    let required = output.len().saturating_mul(std::mem::size_of::<
+        rusttable_processing::operations::highpass::HighpassPixel,
+    >());
+    let mut input = Vec::new();
+    input.try_reserve_exact(output.len()).map_err(|_| {
+        sharpen_evaluation_error(
+            node,
+            rusttable_processing::operations::OperationExecutionError::AllocationFailed {
+                required,
+            },
+            scope,
+        )
+    })?;
+    input.extend(
+        output
+            .iter()
+            .copied()
+            .map(rusttable_processing::operations::highpass::HighpassPixel::from_channels),
+    );
+    let plan = rusttable_processing::operations::highpass::HighpassPlan::new_with_scale(
+        config,
+        dimensions,
+        scale.roi_scale(),
+        scale.piece_iscale(),
+    )
+    .map_err(|error| sharpen_evaluation_error(node, error, scope))?;
+    let candidate = plan
+        .execute_with_cancel(&input, dimensions, || {
+            scope.is_some_and(|scope| scope.check().is_err())
+        })
+        .map_err(|error| sharpen_evaluation_error(node, error, scope))?;
+    for (index, (destination, candidate)) in output.iter_mut().zip(candidate).enumerate() {
+        if index % 1_024 == 0
+            && let Some(scope) = scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let coverage = mask.map_or(opacity, |values| values[index] * opacity);
+        let candidate = candidate.channels();
+        for channel in 0..4 {
+            destination[channel] =
+                candidate[channel].mul_add(coverage, destination[channel] * (1.0 - coverage));
+        }
+    }
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    Ok(())
+}
+
+fn execute_lab_tonecurve(
+    config: &rusttable_processing::operations::tonecurve::ToneCurveConfig,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+    context: &LabPointOperationContext<'_>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    let input = output
+        .iter()
+        .copied()
+        .map(rusttable_processing::operations::tonecurve::ToneCurvePixel::from_channels)
+        .collect::<Vec<_>>();
+    let profile =
+        rusttable_processing::operations::tonecurve::requires_profile_evidence(config.parameters())
+            .then(rusttable_processing::operations::tonecurve::ToneCurveProfileEvidence::prophoto);
+    let plan = rusttable_processing::operations::tonecurve::ToneCurvePlan::new(
+        config.parameters().clone(),
+        profile,
+    )
+    .map_err(|error| tonecurve_evaluation_error(context.node, &error, context.scope))?;
+    let candidate = plan
+        .execute_with_cancel(&input, || {
+            context.scope.is_some_and(|scope| scope.check().is_err())
+        })
+        .map_err(|error| tonecurve_evaluation_error(context.node, &error, context.scope))?;
+    let mut result = Vec::with_capacity(output.len());
+    for (index, (source, candidate)) in output.iter().zip(candidate.pixels).enumerate() {
+        if index % 1_024 == 0
+            && let Some(scope) = context.scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let candidate = candidate.channels();
+        let coverage = mask.map_or(opacity, |values| values[index] * opacity);
+        result.push([
+            candidate[0].mul_add(coverage, source[0] * (1.0 - coverage)),
+            candidate[1].mul_add(coverage, source[1] * (1.0 - coverage)),
+            candidate[2].mul_add(coverage, source[2] * (1.0 - coverage)),
+            candidate[3].mul_add(coverage, source[3] * (1.0 - coverage)),
+        ]);
+    }
+    if let Some(scope) = context.scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    Ok(result)
+}
+
+#[expect(
+    clippy::too_many_arguments,
     reason = "the sharpen boundary carries mutable pixels, scale, mask, node identity, and cancellation"
 )]
 fn execute_sharpen_lab(
@@ -1469,6 +1609,27 @@ fn colormapping_evaluation_error(
 ) -> CpuPixelpipeError {
     if source == rusttable_processing::ColorMappingExecutionError::Cancelled
         && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
+}
+
+fn tonecurve_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: &rusttable_processing::operations::tonecurve::ToneCurveExecutionError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if matches!(
+        source,
+        rusttable_processing::operations::tonecurve::ToneCurveExecutionError::Cancelled
+    ) && let Some(error) = scope.and_then(|scope| scope.check().err())
     {
         return CpuPixelpipeError::Cancelled(error);
     }

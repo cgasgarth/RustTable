@@ -1,16 +1,18 @@
 //! Source-derived bounded Tone Curve CPU leaf coverage.
 //!
-//! The operation is included by path: production registry, history, pixelpipe,
-//! GPU, GTK, blending, and preset integration are separate deferred seams.
+//! Production registry, typed history, and CPU pixelpipe dispatch are routed;
+//! GPU, GTK, masks/outer blending, and preset integration remain deferred seams.
 
 #![allow(
     clippy::assertions_on_constants,
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
+    clippy::excessive_precision,
     clippy::field_reassign_with_default,
     clippy::float_cmp,
     clippy::needless_range_loop,
     clippy::similar_names,
+    clippy::suboptimal_flops,
     clippy::too_many_lines,
     clippy::unreadable_literal,
     reason = "source-derived vectors intentionally assert f32 bit patterns and fixed arrays"
@@ -47,7 +49,7 @@ fn params_with_l_curve(curve: [ToneCurveNode; 2]) -> ToneCurveParametersV5 {
 }
 
 fn linear_profile() -> ToneCurveProfileEvidence {
-    ToneCurveProfileEvidence::new_linear([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+    ToneCurveProfileEvidence::prophoto()
 }
 
 fn put_i32(bytes: &mut [u8], offset: usize, value: i32) {
@@ -291,36 +293,54 @@ fn xyz_and_rgb_autoscale_replace_l_table_before_fitting() {
 }
 
 #[test]
-fn rgb_luminance_requires_profile_evidence_and_uses_explicit_matrix_and_trc() {
+fn rgb_luminance_requires_profile_evidence_and_rejects_nonlinear_evidence() {
     let mut parameters = ToneCurveParametersV5::default();
     parameters.tonecurve_autoscale_ab = ToneCurveAutoscale::AutomaticRgb;
     parameters.preserve_colors = PreserveColors::Luminance;
+    assert!(compile_parameters(&parameters, None).is_ok());
     assert_eq!(
-        compile_parameters(&parameters, None).unwrap_err(),
-        tonecurve::CurveCompileError::MissingProfileEvidence
+        ToneCurvePlan::new(parameters, None).unwrap_err(),
+        ToneCurveExecutionError::Curve(tonecurve::CurveCompileError::MissingProfileEvidence)
     );
     assert_eq!(
         PROFILE_MATRIX_ORIENTATION,
         "matrix_in is row-major (non-transposed) and its row 1 supplies ProPhoto Y"
     );
 
-    let matrix = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
-    let profile = ToneCurveProfileEvidence::new_linear(matrix);
-    assert_eq!(
-        profile.luminance([1.0, 2.0, 3.0]).to_bits(),
-        32.0_f32.to_bits()
+    let profile = ToneCurveProfileEvidence::prophoto();
+    let rgb = [0.2_f32, 0.7, 0.1];
+    let expected = 0.2880402_f32 * rgb[0] + 0.7118741_f32 * rgb[1] + 0.0000857_f32 * rgb[2];
+    assert_eq!(profile.luminance(rgb).to_bits(), expected.to_bits());
+    assert_ne!(
+        profile.luminance(rgb).to_bits(),
+        ((rgb[0] + rgb[1] + rgb[2]) / 3.0).to_bits()
     );
 
-    let lut = std::array::from_fn(|_| vec![0.0, 0.1, 1.0]);
     let nonlinear = ToneCurveProfileEvidence::new_with_trc(
         [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-        lut,
+        std::array::from_fn(|_| vec![0.0, 0.1, 1.0]),
         [[1.0, 1.0, 1.0]; 3],
         3,
         true,
-    )
-    .unwrap();
-    assert!(nonlinear.luminance([0.5, 0.5, 0.5]) < 0.5);
+    );
+    assert!(nonlinear.is_err());
+}
+
+#[test]
+fn prophoto_profile_evidence_drives_non_neutral_rgb_luminance_execution() {
+    let mut parameters = params_with_l_curve([node(0.0, 0.0), node(1.0, 0.5)]);
+    parameters.tonecurve_autoscale_ab = ToneCurveAutoscale::AutomaticRgb;
+    parameters.preserve_colors = PreserveColors::Luminance;
+    let profile = ToneCurveProfileEvidence::prophoto();
+    let input = ToneCurvePixel::new(50.0, 20.0, -10.0, 0.73);
+    let output = ToneCurvePlan::new(parameters, Some(profile))
+        .expect("ProPhoto profile plan")
+        .execute_with_cancel(&[input], || false)
+        .expect("ProPhoto profile execution")
+        .pixels[0]
+        .channels();
+    assert_ne!(output[..3], input.channels()[..3]);
+    assert_eq!(output[3].to_bits(), 0.73_f32.to_bits());
 }
 
 #[test]
@@ -505,8 +525,20 @@ fn runtime_commit_order_and_deferred_surfaces_remain_explicit() {
     assert!(caps.cpu_supported);
     assert!(!GPU_SUPPORTED && !GTK_SUPPORTED);
     assert!(caps.rgb_luminance_requires_profile_evidence);
+    assert!(caps.runtime_mask_coverage_consumed);
+    assert!(caps.runtime_opacity_consumed);
+    assert!(caps.imported_native_blend_mask_deferred);
     assert!(RESPONSIBILITIES.iter().any(|entry| {
         entry.native_symbol == "process_cl" && entry.status.contains("unavailable")
+    }));
+    assert!(RESPONSIBILITIES.iter().any(|entry| {
+        entry.native_symbol == "runtime mask coverage / operation opacity"
+            && entry.status.contains("implemented")
+    }));
+    assert!(RESPONSIBILITIES.iter().any(|entry| {
+        entry.native_symbol == "imported native blend/mask payloads"
+            && entry.status.contains("opaque")
+            && entry.status.contains("deferred")
     }));
     assert!(RESPONSIBILITIES.iter().any(|entry| {
         entry.native_symbol == "gui_init/gui_changed" && entry.status.contains("deferred")

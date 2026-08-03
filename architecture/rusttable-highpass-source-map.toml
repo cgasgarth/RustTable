@@ -43,13 +43,21 @@ id = "gpu-kernel-contract"
 upstream_path = "data/kernels/highpass.cl"
 upstream_symbols = ["highpass_invert", "highpass_hblur", "highpass_vblur", "highpass_mix"]
 rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
-status = "implemented"
-notes = "Program identity and CPU/GPU fourth-channel and blur differences are documented; executable GPU binding remains deferred."
+status = "deferred"
+notes = "Program identity and CPU/GPU fourth-channel and blur differences are documented as retained oracle evidence; executable GPU binding remains deferred."
 
 [[responsibility]]
-id = "operation-integration"
-upstream_path = "src/iop/highpass.c"
-upstream_symbols = ["flags", "default_colorspace", "process", "gui_init"]
-rust_path = "crates/rusttable-processing/src/operations/mod.rs"
+id = "production-routing"
+upstream_path = "src/iop/highpass.c and processing integration hubs"
+upstream_symbols = ["flags", "default_colorspace", "process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs; crates/rusttable-processing/src/descriptor; crates/rusttable-processing/src/registry; crates/rusttable-import; crates/rusttable-pixelpipe"
+status = "implemented"
+notes = "Production registry, typed descriptor, v1 history import, CPU evaluator and pixelpipe dispatch, snapshot identity, and the bounded CPU capability contract are integrated."
+
+[[responsibility]]
+id = "remaining-shared-capabilities"
+upstream_path = "src/iop/highpass.c; src/develop/blend.c; shared GPU, UI, mask, and blend owners"
+upstream_symbols = ["process_cl", "gui_init", "IOP_FLAGS_SUPPORTS_BLENDING"]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs; crates/rusttable-processing/src/registry; crates/rusttable-pixelpipe"
 status = "deferred"
-notes = "Registry, descriptor, snapshot, pixelpipe, blending, import/history routing, stale capability metadata, and GTK ownership are outside the operation-local lane."
+notes = "Executable GPU binding, GTK controls, imported masks, outer blending, and broader blend capability remain explicitly unavailable rather than approximated."

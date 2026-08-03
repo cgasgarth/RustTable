@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     CompatHistoryHash, CompatHistoryStep, CompatModuleInstance, CompatModuleOrder,
@@ -7,12 +7,111 @@ use super::{
     ModuleOrderRule, ModuleOrderVersion, OpaquePayload, Severity, SourceRowKey, finding,
 };
 
-// Migration oracle from pinned darktable
-// `cfe57f3bbf5269bfacf31e832267279caa6938ad:src/common/iop_order.c::v30_order`.
-//
 // Keep this separate from `Operation::default_order`: the operation scanner
 // records CMake registration ordinals there, while a built-in `module_order`
 // row names one of Darktable's versioned pixel-pipeline tables.
+//
+// Migration oracle from pinned darktable
+// `cfe57f3bbf5269bfacf31e832267279caa6938ad:src/common/iop_order.c::legacy_order`.
+
+const LEGACY_BUILT_IN_ORDER: &[&str] = &[
+    "rawprepare",
+    "invert",
+    "temperature",
+    "rasterfile",
+    "highlights",
+    "cacorrect",
+    "hotpixels",
+    "rawdenoise",
+    "demosaic",
+    "mask_manager",
+    "denoiseprofile",
+    "tonemap",
+    "exposure",
+    "spots",
+    "retouch",
+    "lens",
+    "cacorrectrgb",
+    "ashift",
+    "liquify",
+    "rotatepixels",
+    "scalepixels",
+    "flip",
+    "enlargecanvas",
+    "clipping",
+    "toneequal",
+    "crop",
+    "overlay",
+    "graduatednd",
+    "basecurve",
+    "bilateral",
+    "profile_gamma",
+    "hazeremoval",
+    "colorin",
+    "channelmixerrgb",
+    "diffuse",
+    "censorize",
+    "negadoctor",
+    "blurs",
+    "basicadj",
+    "primaries",
+    "colorreconstruct",
+    "colorchecker",
+    "defringe",
+    "equalizer",
+    "vibrance",
+    "colorharmonizer",
+    "colorbalance",
+    "colorequal",
+    "colorbalancergb",
+    "colorize",
+    "colortransfer",
+    "colormapping",
+    "bloom",
+    "nlmeans",
+    "globaltonemap",
+    "shadhi",
+    "atrous",
+    "bilat",
+    "colorzones",
+    "lowlight",
+    "monochrome",
+    "sigmoid",
+    "agx",
+    "filmic",
+    "filmicrgb",
+    "colisa",
+    "zonesystem",
+    "tonecurve",
+    "levels",
+    "rgblevels",
+    "rgbcurve",
+    "relight",
+    "colorcorrection",
+    "sharpen",
+    "lowpass",
+    "highpass",
+    "grain",
+    "lut3d",
+    "colorcontrast",
+    "colorout",
+    "channelmixer",
+    "soften",
+    "vignette",
+    "splittoning",
+    "velvia",
+    "clahe",
+    "finalscale",
+    "overexposed",
+    "rawoverexposed",
+    "dither",
+    "borders",
+    "watermark",
+    "gamma",
+];
+
+// Migration oracle from pinned darktable
+// `cfe57f3bbf5269bfacf31e832267279caa6938ad:src/common/iop_order.c::v30_order`.
 const V30_BUILT_IN_ORDER: &[&str] = &[
     "rawprepare",
     "invert",
@@ -101,6 +200,300 @@ const V30_BUILT_IN_ORDER: &[&str] = &[
     "colorout",
     "clahe",
     "finalscale",
+    "overexposed",
+    "rawoverexposed",
+    "dither",
+    "borders",
+    "watermark",
+    "gamma",
+];
+
+// Migration oracle from pinned darktable
+// `cfe57f3bbf5269bfacf31e832267279caa6938ad:src/common/iop_order.c::v30_jpg_order`.
+const V30_JPEG_BUILT_IN_ORDER: &[&str] = &[
+    "rawprepare",
+    "invert",
+    "temperature",
+    "rasterfile",
+    "highlights",
+    "cacorrect",
+    "hotpixels",
+    "rawdenoise",
+    "demosaic",
+    "colorin",
+    "denoiseprofile",
+    "bilateral",
+    "rotatepixels",
+    "scalepixels",
+    "lens",
+    "cacorrectrgb",
+    "hazeremoval",
+    "ashift",
+    "flip",
+    "enlargecanvas",
+    "overlay",
+    "clipping",
+    "liquify",
+    "spots",
+    "retouch",
+    "exposure",
+    "mask_manager",
+    "tonemap",
+    "toneequal",
+    "crop",
+    "graduatednd",
+    "profile_gamma",
+    "equalizer",
+    "channelmixerrgb",
+    "diffuse",
+    "censorize",
+    "negadoctor",
+    "blurs",
+    "primaries",
+    "nlmeans",
+    "colorchecker",
+    "defringe",
+    "atrous",
+    "lowpass",
+    "highpass",
+    "sharpen",
+    "colortransfer",
+    "colormapping",
+    "channelmixer",
+    "basicadj",
+    "colorharmonizer",
+    "colorbalance",
+    "colorequal",
+    "colorbalancergb",
+    "rgbcurve",
+    "rgblevels",
+    "basecurve",
+    "filmic",
+    "agx",
+    "sigmoid",
+    "filmicrgb",
+    "lut3d",
+    "colisa",
+    "tonecurve",
+    "levels",
+    "shadhi",
+    "zonesystem",
+    "globaltonemap",
+    "relight",
+    "bilat",
+    "colorcorrection",
+    "colorcontrast",
+    "velvia",
+    "vibrance",
+    "colorzones",
+    "bloom",
+    "colorize",
+    "lowlight",
+    "monochrome",
+    "grain",
+    "soften",
+    "splittoning",
+    "vignette",
+    "colorreconstruct",
+    "colorout",
+    "clahe",
+    "finalscale",
+    "overexposed",
+    "rawoverexposed",
+    "dither",
+    "borders",
+    "watermark",
+    "gamma",
+];
+
+// Migration oracle from pinned darktable
+// `cfe57f3bbf5269bfacf31e832267279caa6938ad:src/common/iop_order.c::v50_order`.
+const V50_BUILT_IN_ORDER: &[&str] = &[
+    "rawprepare",
+    "invert",
+    "temperature",
+    "rasterfile",
+    "highlights",
+    "cacorrect",
+    "hotpixels",
+    "rawdenoise",
+    "demosaic",
+    "denoiseprofile",
+    "bilateral",
+    "rotatepixels",
+    "scalepixels",
+    "lens",
+    "cacorrectrgb",
+    "hazeremoval",
+    "ashift",
+    "flip",
+    "enlargecanvas",
+    "overlay",
+    "clipping",
+    "liquify",
+    "spots",
+    "retouch",
+    "exposure",
+    "mask_manager",
+    "tonemap",
+    "toneequal",
+    "crop",
+    "graduatednd",
+    "profile_gamma",
+    "equalizer",
+    "colorin",
+    "channelmixerrgb",
+    "diffuse",
+    "censorize",
+    "negadoctor",
+    "blurs",
+    "primaries",
+    "nlmeans",
+    "colorchecker",
+    "defringe",
+    "atrous",
+    "lowpass",
+    "highpass",
+    "sharpen",
+    "colortransfer",
+    "colormapping",
+    "channelmixer",
+    "basicadj",
+    "colorharmonizer",
+    "colorbalance",
+    "colorequal",
+    "colorbalancergb",
+    "rgbcurve",
+    "rgblevels",
+    "basecurve",
+    "filmic",
+    "sigmoid",
+    "agx",
+    "filmicrgb",
+    "lut3d",
+    "colisa",
+    "tonecurve",
+    "levels",
+    "shadhi",
+    "zonesystem",
+    "globaltonemap",
+    "relight",
+    "bilat",
+    "colorcorrection",
+    "colorcontrast",
+    "velvia",
+    "vibrance",
+    "colorzones",
+    "bloom",
+    "colorize",
+    "lowlight",
+    "monochrome",
+    "grain",
+    "soften",
+    "splittoning",
+    "vignette",
+    "colorreconstruct",
+    "finalscale",
+    "colorout",
+    "clahe",
+    "overexposed",
+    "rawoverexposed",
+    "dither",
+    "borders",
+    "watermark",
+    "gamma",
+];
+
+// Migration oracle from pinned darktable
+// `cfe57f3bbf5269bfacf31e832267279caa6938ad:src/common/iop_order.c::v50_jpg_order`.
+const V50_JPEG_BUILT_IN_ORDER: &[&str] = &[
+    "rawprepare",
+    "invert",
+    "temperature",
+    "rasterfile",
+    "highlights",
+    "cacorrect",
+    "hotpixels",
+    "rawdenoise",
+    "demosaic",
+    "colorin",
+    "denoiseprofile",
+    "bilateral",
+    "rotatepixels",
+    "scalepixels",
+    "lens",
+    "cacorrectrgb",
+    "hazeremoval",
+    "ashift",
+    "flip",
+    "enlargecanvas",
+    "overlay",
+    "clipping",
+    "liquify",
+    "spots",
+    "retouch",
+    "exposure",
+    "mask_manager",
+    "tonemap",
+    "toneequal",
+    "crop",
+    "graduatednd",
+    "profile_gamma",
+    "equalizer",
+    "channelmixerrgb",
+    "diffuse",
+    "censorize",
+    "negadoctor",
+    "blurs",
+    "primaries",
+    "nlmeans",
+    "colorchecker",
+    "defringe",
+    "atrous",
+    "lowpass",
+    "highpass",
+    "sharpen",
+    "colortransfer",
+    "colormapping",
+    "channelmixer",
+    "basicadj",
+    "colorharmonizer",
+    "colorbalance",
+    "colorequal",
+    "colorbalancergb",
+    "rgbcurve",
+    "rgblevels",
+    "basecurve",
+    "filmic",
+    "sigmoid",
+    "agx",
+    "filmicrgb",
+    "lut3d",
+    "colisa",
+    "tonecurve",
+    "levels",
+    "shadhi",
+    "zonesystem",
+    "globaltonemap",
+    "relight",
+    "bilat",
+    "colorcorrection",
+    "colorcontrast",
+    "velvia",
+    "vibrance",
+    "colorzones",
+    "bloom",
+    "colorize",
+    "lowlight",
+    "monochrome",
+    "grain",
+    "soften",
+    "splittoning",
+    "vignette",
+    "colorreconstruct",
+    "finalscale",
+    "colorout",
+    "clahe",
     "overexposed",
     "rawoverexposed",
     "dither",
@@ -274,21 +667,16 @@ pub(super) fn order_instances(
     findings: &mut Vec<Finding>,
 ) -> (Vec<ModuleInstanceId>, Option<HistoryOrderSource>, bool) {
     let Some(order) = module_order else {
+        // Native selects a built-in default here from display-referred state and
+        // the image flags before loading history. Those inputs are not part of
+        // `HistoryRows`, so the physical history-number sequence is retention
+        // order only and cannot prove executable module order.
         let mut ordered = instances.to_vec();
         ordered.sort_by_key(|instance| first_step_number(instance.id, steps));
-        let proven = !findings.iter().any(|finding| {
-            finding.severity == Severity::Blocking
-                && matches!(
-                    finding.code,
-                    FindingCode::InvalidHistoryNumber
-                        | FindingCode::DuplicateHistoryNumber
-                        | FindingCode::HistoryNumberGap
-                )
-        });
         return (
             ordered.into_iter().map(|instance| instance.id).collect(),
-            proven.then_some(HistoryOrderSource::HistoryNumbers),
-            proven,
+            None,
+            false,
         );
     };
     if !order.entries.is_empty() {
@@ -296,7 +684,7 @@ pub(super) fn order_instances(
         for entry in &order.entries {
             if let Some(instance) = instances.iter().find(|instance| {
                 instance.operation.raw_name == entry.operation
-                    && instance.multi_priority == Some(entry.instance)
+                    && instance.multi_priority.unwrap_or(0) == entry.instance
             }) && !result.contains(&instance.id)
             {
                 result.push(instance.id);
@@ -358,21 +746,21 @@ fn built_in_order(
     version: ModuleOrderVersion,
 ) -> (Vec<ModuleInstanceId>, bool) {
     let native_order = match version {
+        ModuleOrderVersion::Legacy => Some(LEGACY_BUILT_IN_ORDER),
         ModuleOrderVersion::V30 => Some(V30_BUILT_IN_ORDER),
-        _ => None,
+        ModuleOrderVersion::V30Jpeg => Some(V30_JPEG_BUILT_IN_ORDER),
+        ModuleOrderVersion::V50 => Some(V50_BUILT_IN_ORDER),
+        ModuleOrderVersion::V50Jpeg => Some(V50_JPEG_BUILT_IN_ORDER),
+        ModuleOrderVersion::Custom | ModuleOrderVersion::Unknown(_) => None,
     };
     let mut ordered = instances.to_vec();
     ordered.sort_by_key(|instance| {
-        let name = instance.operation.name.as_deref();
+        let name = instance.operation.name.as_deref().unwrap_or_default();
         (
             native_order
-                .and_then(|order| {
-                    name.and_then(|name| order.iter().position(|candidate| *candidate == name))
-                })
+                .and_then(|order| order.iter().position(|candidate| *candidate == name))
                 .unwrap_or(usize::MAX),
-            name.and_then(|name| manifest.get(name))
-                .and_then(|entry| entry.default_order)
-                .unwrap_or(i64::MAX),
+            name.to_owned(),
             instance.multi_priority.unwrap_or(i64::MAX),
             instance.first_source.row(),
         )
@@ -495,13 +883,27 @@ fn darktable_hash(
 ) -> [u8; 16] {
     let mut digest = md5::Context::new();
     let endpoint = history_end.unwrap_or(i64::MAX);
-    let mut seen = BTreeSet::new();
+    let mut max_num_by_key = BTreeMap::<(Vec<u8>, i64), i64>::new();
+    for step in steps.iter().filter(|step| step.num <= endpoint) {
+        max_num_by_key
+            .entry((
+                step.operation.raw_name.clone(),
+                step.multi_priority.unwrap_or(0),
+            ))
+            .and_modify(|max_num| *max_num = (*max_num).max(step.num))
+            .or_insert(step.num);
+    }
     let mut selected = steps
         .iter()
         .filter(|step| {
-            step.num < endpoint
+            step.num <= endpoint
                 && matches!(step.enabled, EnabledState::Enabled)
-                && seen.insert((step.operation.raw_name.clone(), step.multi_priority))
+                && max_num_by_key
+                    .get(&(
+                        step.operation.raw_name.clone(),
+                        step.multi_priority.unwrap_or(0),
+                    ))
+                    .is_some_and(|max_num| *max_num == step.num)
         })
         .collect::<Vec<_>>();
     selected.sort_by_key(|step| step.num);

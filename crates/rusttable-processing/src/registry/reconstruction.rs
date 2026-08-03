@@ -12,6 +12,15 @@ use rusttable_core::Operation;
 )]
 pub fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     match operation.kind() {
+        crate::ProcessingOperationKind::Basecurve { .. } => {
+            crate::descriptor::basecurve_descriptor().id
+        }
+        crate::ProcessingOperationKind::Highpass { .. } => {
+            crate::descriptor::highpass_descriptor().id
+        }
+        crate::ProcessingOperationKind::ToneCurve { .. } => {
+            crate::descriptor::tonecurve_descriptor().id
+        }
         crate::ProcessingOperationKind::Agx { .. } => crate::descriptor::agx_descriptor().id,
         crate::ProcessingOperationKind::BasicAdj { .. } => {
             crate::descriptor::basicadj_descriptor().id

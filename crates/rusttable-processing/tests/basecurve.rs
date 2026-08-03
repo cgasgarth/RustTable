@@ -14,6 +14,8 @@ use std::cell::Cell;
 
 use basecurve::source_map::{BASECURVE_SOURCE_MAP, BasecurvePortStatus};
 use basecurve::*;
+use rusttable_processing::WorkingFrameDescriptor;
+use rusttable_processing::descriptor::{OperationFlags, RoiKind};
 
 fn fixture_bytes() -> Vec<u8> {
     include_str!("../src/operations/basecurve/fixtures/v6-default.hex")
@@ -296,11 +298,45 @@ fn legacy_and_color_preserving_paths_keep_alpha_and_profile_semantics() {
     assert_eq!(output[3].to_bits(), 0.63_f32.to_bits());
 
     let no_profile_luminance =
-        BasecurvePlan::compile(nonlinear_parameters()).expect("camera luminance");
-    let camera = no_profile_luminance
-        .execute_rgba(&[BasecurvePixel::new(0.5, 0.0, 0.0, 1.0)])
-        .expect("camera path");
-    assert!(camera[0].channels()[0].is_finite());
+        BasecurvePlan::compile(nonlinear_parameters()).expect("profile-dependent curve");
+    assert_eq!(
+        no_profile_luminance
+            .execute_rgba(&[BasecurvePixel::new(0.5, 0.0, 0.0, 1.0)])
+            .unwrap_err(),
+        BasecurveExecutionError::MissingProfileEvidence
+    );
+}
+
+#[test]
+fn selected_working_profile_changes_luminance_without_camera_fallback() {
+    let mut parameters = nonlinear_parameters();
+    parameters.preserve_colors = DT_RGB_NORM_LUMINANCE;
+    let plan = BasecurvePlan::compile(parameters).expect("profile-dependent curve");
+    let selected = BasecurveProfileEvidence::from_working_frame(WorkingFrameDescriptor::rec2020())
+        .expect("selected builtin working profile");
+    let camera_fallback = BasecurveProfileEvidence::new(
+        [
+            [1.0, 0.0, 0.0],
+            [0.2225045, 0.7168786, 0.0606169],
+            [0.0, 0.0, 1.0],
+        ],
+        std::array::from_fn(|_| vec![-1.0]),
+        [[0.0; 3]; 3],
+        0,
+        false,
+    )
+    .expect("camera comparison evidence");
+    let input = BasecurvePixel::new(0.2, 0.7, 0.1, 0.41);
+    let selected_output = plan
+        .execute_rgba_with_profile(&[input], Some(&selected), || false)
+        .expect("selected profile output")[0]
+        .channels();
+    let camera_output = plan
+        .execute_rgba_with_profile(&[input], Some(&camera_fallback), || false)
+        .expect("camera comparison output")[0]
+        .channels();
+    assert_ne!(selected_output[..3], camera_output[..3]);
+    assert_eq!(selected_output[3].to_bits(), 0.41_f32.to_bits());
 }
 
 #[test]
@@ -331,6 +367,20 @@ fn profile_evidence_rejects_incomplete_icc_data_without_fallback() {
 }
 
 #[test]
+fn descriptor_advertises_native_cpu_tile_contract() {
+    let descriptor = rusttable_processing::descriptor::basecurve_descriptor();
+    descriptor.validate().expect("descriptor");
+    assert!(descriptor.flags.contains(OperationFlags::TILEABLE));
+    assert!(!descriptor.flags.contains(OperationFlags::FULL_IMAGE));
+    assert!(!descriptor.flags.contains(OperationFlags::ANALYSIS));
+    assert_eq!(descriptor.roi, RoiKind::Identity);
+    assert_eq!(descriptor.tiling.overlap_pixels, 0);
+    assert_eq!(descriptor.tiling.alignment_pixels, 1);
+    assert_eq!(descriptor.tiling.temporary_multiplier_milli, 2_000);
+    assert!(!descriptor.mask_blend.analysis);
+}
+
+#[test]
 fn unsupported_fusion_capabilities_and_cancellation_fail_closed() {
     let mut parameters = BasecurveParameters::defaults();
     parameters.exposure_fusion = 1;
@@ -344,6 +394,10 @@ fn unsupported_fusion_capabilities_and_cancellation_fail_closed() {
     assert!(!capabilities.gtk);
     assert!(!capabilities.consumes_masks);
     assert_eq!(capabilities.outer_blending, DeferredCapability::Deferred);
+    assert_eq!(
+        capabilities.production_routing,
+        DeferredCapability::Supported
+    );
     assert_eq!(capabilities.tiling.factor_milli, 2_000);
     assert_eq!(capabilities.tiling.overlap_pixels, 0);
     assert_eq!(capabilities.tiling.alignment_pixels, 1);
@@ -359,12 +413,11 @@ fn unsupported_fusion_capabilities_and_cancellation_fail_closed() {
         capabilities.require_masks(),
         Err(BasecurveExecutionError::UnsupportedCapability(_))
     ));
-    assert!(matches!(
-        capabilities.require_production_routing(),
-        Err(BasecurveExecutionError::UnsupportedCapability(_))
-    ));
+    assert_eq!(capabilities.require_production_routing(), Ok(()));
 
-    let plan = BasecurvePlan::compile(BasecurveParameters::defaults()).expect("plan");
+    let mut cancellation_parameters = BasecurveParameters::defaults();
+    cancellation_parameters.preserve_colors = DT_RGB_NORM_NONE;
+    let plan = BasecurvePlan::compile(cancellation_parameters).expect("plan");
     let input = vec![BasecurvePixel::new(0.25, 0.5, 0.75, 1.0); 300];
     let calls = Cell::new(0_u32);
     let result = plan.execute_rgba_with_profile(&input, None, || {

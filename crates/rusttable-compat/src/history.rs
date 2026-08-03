@@ -9,6 +9,94 @@ use super::{Finding, FindingCode, Severity, SourceRowKey};
 const REFERENCE_OPERATION_CAPABILITIES: &str =
     include_str!("../../../architecture/operation-capabilities.json");
 
+/// Darktable's current persisted blend payload version.
+pub const DARKTABLE_BLEND_VERSION: i64 = 14;
+/// Size of `dt_develop_blend_params_t` at blend payload version 14.
+pub const DARKTABLE_BLEND_PARAMETER_BYTES: usize = 420;
+
+const DEVELOP_BLEND_CS_RGB_SCENE: i32 = 4;
+#[expect(
+    clippy::excessive_precision,
+    reason = "Native Darktable blend defaults retain this exact decimal before f32 serialization."
+)]
+const SCENE_RGB_JZ_CZ_BOOST: f32 = -6.643_856_19_f32;
+
+/// Returns Darktable's exact v14 identity blend payload in native field order.
+///
+/// The native initializer starts with `DEVELOP_BLEND_CS_NONE`, then
+/// `dt_iop_commit_blend_params` normalizes that field to the module's default
+/// colorspace before the payload is persisted. Callers must provide that
+/// operation-specific normalized value; every other field remains native.
+#[must_use]
+pub fn identity_blend_v14_bytes(blend_cst: i32) -> Vec<u8> {
+    let mut bytes = vec![0_u8; DARKTABLE_BLEND_PARAMETER_BYTES];
+    let mut offset = 0;
+    put_u32(&mut bytes, &mut offset, 0); // DEVELOP_MASK_DISABLED
+    put_i32(&mut bytes, &mut offset, blend_cst);
+    put_u32(&mut bytes, &mut offset, 0x18); // DEVELOP_BLEND_NORMAL2
+    put_f32(&mut bytes, &mut offset, 0.0);
+    put_f32(&mut bytes, &mut offset, 100.0);
+    put_u32(&mut bytes, &mut offset, 0); // DEVELOP_COMBINE_NORM_EXCL
+    put_i32(&mut bytes, &mut offset, 0); // mask_id
+    put_u32(&mut bytes, &mut offset, 0); // blendif
+    put_f32(&mut bytes, &mut offset, 0.0);
+    put_u32(&mut bytes, &mut offset, 5); // DEVELOP_MASK_GUIDE_IN_AFTER_BLUR
+    for _ in 0..4 {
+        put_f32(&mut bytes, &mut offset, 0.0);
+    }
+    put_u32(&mut bytes, &mut offset, 1); // feather_version
+    for _ in 0..2 {
+        put_u32(&mut bytes, &mut offset, 0);
+    }
+    for _ in 0..16 {
+        put_f32(&mut bytes, &mut offset, 0.0);
+        put_f32(&mut bytes, &mut offset, 0.0);
+        put_f32(&mut bytes, &mut offset, 1.0);
+        put_f32(&mut bytes, &mut offset, 1.0);
+    }
+    for index in 0..16 {
+        let boost = if blend_cst == DEVELOP_BLEND_CS_RGB_SCENE && matches!(index, 8 | 9 | 12 | 13) {
+            SCENE_RGB_JZ_CZ_BOOST
+        } else {
+            0.0
+        };
+        put_f32(&mut bytes, &mut offset, boost);
+    }
+    offset += 20; // raster_mask_source[20]
+    put_i32(&mut bytes, &mut offset, 0); // raster_mask_instance
+    put_i32(&mut bytes, &mut offset, -1); // INVALID_MASKID
+    put_i32(&mut bytes, &mut offset, 0); // gboolean FALSE
+    debug_assert_eq!(offset, DARKTABLE_BLEND_PARAMETER_BYTES);
+    bytes
+}
+
+/// Accepts only a present, byte-for-byte current identity blend payload.
+#[must_use]
+pub fn is_identity_blend_v14(
+    payload: &OpaquePayload,
+    version: Option<i64>,
+    blend_cst: i32,
+) -> bool {
+    version == Some(DARKTABLE_BLEND_VERSION)
+        && payload.present
+        && payload.bytes == identity_blend_v14_bytes(blend_cst)
+}
+
+fn put_f32(bytes: &mut [u8], offset: &mut usize, value: f32) {
+    bytes[*offset..*offset + 4].copy_from_slice(&value.to_le_bytes());
+    *offset += 4;
+}
+
+fn put_u32(bytes: &mut [u8], offset: &mut usize, value: u32) {
+    bytes[*offset..*offset + 4].copy_from_slice(&value.to_le_bytes());
+    *offset += 4;
+}
+
+fn put_i32(bytes: &mut [u8], offset: &mut usize, value: i32) {
+    bytes[*offset..*offset + 4].copy_from_slice(&value.to_le_bytes());
+    *offset += 4;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ManifestOperation {
     current_version: u32,
@@ -343,6 +431,8 @@ pub struct HistorySelection {
     pub history_end: Option<i64>,
     pub selected_rows: Vec<SourceRowKey>,
     pub redo_rows: Vec<SourceRowKey>,
+    /// Enabled rows at the latest selected history number for each operation/priority key.
+    pub active_rows: Vec<SourceRowKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

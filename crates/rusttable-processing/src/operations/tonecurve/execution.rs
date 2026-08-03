@@ -1,8 +1,10 @@
 //! Bounded CPU Tone Curve execution ported from `process()`, `commit_params()`,
 //! and the native pipe data transitions in `src/iop/tonecurve.c`.
 //!
-//! Production history routing, registry/descriptor projection, pixelpipe
-//! dispatch, GPU, GTK, blending, and presets remain unavailable seams.
+//! Production registry, typed history, and CPU pixelpipe dispatch are routed by
+//! the processing integration hubs. The Lab D50 pixelpipe consumes runtime mask
+//! coverage and operation opacity; opaque imported native blend/mask payloads,
+//! GPU, GTK, and presets remain explicitly deferred seams.
 
 #![forbid(unsafe_code)]
 #![expect(
@@ -21,7 +23,7 @@ use std::fmt;
 
 use super::curve::{
     CompiledToneCurveSet, CurveCompileError, ToneCurveProfileEvidence, compile_parameters,
-    lab_to_prophoto, lab_to_xyz, prophoto_to_lab, xyz_to_lab,
+    lab_to_prophoto, lab_to_xyz, prophoto_to_lab, requires_profile_evidence, xyz_to_lab,
 };
 use super::parameters::{
     CHANNELS, LUT_RESOLUTION, PreserveColors, ToneCurveAutoscale, ToneCurveParametersV5,
@@ -41,8 +43,9 @@ pub struct ToneCurveCapabilities {
     pub cpu_supported: bool,
     pub gpu_supported: bool,
     pub gtk_supported: bool,
-    pub masks_consumed: bool,
-    pub outer_blend_deferred: bool,
+    pub runtime_mask_coverage_consumed: bool,
+    pub runtime_opacity_consumed: bool,
+    pub imported_native_blend_mask_deferred: bool,
     pub rgb_luminance_requires_profile_evidence: bool,
 }
 
@@ -52,8 +55,9 @@ pub const fn capabilities() -> ToneCurveCapabilities {
         cpu_supported: true,
         gpu_supported: GPU_SUPPORTED,
         gtk_supported: GTK_SUPPORTED,
-        masks_consumed: false,
-        outer_blend_deferred: true,
+        runtime_mask_coverage_consumed: true,
+        runtime_opacity_consumed: true,
+        imported_native_blend_mask_deferred: true,
         rgb_luminance_requires_profile_evidence: true,
     }
 }
@@ -123,6 +127,11 @@ impl ToneCurvePlan {
         parameters: ToneCurveParametersV5,
         profile: Option<ToneCurveProfileEvidence>,
     ) -> Result<Self, ToneCurveExecutionError> {
+        if requires_profile_evidence(&parameters) && profile.is_none() {
+            return Err(ToneCurveExecutionError::Curve(
+                CurveCompileError::MissingProfileEvidence,
+            ));
+        }
         let curves = compile_parameters(&parameters, profile.as_ref())?;
         Ok(Self {
             parameters,
@@ -386,6 +395,11 @@ impl ToneCurveRuntime {
         &mut self,
         profile: Option<ToneCurveProfileEvidence>,
     ) -> Result<ToneCurvePlan, ToneCurveExecutionError> {
+        if requires_profile_evidence(&self.parameters) && profile.is_none() {
+            return Err(ToneCurveExecutionError::Curve(
+                CurveCompileError::MissingProfileEvidence,
+            ));
+        }
         let compiled = compile_parameters(&self.parameters, profile.as_ref())?;
         self.compiled = Some(compiled.clone());
         Ok(ToneCurvePlan {

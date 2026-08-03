@@ -409,6 +409,101 @@ pub fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
     }
     let before_mask = mask_route.working_rgb_blend().map(|_| pixels.to_vec());
     let result = match operation.kind() {
+        ProcessingOperationKind::Basecurve { config } => {
+            require_unblended_tonal_route(
+                step_index,
+                operation_id,
+                opacity,
+                mask.is_some(),
+                "Base Curve",
+            )?;
+            let plan = crate::operations::basecurve::BasecurvePlan::compile(config.parameters())
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let profile = if config.parameters().preserve_colors
+                == crate::operations::basecurve::DT_RGB_NORM_LUMINANCE
+            {
+                crate::operations::basecurve::BasecurveProfileEvidence::from_working_frame(*frame)
+            } else {
+                None
+            };
+            let rgba = pixels
+                .iter()
+                .copied()
+                .map(|pixel| {
+                    crate::operations::basecurve::BasecurvePixel::new(
+                        pixel.red().get(),
+                        pixel.green().get(),
+                        pixel.blue().get(),
+                        1.0,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let candidate = plan
+                .execute_rgba_with_profile(&rgba, profile.as_ref(), &cancelled)
+                .map_err(|error| match error {
+                    crate::operations::basecurve::BasecurveExecutionError::Cancelled => {
+                        EvaluationError::Cancelled {
+                            step_index,
+                            operation_id,
+                        }
+                    }
+                    error => operation_plan_error(step_index, operation_id, error),
+                })?;
+            let candidate = candidate
+                .into_iter()
+                .enumerate()
+                .map(|(index, pixel)| {
+                    let channels = pixel.channels();
+                    let red = FiniteF32::new(channels[0]).map_err(|_| {
+                        EvaluationError::NonFiniteChannelResult {
+                            step_index,
+                            operation_id,
+                            pixel_index: pixel_index_offset + index,
+                            channel: RgbChannel::Red,
+                        }
+                    })?;
+                    let green = FiniteF32::new(channels[1]).map_err(|_| {
+                        EvaluationError::NonFiniteChannelResult {
+                            step_index,
+                            operation_id,
+                            pixel_index: pixel_index_offset + index,
+                            channel: RgbChannel::Green,
+                        }
+                    })?;
+                    let blue = FiniteF32::new(channels[2]).map_err(|_| {
+                        EvaluationError::NonFiniteChannelResult {
+                            step_index,
+                            operation_id,
+                            pixel_index: pixel_index_offset + index,
+                            channel: RgbChannel::Blue,
+                        }
+                    })?;
+                    Ok(LinearRgb::new(red, green, blue))
+                })
+                .collect::<Result<Vec<_>, EvaluationError>>()?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::Highpass { .. } => Err(operation_plan_error(
+            step_index,
+            operation_id,
+            OperationExecutionError::UnsupportedCapability(
+                "Highpass requires the Lab D50 pixelpipe route",
+            ),
+        )),
+        ProcessingOperationKind::ToneCurve { .. } => Err(operation_plan_error(
+            step_index,
+            operation_id,
+            OperationExecutionError::UnsupportedCapability(
+                "Tone Curve requires the Lab D50 pixelpipe route",
+            ),
+        )),
         ProcessingOperationKind::Agx { config } => {
             require_unblended_tonal_route(
                 step_index,

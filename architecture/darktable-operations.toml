@@ -1631,8 +1631,8 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 name = "basecurve"
 reference_path = "src/iop/basecurve.c"
 module_version = 6
-parameter_size = 52
-parameter_layout_hash = "f064198a166b8da65cc3f164b9a6c69e7cf72553945cd51d016c6d29f01c0ee4"
+parameter_size = 520
+parameter_layout_hash = "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8"
 default_enabled = true
 default_order = 92
 group = "basic"
@@ -1677,10 +1677,10 @@ tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
 version = 1
-byte_size = 728
-layout_hash = "8f29bffc41744ffdb4bf0c7816fced27c833ebfea9a8c92a8eb757b10be4de7b"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 52
+layout_hash = "d63cecbb050f267481218175459f98ea7a9f05db1237f70cb3c6fc4d52c0987f"
+decoder = "rusttable.basecurve.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.basecurve.params.v1"
 abi_layouts = []
 target_codecs = []
@@ -1696,10 +1696,10 @@ evidence_hash = "42e114ec883e16d73992d2fe940466f6edcc9faa94e439dcca580219975cf34
 
 [[operations.parameter_versions]]
 version = 2
-byte_size = 1104
-layout_hash = "9ba2a3fd64cfb60f7ec0cdf0eea0c18e0b834b2afdc027f3392ce8f929ce6f6d"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 504
+layout_hash = "350774dd5d29c1c8eefa2d2c06a61d28063d709962cf3d52100a6958d8c49a3f"
+decoder = "rusttable.basecurve.decode.v2"
+opaque_blocking = false
 fixture_id = "operation.basecurve.params.v2"
 abi_layouts = []
 target_codecs = []
@@ -1715,10 +1715,10 @@ evidence_hash = "e7f7fa76fe72d081be1bc828ce8c7d8a7c2e946c95e5d3a3fde4478e7e3319d
 
 [[operations.parameter_versions]]
 version = 3
-byte_size = 1448
-layout_hash = "7a2acd7ace9662c4642c352e1c4e94155e655f6684ff8311ce488d5e1a15f484"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 512
+layout_hash = "4c7e8161b209f41a8997c4bb70a273ea5e69f11299daa19774c672f6fbdc5d2d"
+decoder = "rusttable.basecurve.decode.v3"
+opaque_blocking = false
 fixture_id = "operation.basecurve.params.v3"
 abi_layouts = []
 target_codecs = []
@@ -1734,10 +1734,10 @@ evidence_hash = "a86dc9a01a7ad32952116bfca6f36f962c6df026034df93a87c6fb94df6efe0
 
 [[operations.parameter_versions]]
 version = 4
-byte_size = 1784
-layout_hash = "072d9b1a5bd9f3fc60859b2ed3eba40d1f59243d62b5342f92b0b2c99b4e18a5"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 512
+layout_hash = "4c7e8161b209f41a8997c4bb70a273ea5e69f11299daa19774c672f6fbdc5d2d"
+decoder = "rusttable.basecurve.decode.v4"
+opaque_blocking = false
 fixture_id = "operation.basecurve.params.v4"
 abi_layouts = []
 target_codecs = []
@@ -1753,10 +1753,10 @@ evidence_hash = "0195208fb04b5add15f9a33baad03068595f8c8a09f3a6a9d4a0aa88668313f
 
 [[operations.parameter_versions]]
 version = 5
-byte_size = 2120
-layout_hash = "c3fce4073623b69a3fe21da6e81f1c6937c4a6ea44d23915f892baaea07ef85b"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 516
+layout_hash = "6b7ca6858c6aa91e9f9b90b38828a9a66ec52ca43b31d429815491782ba12001"
+decoder = "rusttable.basecurve.decode.v5"
+opaque_blocking = false
 fixture_id = "operation.basecurve.params.v5"
 abi_layouts = []
 target_codecs = []
@@ -1772,12 +1772,261 @@ evidence_hash = "9e7615d0a4800e091f7c4d04eb84b9458542214a21aa958f16d73eb9772f73c
 
 [[operations.parameter_versions]]
 version = 6
-byte_size = 52
-layout_hash = "71dff671da55c3dc7cce3b74ab4ae0fa697cea8069839fba456781161d15f73a"
-decoder = "generated.bytes.decode.v6"
+byte_size = 520
+layout_hash = "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8"
+decoder = "rusttable.basecurve.decode.v6"
 opaque_blocking = false
 fixture_id = "operation.basecurve.params.v6"
 target_codecs = []
+
+[[operations.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve"
+type_name = "dt_iop_basecurve_node_t[3][20]"
+array_extent = 60
+offset = 0
+size = 480
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_fusion"
+type_name = "int"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_stops"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_bias"
+type_name = "float"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "2a1bf0737e0f6f370731fd1e30c20d0211158d74ccea6a9f7f37dd536cb8c85e"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve"
+type_name = "dt_iop_basecurve_node_t[3][20]"
+array_extent = 60
+offset = 0
+size = 480
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_fusion"
+type_name = "int"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_stops"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_bias"
+type_name = "float"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "4cc449879bd88ee6c8e55cf2f8c53118ea80ca628b5d711982b819b15225e1b8"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve"
+type_name = "dt_iop_basecurve_node_t[3][20]"
+array_extent = 60
+offset = 0
+size = 480
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "basecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_fusion"
+type_name = "int"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_stops"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "exposure_bias"
+type_name = "float"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
+
+[operations.parameter_versions.codec]
+byte_size = 520
+decoder = "rusttable.basecurve.decode.v6"
+encoder = "rusttable.basecurve.encode.v6"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.basecurve.v6"
+
+[[operations.parameter_versions.codec.fields]]
+name = "basecurve"
+kind = "f32"
+offset = 0
+size = 480
+array_extent = 120
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "basecurve_nodes"
+kind = "i32"
+offset = 480
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "basecurve_type"
+kind = "i32"
+offset = 492
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "exposure_fusion"
+kind = "i32"
+offset = 504
+size = 4
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "exposure_stops"
+kind = "f32"
+offset = 508
+size = 4
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "exposure_bias"
+kind = "f32"
+offset = 512
+size = 4
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "preserve_colors"
+kind = "enum_i32"
+offset = 516
+size = 4
+enum_values = []
 
 [operations.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -1787,79 +2036,6 @@ line_end = 51
 reason = "explicit parameter layout declaration"
 reviewer = "cgasgarth"
 evidence_hash = "484b75e48462a1d270f71ed090389ef14df2ea1157366ee0b96e99aeb19e5924"
-
-[[operations.parameter_versions.abi_layouts]]
-target = "x86_64-unknown-linux-gnu"
-c_abi_model = "x86_64-unknown-linux-gnu"
-endianness = "little"
-pointer_width = 64
-padding = []
-total_size = 52
-alignment = 1
-layout_hash = "f064198a166b8da65cc3f164b9a6c69e7cf72553945cd51d016c6d29f01c0ee4"
-difference_from = []
-
-[[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
-offset = 0
-size = 52
-alignment = 1
-
-[[operations.parameter_versions.abi_layouts]]
-target = "aarch64-apple-darwin"
-c_abi_model = "aarch64-apple-darwin"
-endianness = "little"
-pointer_width = 64
-padding = []
-total_size = 52
-alignment = 1
-layout_hash = "612ca7bd0eee5f1c6d1e58a31e2e26e009bf3fbbf9d2cc61357eb5ec40ceac23"
-difference_from = []
-
-[[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
-offset = 0
-size = 52
-alignment = 1
-
-[[operations.parameter_versions.abi_layouts]]
-target = "x86_64-pc-windows-msvc"
-c_abi_model = "x86_64-pc-windows-msvc"
-endianness = "little"
-pointer_width = 64
-padding = []
-total_size = 52
-alignment = 1
-layout_hash = "4808b90a584722af7956dea43cf8634c2f0a2b095d47fd05b188dd65d2e19c90"
-difference_from = []
-
-[[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
-offset = 0
-size = 52
-alignment = 1
-
-[operations.parameter_versions.codec]
-byte_size = 52
-decoder = "generated.bytes.decode.v6"
-encoder = "generated.bytes.encode.v6"
-byte_order = "little"
-preserves_padding = true
-format = "rusttable.operation.v1"
-
-[[operations.parameter_versions.codec.fields]]
-name = "raw"
-kind = "bytes"
-offset = 0
-size = 52
-array_extent = 52
-enum_values = []
 
 [[operations.migrations]]
 from_version = 1
@@ -1992,18 +2168,62 @@ c_abi_model = "x86_64-unknown-linux-gnu"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 52
-alignment = 1
-layout_hash = "f064198a166b8da65cc3f164b9a6c69e7cf72553945cd51d016c6d29f01c0ee4"
+total_size = 520
+alignment = 4
+layout_hash = "0881226e618e645a145b052def2dbd6a6ab11bee15ab944867475556e1141dd8"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
+name = "basecurve"
+type_name = "dt_iop_basecurve_node_t[3][20]"
+array_extent = 60
 offset = 0
-size = 52
-alignment = 1
+size = 480
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "basecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "basecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_fusion"
+type_name = "int"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_stops"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_bias"
+type_name = "float"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
 
 [[operations.abi_layouts]]
 target = "aarch64-apple-darwin"
@@ -2011,18 +2231,62 @@ c_abi_model = "aarch64-apple-darwin"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 52
-alignment = 1
-layout_hash = "612ca7bd0eee5f1c6d1e58a31e2e26e009bf3fbbf9d2cc61357eb5ec40ceac23"
+total_size = 520
+alignment = 4
+layout_hash = "2a1bf0737e0f6f370731fd1e30c20d0211158d74ccea6a9f7f37dd536cb8c85e"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
+name = "basecurve"
+type_name = "dt_iop_basecurve_node_t[3][20]"
+array_extent = 60
 offset = 0
-size = 52
-alignment = 1
+size = 480
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "basecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "basecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_fusion"
+type_name = "int"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_stops"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_bias"
+type_name = "float"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
 
 [[operations.abi_layouts]]
 target = "x86_64-pc-windows-msvc"
@@ -2030,33 +2294,121 @@ c_abi_model = "x86_64-pc-windows-msvc"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 52
-alignment = 1
-layout_hash = "4808b90a584722af7956dea43cf8634c2f0a2b095d47fd05b188dd65d2e19c90"
+total_size = 520
+alignment = 4
+layout_hash = "4cc449879bd88ee6c8e55cf2f8c53118ea80ca628b5d711982b819b15225e1b8"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
+name = "basecurve"
+type_name = "dt_iop_basecurve_node_t[3][20]"
+array_extent = 60
 offset = 0
-size = 52
-alignment = 1
+size = 480
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "basecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "basecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_fusion"
+type_name = "int"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_stops"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "exposure_bias"
+type_name = "float"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
 
 [operations.codec]
-byte_size = 52
-decoder = "generated.bytes.decode.v6"
-encoder = "generated.bytes.encode.v6"
+byte_size = 520
+decoder = "rusttable.basecurve.decode.v6"
+encoder = "rusttable.basecurve.encode.v6"
 byte_order = "little"
 preserves_padding = true
-format = "rusttable.operation.v1"
+format = "darktable.iop.basecurve.v6"
 
 [[operations.codec.fields]]
-name = "raw"
-kind = "bytes"
+name = "basecurve"
+kind = "f32"
 offset = 0
-size = 52
-array_extent = 52
+size = 480
+array_extent = 120
+enum_values = []
+
+[[operations.codec.fields]]
+name = "basecurve_nodes"
+kind = "i32"
+offset = 480
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.codec.fields]]
+name = "basecurve_type"
+kind = "i32"
+offset = 492
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.codec.fields]]
+name = "exposure_fusion"
+kind = "i32"
+offset = 504
+size = 4
+enum_values = []
+
+[[operations.codec.fields]]
+name = "exposure_stops"
+kind = "f32"
+offset = 508
+size = 4
+enum_values = []
+
+[[operations.codec.fields]]
+name = "exposure_bias"
+kind = "f32"
+offset = 512
+size = 4
+enum_values = []
+
+[[operations.codec.fields]]
+name = "preserve_colors"
+kind = "enum_i32"
+offset = 516
+size = 4
 enum_values = []
 
 [operations.color_contract.input]
@@ -34602,8 +34954,8 @@ kernels = [
 name = "tonecurve"
 reference_path = "src/iop/tonecurve.c"
 module_version = 5
-parameter_size = 52
-parameter_layout_hash = "f064198a166b8da65cc3f164b9a6c69e7cf72553945cd51d016c6d29f01c0ee4"
+parameter_size = 520
+parameter_layout_hash = "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332"
 default_enabled = false
 default_order = 73
 group = "tone"
@@ -34639,10 +34991,10 @@ tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
 version = 1
-byte_size = 787472
-layout_hash = "ac3ce4f9cf2ce0627c7e282e745e14a41ef96cecc7fbe45ad277f5b2ddd481cf"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 52
+layout_hash = "d63cecbb050f267481218175459f98ea7a9f05db1237f70cb3c6fc4d52c0987f"
+decoder = "rusttable.tonecurve.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.tonecurve.params.v1"
 abi_layouts = []
 target_codecs = []
@@ -34658,10 +35010,10 @@ evidence_hash = "6bfb7563fb8a38cf16e17b1745da26d3b267878f3ba30cf011ade77673b9ff3
 
 [[operations.parameter_versions]]
 version = 3
-byte_size = 787856
-layout_hash = "3506c608dd25da081135b3761fb1a1f33f2f0f6912748e2812756661c76bff2a"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 512
+layout_hash = "d52e3e3aa3c5f8c3fa1afd20dc36a5382b4b20bc6ccda90fad496c32a79c93ac"
+decoder = "rusttable.tonecurve.decode.v3"
+opaque_blocking = false
 fixture_id = "operation.tonecurve.params.v3"
 abi_layouts = []
 target_codecs = []
@@ -34677,10 +35029,10 @@ evidence_hash = "a966f92e7497236d1432c2f4c12ef6b194213a012274d7a2f0e6425ebd5467c
 
 [[operations.parameter_versions]]
 version = 4
-byte_size = 788216
-layout_hash = "b5ec6ee07f7fece3658436cc87cc11c7e4094e94429932aa3689032b8f55fa80"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 516
+layout_hash = "8257087257a3dc8981ce6ea4a7a24f0a7d1c16805f10a6aae4b2c714cfd2b31a"
+decoder = "rusttable.tonecurve.decode.v4"
+opaque_blocking = false
 fixture_id = "operation.tonecurve.params.v4"
 abi_layouts = []
 target_codecs = []
@@ -34696,12 +35048,261 @@ evidence_hash = "7bc0d4429ed28ee47ee35514d21dbdfd74299e4afca13054b9e41c00d432fb7
 
 [[operations.parameter_versions]]
 version = 5
-byte_size = 52
-layout_hash = "c7aa0ebfa6261b456d0abba41f04bc76fefff2ae55f53a71075f69eb4b578f44"
-decoder = "generated.bytes.decode.v5"
+byte_size = 520
+layout_hash = "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332"
+decoder = "rusttable.tonecurve.decode.v5"
 opaque_blocking = false
 fixture_id = "operation.tonecurve.params.v5"
 target_codecs = []
+
+[[operations.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve"
+type_name = "dt_iop_tonecurve_node_t[3][20]"
+array_extent = 60
+offset = 0
+size = 480
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_autoscale_ab"
+type_name = "dt_iop_tonecurve_autoscale_t"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_preset"
+type_name = "int"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_unbound_ab"
+type_name = "int"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "c100fa1bc4949c2210992a643e4ac6fcb40d3af2f04753db36ec74536fd4d599"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve"
+type_name = "dt_iop_tonecurve_node_t[3][20]"
+array_extent = 60
+offset = 0
+size = 480
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_autoscale_ab"
+type_name = "dt_iop_tonecurve_autoscale_t"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_preset"
+type_name = "int"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_unbound_ab"
+type_name = "int"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "f7fd9e9c16ba00f9c2f33aaeb6f9372c56583c48fcb8910f69014c36f7e5dd77"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve"
+type_name = "dt_iop_tonecurve_node_t[3][20]"
+array_extent = 60
+offset = 0
+size = 480
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_autoscale_ab"
+type_name = "dt_iop_tonecurve_autoscale_t"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_preset"
+type_name = "int"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "tonecurve_unbound_ab"
+type_name = "int"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
+
+[operations.parameter_versions.codec]
+byte_size = 520
+decoder = "rusttable.tonecurve.decode.v5"
+encoder = "rusttable.tonecurve.encode.v5"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.tonecurve.v5"
+
+[[operations.parameter_versions.codec.fields]]
+name = "tonecurve"
+kind = "f32"
+offset = 0
+size = 480
+array_extent = 120
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "tonecurve_nodes"
+kind = "i32"
+offset = 480
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "tonecurve_type"
+kind = "enum_i32"
+offset = 492
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "tonecurve_autoscale_ab"
+kind = "enum_i32"
+offset = 504
+size = 4
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "tonecurve_preset"
+kind = "i32"
+offset = 508
+size = 4
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "tonecurve_unbound_ab"
+kind = "i32"
+offset = 512
+size = 4
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "preserve_colors"
+kind = "enum_i32"
+offset = 516
+size = 4
+enum_values = []
 
 [operations.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -34711,79 +35312,6 @@ line_end = 48
 reason = "explicit parameter layout declaration"
 reviewer = "cgasgarth"
 evidence_hash = "8cb094e8adfdbcb2246eb6797a0d04c275cd3b6ce8763d08b6131e3a2902540c"
-
-[[operations.parameter_versions.abi_layouts]]
-target = "x86_64-unknown-linux-gnu"
-c_abi_model = "x86_64-unknown-linux-gnu"
-endianness = "little"
-pointer_width = 64
-padding = []
-total_size = 52
-alignment = 1
-layout_hash = "f064198a166b8da65cc3f164b9a6c69e7cf72553945cd51d016c6d29f01c0ee4"
-difference_from = []
-
-[[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
-offset = 0
-size = 52
-alignment = 1
-
-[[operations.parameter_versions.abi_layouts]]
-target = "aarch64-apple-darwin"
-c_abi_model = "aarch64-apple-darwin"
-endianness = "little"
-pointer_width = 64
-padding = []
-total_size = 52
-alignment = 1
-layout_hash = "612ca7bd0eee5f1c6d1e58a31e2e26e009bf3fbbf9d2cc61357eb5ec40ceac23"
-difference_from = []
-
-[[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
-offset = 0
-size = 52
-alignment = 1
-
-[[operations.parameter_versions.abi_layouts]]
-target = "x86_64-pc-windows-msvc"
-c_abi_model = "x86_64-pc-windows-msvc"
-endianness = "little"
-pointer_width = 64
-padding = []
-total_size = 52
-alignment = 1
-layout_hash = "4808b90a584722af7956dea43cf8634c2f0a2b095d47fd05b188dd65d2e19c90"
-difference_from = []
-
-[[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
-offset = 0
-size = 52
-alignment = 1
-
-[operations.parameter_versions.codec]
-byte_size = 52
-decoder = "generated.bytes.decode.v5"
-encoder = "generated.bytes.encode.v5"
-byte_order = "little"
-preserves_padding = true
-format = "rusttable.operation.v1"
-
-[[operations.parameter_versions.codec.fields]]
-name = "raw"
-kind = "bytes"
-offset = 0
-size = 52
-array_extent = 52
-enum_values = []
 
 [[operations.migrations]]
 from_version = 3
@@ -34871,18 +35399,62 @@ c_abi_model = "x86_64-unknown-linux-gnu"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 52
-alignment = 1
-layout_hash = "f064198a166b8da65cc3f164b9a6c69e7cf72553945cd51d016c6d29f01c0ee4"
+total_size = 520
+alignment = 4
+layout_hash = "c6b53ef5e90c1c9fa80fc00bdf85fc4b539a11a64d9674cfdfbaeb85335f4332"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
+name = "tonecurve"
+type_name = "dt_iop_tonecurve_node_t[3][20]"
+array_extent = 60
 offset = 0
-size = 52
-alignment = 1
+size = 480
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_autoscale_ab"
+type_name = "dt_iop_tonecurve_autoscale_t"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_preset"
+type_name = "int"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_unbound_ab"
+type_name = "int"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
 
 [[operations.abi_layouts]]
 target = "aarch64-apple-darwin"
@@ -34890,18 +35462,62 @@ c_abi_model = "aarch64-apple-darwin"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 52
-alignment = 1
-layout_hash = "612ca7bd0eee5f1c6d1e58a31e2e26e009bf3fbbf9d2cc61357eb5ec40ceac23"
+total_size = 520
+alignment = 4
+layout_hash = "c100fa1bc4949c2210992a643e4ac6fcb40d3af2f04753db36ec74536fd4d599"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
+name = "tonecurve"
+type_name = "dt_iop_tonecurve_node_t[3][20]"
+array_extent = 60
 offset = 0
-size = 52
-alignment = 1
+size = 480
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_autoscale_ab"
+type_name = "dt_iop_tonecurve_autoscale_t"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_preset"
+type_name = "int"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_unbound_ab"
+type_name = "int"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
 
 [[operations.abi_layouts]]
 target = "x86_64-pc-windows-msvc"
@@ -34909,33 +35525,121 @@ c_abi_model = "x86_64-pc-windows-msvc"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 52
-alignment = 1
-layout_hash = "4808b90a584722af7956dea43cf8634c2f0a2b095d47fd05b188dd65d2e19c90"
+total_size = 520
+alignment = 4
+layout_hash = "f7fd9e9c16ba00f9c2f33aaeb6f9372c56583c48fcb8910f69014c36f7e5dd77"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[52]"
-array_extent = 52
+name = "tonecurve"
+type_name = "dt_iop_tonecurve_node_t[3][20]"
+array_extent = 60
 offset = 0
-size = 52
-alignment = 1
+size = 480
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 480
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 492
+size = 12
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_autoscale_ab"
+type_name = "dt_iop_tonecurve_autoscale_t"
+offset = 504
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_preset"
+type_name = "int"
+offset = 508
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "tonecurve_unbound_ab"
+type_name = "int"
+offset = 512
+size = 4
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "preserve_colors"
+type_name = "dt_iop_rgb_norms_t"
+offset = 516
+size = 4
+alignment = 4
 
 [operations.codec]
-byte_size = 52
-decoder = "generated.bytes.decode.v5"
-encoder = "generated.bytes.encode.v5"
+byte_size = 520
+decoder = "rusttable.tonecurve.decode.v5"
+encoder = "rusttable.tonecurve.encode.v5"
 byte_order = "little"
 preserves_padding = true
-format = "rusttable.operation.v1"
+format = "darktable.iop.tonecurve.v5"
 
 [[operations.codec.fields]]
-name = "raw"
-kind = "bytes"
+name = "tonecurve"
+kind = "f32"
 offset = 0
-size = 52
-array_extent = 52
+size = 480
+array_extent = 120
+enum_values = []
+
+[[operations.codec.fields]]
+name = "tonecurve_nodes"
+kind = "i32"
+offset = 480
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.codec.fields]]
+name = "tonecurve_type"
+kind = "enum_i32"
+offset = 492
+size = 12
+array_extent = 3
+enum_values = []
+
+[[operations.codec.fields]]
+name = "tonecurve_autoscale_ab"
+kind = "enum_i32"
+offset = 504
+size = 4
+enum_values = []
+
+[[operations.codec.fields]]
+name = "tonecurve_preset"
+kind = "i32"
+offset = 508
+size = 4
+enum_values = []
+
+[[operations.codec.fields]]
+name = "tonecurve_unbound_ab"
+kind = "i32"
+offset = 512
+size = 4
+enum_values = []
+
+[[operations.codec.fields]]
+name = "preserve_colors"
+kind = "enum_i32"
+offset = 516
+size = 4
 enum_values = []
 
 [operations.color_contract.input]

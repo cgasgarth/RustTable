@@ -7,6 +7,10 @@ use rusttable_image::{
     BlackWhiteLevels, CfaColor, CfaPattern, CfaPhase, ColorEncoding, ImageDimensions, Orientation,
     RawMosaic, RawMosaicSource, SourceColor, SourceColorFallback,
 };
+use rusttable_masks::{
+    GeometryAncestry, MaskGeometry, MaskGraphBuilder, MaskIdentity, MaskNode, MaskRaster, MaskRoi,
+    MaskSource,
+};
 use rusttable_pixelpipe::{
     CancellationReason, CancellationScope, CpuImplementation, CpuPipelineReceiptError,
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeRequest,
@@ -16,6 +20,10 @@ use rusttable_pixelpipe::{
     RgbaF32SourceRepresentation,
 };
 use rusttable_processing::operations::colormapping::{FLAG_HAS_SOURCE_TARGET, HISTN};
+use rusttable_processing::operations::highpass::{HighpassConfig, HighpassPixel, HighpassPlan};
+use rusttable_processing::operations::tonecurve::{
+    PreserveColors, ToneCurveAutoscale, ToneCurveNode, ToneCurveParametersV5,
+};
 use rusttable_processing::{
     ColorMappingParametersV1, CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage,
     SrgbChannel, to_linear_srgb,
@@ -38,11 +46,20 @@ fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
 }
 
 fn native_payload_operation(id: u128, key: &str, bytes: &[u8]) -> Operation {
+    native_payload_operation_with_opacity(id, key, bytes, OperationOpacity::ONE)
+}
+
+fn native_payload_operation_with_opacity(
+    id: u128,
+    key: &str,
+    bytes: &[u8],
+    opacity: OperationOpacity,
+) -> Operation {
     Operation::new_with_opacity(
         OperationId::new(id).expect("nonzero ID"),
         OperationKey::new(key).expect("valid key"),
         true,
-        OperationOpacity::ONE,
+        opacity,
         bytes.chunks(2_048).enumerate().map(|(index, chunk)| {
             let mut encoded = String::with_capacity(chunk.len() * 2);
             for byte in chunk {
@@ -224,6 +241,98 @@ fn lab_image() -> RgbaF32Image {
     .expect("valid Lab input")
 }
 
+fn tonecurve_mask_graph(operation_id: u128) -> rusttable_masks::MaskGraph {
+    let identity = MaskIdentity::new(2, 3, 7, 1);
+    let node = MaskNode::new(
+        identity,
+        "tonecurve-runtime-mask",
+        MaskSource::Raster,
+        MaskGeometry::new(GeometryAncestry::identity(), MaskRoi::full(32, 32), true),
+        Some(MaskRaster::new(32, 32, vec![0.5; 1_024]).expect("Tone Curve mask")),
+        [],
+    )
+    .expect("Tone Curve mask node");
+    MaskGraphBuilder::new()
+        .add_mask(node)
+        .add_edge(identity, operation_id, 1)
+        .build()
+        .expect("Tone Curve mask graph")
+}
+
+#[test]
+fn tonecurve_pixelpipe_consumes_runtime_mask_and_opacity_without_imported_blobs() {
+    let mut parameters = ToneCurveParametersV5::default();
+    parameters.tonecurve[0][1] = ToneCurveNode::new(1.0, 0.45);
+    let operation_id = 22;
+    let full_opacity =
+        native_payload_operation(operation_id, "rusttable.tonecurve", &parameters.to_bytes());
+    let masked_partial = native_payload_operation_with_opacity(
+        operation_id,
+        "rusttable.tonecurve",
+        &parameters.to_bytes(),
+        OperationOpacity::new(0.5).expect("partial opacity"),
+    );
+    let baseline = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            lab_image(),
+            graph(Vec::new()),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("baseline execution");
+    let full = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            lab_image(),
+            graph(vec![full_opacity]),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("full-opacity execution");
+    let masked = CpuPixelpipeExecutor
+        .execute(
+            &CpuPixelpipeRequest::new(
+                lab_image(),
+                graph(vec![masked_partial]),
+                CpuPixelpipeOutputMode::FullExport,
+            )
+            .with_mask_graph(tonecurve_mask_graph(operation_id)),
+        )
+        .expect("runtime mask and opacity execution");
+
+    for ((baseline, full), actual) in baseline
+        .image()
+        .pixels()
+        .iter()
+        .zip(full.image().pixels())
+        .zip(masked.image().pixels())
+        .take(8)
+    {
+        let coverage = 0.25;
+        for (actual, expected) in [
+            (
+                actual.red(),
+                full.red()
+                    .mul_add(coverage, baseline.red() * (1.0 - coverage)),
+            ),
+            (
+                actual.green(),
+                full.green()
+                    .mul_add(coverage, baseline.green() * (1.0 - coverage)),
+            ),
+            (
+                actual.blue(),
+                full.blue()
+                    .mul_add(coverage, baseline.blue() * (1.0 - coverage)),
+            ),
+            (
+                actual.alpha(),
+                full.alpha()
+                    .mul_add(coverage, baseline.alpha() * (1.0 - coverage)),
+            ),
+        ] {
+            assert!((actual - expected).abs() < 1.0e-6);
+        }
+    }
+}
+
 #[test]
 fn rawprepare_route_snapshot_identity_includes_source_samples() {
     let first = raw_source(CfaPattern::bayer_rggb(), vec![0, 1_000, 2_000, 4_000]);
@@ -320,6 +429,55 @@ fn executes_registered_operations_in_authored_order_and_preserves_alpha() {
     assert!((first.red() - 0.264_041_13).abs() < 0.000_001);
     assert!((first.green() - 0.302_628_25).abs() < 0.000_001);
     assert!((first.blue() - 2.290_086_3).abs() < 0.000_001);
+}
+
+#[test]
+fn tonecurve_rgb_luminance_uses_native_prophoto_profile_at_the_pixelpipe_boundary() {
+    let mut parameters = ToneCurveParametersV5::default();
+    parameters.tonecurve[0][1] = ToneCurveNode::new(1.0, 0.45);
+    parameters.tonecurve_autoscale_ab = ToneCurveAutoscale::AutomaticRgb;
+    parameters.preserve_colors = PreserveColors::Luminance;
+    let tonecurve = native_payload_operation(21, "rusttable.tonecurve", &parameters.to_bytes());
+    let baseline = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            image(),
+            graph(Vec::new()),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("baseline execution");
+    let result = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            image(),
+            graph(vec![tonecurve]),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("working-profile Tone Curve execution");
+
+    let changed = [
+        (
+            result.image().pixels()[0].red(),
+            baseline.image().pixels()[0].red(),
+        ),
+        (
+            result.image().pixels()[0].green(),
+            baseline.image().pixels()[0].green(),
+        ),
+        (
+            result.image().pixels()[0].blue(),
+            baseline.image().pixels()[0].blue(),
+        ),
+    ]
+    .into_iter()
+    .any(|(actual, expected)| actual.to_bits() != expected.to_bits());
+    assert!(changed, "Tone Curve must change the non-neutral pixel");
+    assert_eq!(
+        result.image().pixels()[0].alpha().to_bits(),
+        0.4_f32.to_bits()
+    );
+    assert_eq!(
+        result.image().pixels()[1].alpha().to_bits(),
+        1.0_f32.to_bits()
+    );
 }
 
 #[test]
@@ -1196,6 +1354,78 @@ fn rgb_levels_direct_route_preserves_external_alpha_across_linked_and_direct_rgb
             "the zeroed operation-local spare lane must remain separate from published straight alpha"
         );
     }
+}
+
+#[test]
+fn highpass_cpu_route_preserves_source_alpha_and_native_zero_spare_and_cancels() {
+    let input = lab_image();
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        input.clone(),
+        graph(vec![operation(
+            902,
+            "rusttable.highpass",
+            &[("sharpness", 50.0), ("contrast", 50.0)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Highpass snapshot");
+    let executor = CpuPixelpipeExecutor;
+    let full = executor
+        .execute(&snapshot)
+        .expect("full Highpass execution");
+    let tiled = executor
+        .execute_tiled(&snapshot, CpuTilePlan::new(7, 9).expect("tile plan"))
+        .expect("tiled Highpass execution");
+
+    assert_eq!(full.image(), tiled.image());
+    assert!(
+        full.image()
+            .pixels()
+            .iter()
+            .zip(input.pixels())
+            .all(|(pixel, source)| {
+                pixel.alpha().to_bits() == source.alpha().to_bits()
+                    && pixel.green().is_finite()
+                    && pixel.blue().is_finite()
+            }),
+        "the Lab boundary must restore source alpha after Highpass"
+    );
+    let operation_input = input
+        .pixels()
+        .iter()
+        .map(|pixel| HighpassPixel::new(pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()))
+        .collect::<Vec<_>>();
+    let operation_result = HighpassPlan::new(
+        HighpassConfig::new(50.0, 50.0).expect("finite Highpass configuration"),
+        input.descriptor().dimensions(),
+    )
+    .expect("Highpass operation plan")
+    .execute(&operation_input, input.descriptor().dimensions())
+    .expect("Highpass operation result");
+    assert!(
+        operation_result
+            .iter()
+            .all(|pixel| pixel.fourth().to_bits() == 0.0_f32.to_bits()),
+        "native Highpass must zero its operation-local spare lane"
+    );
+    let changed = CpuPixelpipeSnapshot::try_new(
+        lab_image(),
+        graph(vec![operation(
+            902,
+            "rusttable.highpass",
+            &[("sharpness", 25.0), ("contrast", 50.0)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("changed Highpass snapshot");
+    assert_ne!(snapshot.identity(), changed.identity());
+
+    let scope = CancellationScope::root(PipelineGeneration::new(902).expect("generation"));
+    scope.cancel(CancellationReason::EditChanged);
+    assert!(matches!(
+        executor.execute_with_cancellation(&snapshot, &scope),
+        Err(CpuPixelpipeError::Cancelled(_))
+    ));
 }
 
 #[test]
