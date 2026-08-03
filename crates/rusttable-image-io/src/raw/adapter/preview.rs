@@ -5,6 +5,11 @@
 //! sensor development primitives; persisted white balance belongs to
 //! processing.
 
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "RAW development preserves the reviewed native interpolation order."
+)]
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
@@ -419,7 +424,7 @@ fn cfa_color(channel: super::RawChannel) -> Result<CfaColor, ImageInputError> {
     }
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "the range and non-negative integer value are checked above"
@@ -433,7 +438,11 @@ fn level_u16(value: f32, name: &str) -> Result<u16, ImageInputError> {
     Ok(value as u16)
 }
 
-fn contains_rect(outer: Rect, inner: Rect) -> bool {
+#[expect(
+    clippy::suspicious_operation_groupings,
+    reason = "Rectangle containment compares the inner extent against the outer extent."
+)]
+const fn contains_rect(outer: Rect, inner: Rect) -> bool {
     inner.p.x >= outer.p.x
         && inner.p.y >= outer.p.y
         && inner.p.x.saturating_add(inner.d.w) <= outer.p.x.saturating_add(outer.d.w)
@@ -474,11 +483,6 @@ fn axis(value: usize) -> Result<u32, ImageInputError> {
     u32::try_from(value).map_err(|_| ImageInputError::ArithmeticOverflow)
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "the value is rounded and clamped to the complete u8 domain before quantization"
-)]
 pub(super) fn linear_rgba8(pixels: &[[f32; 4]]) -> Vec<u8> {
     pixels
         .iter()
@@ -493,7 +497,7 @@ pub(super) fn linear_rgba8(pixels: &[[f32; 4]]) -> Vec<u8> {
         .collect()
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "the value is rounded and clamped to the complete u8 domain before quantization"
@@ -538,7 +542,7 @@ fn malformed(message: &str) -> ImageInputError {
     }
 }
 
-fn decoded_image_error(error: DecodedImageError) -> ImageInputError {
+const fn decoded_image_error(error: DecodedImageError) -> ImageInputError {
     match error {
         DecodedImageError::ArithmeticOverflow => ImageInputError::ArithmeticOverflow,
         DecodedImageError::ByteLengthMismatch { expected, actual } => {

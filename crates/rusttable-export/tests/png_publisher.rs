@@ -46,7 +46,7 @@ fn decode(path: &Path) -> DecodedImage {
         .expect("PNG should decode")
 }
 
-fn metadata_policy() -> MetadataPolicy {
+const fn metadata_policy() -> MetadataPolicy {
     MetadataPolicy {
         exif: MetadataAction::Include,
         iptc: MetadataAction::Include,

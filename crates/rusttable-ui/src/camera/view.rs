@@ -379,7 +379,7 @@ fn setting_text(capability: &CameraCapability) -> String {
     }
 }
 
-fn orientation_text(orientation: CameraFrameOrientation) -> &'static str {
+const fn orientation_text(orientation: CameraFrameOrientation) -> &'static str {
     match orientation {
         CameraFrameOrientation::Normal => "normal",
         CameraFrameOrientation::Rotate90 => "rotate 90°",

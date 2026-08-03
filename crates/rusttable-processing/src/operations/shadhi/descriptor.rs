@@ -14,7 +14,10 @@ use crate::descriptor::{
 };
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the Shadhi descriptor keeps source parameter order and mask metadata together"
+)]
 pub fn shadhi_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new("shadhi", "rusttable.shadhi", 5, 5, 1).expect("static ID"),

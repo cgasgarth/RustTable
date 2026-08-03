@@ -21,7 +21,7 @@ const BASICADJ_PARAMETERS: [&str; 11] = [
     "clip",
 ];
 
-pub(crate) fn compile_basicadj(
+pub fn compile_basicadj(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &BASICADJ_PARAMETERS)?;

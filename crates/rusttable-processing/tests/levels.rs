@@ -1,4 +1,7 @@
-#![allow(clippy::float_cmp)]
+#![expect(
+    clippy::float_cmp,
+    reason = "Levels fixtures assert exact native histogram and LUT values."
+)]
 
 use rusttable_processing::RasterDimensions;
 use rusttable_processing::operations::levels::{

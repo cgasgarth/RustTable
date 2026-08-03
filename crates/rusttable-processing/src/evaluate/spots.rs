@@ -1,7 +1,7 @@
 use crate::{LinearRgb, PipelineStepIndex, RasterDimensions};
 use rusttable_core::OperationId;
 
-pub(crate) fn apply_spots(
+pub fn apply_spots(
     step_index: PipelineStepIndex,
     operation_id: OperationId,
     parameters: &crate::SpotsParametersV2,

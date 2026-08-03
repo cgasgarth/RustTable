@@ -1,6 +1,11 @@
 //! Safe WGPU port of Darktable's `src/iop/colorreconstruction.c` `process_cl`
 //! path and `data/kernels/colorreconstruction.cl`.
 
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native color-reconstruction arithmetic order is part of cross-backend parity."
+)]
+
 use std::fmt;
 use std::num::NonZeroU64;
 
@@ -111,7 +116,10 @@ pub struct ColorReconstructionRequest<'a> {
 
 impl<'a> ColorReconstructionRequest<'a> {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "request fields preserve the native Color Reconstruction parameters and GPU boundary"
+    )]
     pub const fn new(
         pixels: &'a [[f32; 4]],
         roi: ColorReconstructionRoi,
@@ -320,11 +328,13 @@ struct ValidatedRequest {
 }
 
 impl ValidatedRequest {
-    #[allow(clippy::too_many_lines)]
-    #[allow(
-        clippy::cast_possible_truncation,
+    #[expect(
+        clippy::too_many_lines,
+        reason = "validation keeps native geometry, memory, limits, and dispatch checks in order"
+    )]
+    #[expect(
         clippy::cast_precision_loss,
-        clippy::cast_sign_loss
+        reason = "GPU geometry uses the native f32 shader arithmetic after explicit range checks"
     )]
     fn new(
         request: ColorReconstructionRequest<'_>,
@@ -552,10 +562,9 @@ impl ValidatedRequest {
 }
 
 /// Returns every explicit device and host allocation owned by this boundary.
-#[allow(
-    clippy::cast_possible_truncation,
+#[expect(
     clippy::cast_precision_loss,
-    clippy::cast_sign_loss
+    reason = "transient-memory geometry uses the native f32 resolution and checked u32 dimensions"
 )]
 pub fn colorreconstruction_transient_memory_bytes(
     roi: ColorReconstructionRoi,
@@ -636,7 +645,10 @@ fn transient_bytes(pixel_bytes: u64, grid_bytes: u64) -> Result<u64, ColorRecons
 
 impl GpuRuntime {
     /// Runs zero, splat, x/y/z blur, and slice in retained `process_cl` order.
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the GPU dispatch sequence preserves native zero, splat, blur, and slice ordering"
+    )]
     pub fn execute_color_reconstruction(
         &self,
         request: ColorReconstructionRequest<'_>,
@@ -859,7 +871,11 @@ fn validate_parameter(
     }
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "native grid sizing rounds in f32 and narrows only after the i32 range check"
+)]
 fn retained_grid_dimension(
     extent: f32,
     sigma: f32,
@@ -954,7 +970,7 @@ fn pack_params(
     bytes
 }
 
-fn storage_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupLayoutEntry {
+const fn storage_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -967,7 +983,7 @@ fn storage_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupL
     }
 }
 
-fn uniform_binding(binding: u32) -> wgpu::BindGroupLayoutEntry {
+const fn uniform_binding(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,

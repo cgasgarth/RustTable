@@ -427,6 +427,10 @@ impl std::error::Error for ColorZonesParameterError {}
 /// Panics only if the checked-in Color Zones descriptor identity or native
 /// fixed-size limits stop fitting their documented representations.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Color Zones descriptor fields mirror the native parameter contract in one declaration."
+)]
 pub fn colorzones_descriptor() -> OperationDescriptor {
     let defaults = ColorZonesParametersV5::defaults();
     let mut parameters = vec![enum_parameter(
@@ -616,7 +620,6 @@ fn integer_parameter(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn scalar_parameter(
     id: &str,
     minimum: f64,

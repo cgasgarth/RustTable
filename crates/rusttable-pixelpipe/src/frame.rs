@@ -9,11 +9,11 @@ use crate::{
     CpuPixelpipeSnapshot, RgbaF32ColorEncoding, RgbaF32Image, RgbaF32Pixel,
 };
 
-pub(crate) fn has_frame_geometry(request: &CpuPixelpipeSnapshot) -> bool {
+pub fn has_frame_geometry(request: &CpuPixelpipeSnapshot) -> bool {
     graph_has_frame_geometry(request.graph())
 }
 
-pub(crate) fn execute_frame_image(
+pub fn execute_frame_image(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
     scope: Option<&CancellationScope>,

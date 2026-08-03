@@ -42,9 +42,11 @@ const PARAMETERS: [&str; 36] = [
     "completely_reverse_primaries",
 ];
 
-pub(crate) fn compile_agx(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+#[expect(
+    clippy::too_many_lines,
+    reason = "Native AgX parameter compilation keeps the complete fixed-order contract together."
+)]
+pub fn compile_agx(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &PARAMETERS)?;
     let defaults = AgxParametersV7::defaults();
     let parameters = AgxParametersV7 {

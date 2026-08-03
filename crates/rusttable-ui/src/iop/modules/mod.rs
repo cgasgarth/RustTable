@@ -154,7 +154,7 @@ impl DarkroomCustomEditorPayload {
 
 /// Mounted custom leaves are retained across processing-snapshot reconciliation.
 #[derive(Clone, Default)]
-pub(crate) struct DarkroomCustomEditorMounts {
+pub struct DarkroomCustomEditorMounts {
     bloom: Rc<RefCell<BTreeMap<OperationId, BloomGtkLeaf>>>,
     colorreconstruct: Rc<RefCell<BTreeMap<OperationId, ColorReconstructionGtkLeaf>>>,
     colorzones: Rc<RefCell<BTreeMap<OperationId, ColorZonesGtkLeaf>>>,
@@ -224,10 +224,9 @@ impl DarkroomCustomEditorMounts {
                     parameters: settled.parameters(),
                     enable_required: settled.enable_required(),
                 };
-                match handler(action) {
-                    Ok(revision) => BloomGtkHandlerOutcome::Commit { revision },
-                    Err(_) => BloomGtkHandlerOutcome::Rollback,
-                }
+                handler(action).map_or(BloomGtkHandlerOutcome::Rollback, |revision| {
+                    BloomGtkHandlerOutcome::Commit { revision }
+                })
             }) as crate::iop::bloom::BloomGtkActionHandler
         });
         let leaf = build_bloom_gtk(widget_id, state, handler);
@@ -264,10 +263,10 @@ impl DarkroomCustomEditorMounts {
                         parameters: settled.parameters(),
                         enable_required: settled.enable_required(),
                     };
-                    match handler(action) {
-                        Ok(revision) => ColorReconstructionGtkHandlerOutcome::Commit { revision },
-                        Err(_) => ColorReconstructionGtkHandlerOutcome::Rollback,
-                    }
+                    handler(action)
+                        .map_or(ColorReconstructionGtkHandlerOutcome::Rollback, |revision| {
+                            ColorReconstructionGtkHandlerOutcome::Commit { revision }
+                        })
                 },
             ) as ColorReconstructionGtkActionHandler
         });
@@ -331,10 +330,9 @@ impl DarkroomCustomEditorMounts {
                         crate::iop::soften::SoftenParameter::Amount => settled.parameters().amount,
                     })),
                 };
-                match handler(action) {
-                    Ok(revision) => SoftenGtkHandlerOutcome::Commit { revision },
-                    Err(_) => SoftenGtkHandlerOutcome::Rollback,
-                }
+                handler(action).map_or(SoftenGtkHandlerOutcome::Rollback, |revision| {
+                    SoftenGtkHandlerOutcome::Commit { revision }
+                })
             }) as SoftenGtkActionHandler
         });
         let leaf = build_soften_gtk(widget_id, state, handler);
@@ -346,7 +344,10 @@ impl DarkroomCustomEditorMounts {
 }
 
 /// One ordered, disclosure-capable module in a darkroom side panel.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "The module snapshot exposes independent GTK state, availability, style, and history flags."
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct DarkroomModuleViewModel {
     id: String,
@@ -380,7 +381,10 @@ impl DarkroomModuleViewModel {
     /// # Errors
     ///
     /// Returns an error when the module identity, title, or controls are invalid.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The module constructor mirrors the persisted darkroom identity and initial GTK state."
+    )]
     pub fn new(
         id: impl Into<String>,
         title: impl Into<String>,
@@ -530,7 +534,7 @@ impl DarkroomModuleViewModel {
     }
 
     #[must_use]
-    pub fn has_bloom_custom_editor(&self) -> bool {
+    pub const fn has_bloom_custom_editor(&self) -> bool {
         matches!(
             &self.custom_editor,
             Some(DarkroomCustomEditorPayload::Bloom(_))
@@ -582,7 +586,7 @@ impl DarkroomModuleViewModel {
     }
 
     #[must_use]
-    pub fn has_soften_custom_editor(&self) -> bool {
+    pub const fn has_soften_custom_editor(&self) -> bool {
         matches!(
             &self.custom_editor,
             Some(DarkroomCustomEditorPayload::Soften(_))
@@ -641,7 +645,7 @@ impl DarkroomModuleViewModel {
     }
 
     #[must_use]
-    pub fn has_colorreconstruct_custom_editor(&self) -> bool {
+    pub const fn has_colorreconstruct_custom_editor(&self) -> bool {
         matches!(
             &self.custom_editor,
             Some(DarkroomCustomEditorPayload::ColorReconstruction(_))
@@ -691,7 +695,7 @@ impl DarkroomModuleViewModel {
     }
 
     #[must_use]
-    pub fn has_colorzones_custom_editor(&self) -> bool {
+    pub const fn has_colorzones_custom_editor(&self) -> bool {
         matches!(
             &self.custom_editor,
             Some(DarkroomCustomEditorPayload::ColorZones(_))
@@ -971,6 +975,10 @@ impl DarkroomModuleViewModel {
     ///
     /// Returns a stale, wrong-module, validation, reset, or overflow error
     /// without applying an invalid action.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The module action table keeps source revision checks, validation, persistence, and custom-editor routing ordered."
+    )]
     pub fn apply(&mut self, action: DarkroomModuleAction) -> Result<Revision, DarkroomModuleError> {
         if action.module_id() != self.id {
             return Err(self.record_error(DarkroomModuleError::WrongModule {
@@ -1162,7 +1170,7 @@ impl DarkroomModuleViewModel {
                 .iter_mut()
                 .find(|control| control.id().as_str() == id)
             else {
-                let control_id = ControlId::new(id.clone())
+                let control_id = ControlId::new(id)
                     .map_err(ControlValidationError::InvalidId)
                     .map_err(DarkroomControlError::Validation)
                     .map_err(|error| self.record_control_error(error))?;
@@ -1279,7 +1287,7 @@ impl DarkroomModuleViewModel {
     /// Restores controller-owned disclosure state after processing state is
     /// reprojected. This is presentation-only and never changes the edit
     /// revision.
-    pub fn restore_expanded_presentation(&mut self, expanded: bool) {
+    pub const fn restore_expanded_presentation(&mut self, expanded: bool) {
         self.expanded = expanded;
     }
 
@@ -1356,9 +1364,9 @@ impl DarkroomModuleViewModel {
                 reason: "module has no Soften custom editor".to_owned(),
             })
         })?;
-        #[allow(
+        #[expect(
             clippy::cast_possible_truncation,
-            reason = "the descriptor-backed slider is bounded to the native f32 range"
+            reason = "The descriptor-backed slider is bounded to the native f32 range."
         )]
         let value = *value as f32;
         let mut editor = current.editor();
@@ -1756,14 +1764,15 @@ impl DarkroomModulesViewModel {
         id: &str,
         operation_id: Option<OperationId>,
     ) -> Option<&DarkroomModuleViewModel> {
-        match operation_id {
-            Some(operation_id) => self
-                .left
-                .iter()
-                .chain(self.right.iter())
-                .find(|module| module.id() == id && module.operation_id() == Some(operation_id)),
-            None => self.module(id),
-        }
+        operation_id.map_or_else(
+            || self.module(id),
+            |operation_id| {
+                self.left
+                    .iter()
+                    .chain(self.right.iter())
+                    .find(|module| module.id() == id && module.operation_id() == Some(operation_id))
+            },
+        )
     }
 
     #[must_use]
@@ -1812,7 +1821,11 @@ pub fn build_module_panel_with_actions(
 }
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    clippy::option_if_let_else,
+    reason = "The source-ordered GTK module panel keeps hierarchy, controls, and optional custom-editor routing together."
+)]
 fn build_module_panel_with_action_revision(
     module: &DarkroomModuleViewModel,
     action_handler: Option<DarkroomModuleActionHandler>,
@@ -2087,7 +2100,7 @@ fn build_module_panel_with_action_revision(
         let current_revision_for_enabled = current_revision.clone();
         let module_id_for_enabled = module_id.clone();
         let control_rows_for_enabled = control_rows.clone();
-        let grid_for_enabled = color_correction_grid_widget.clone();
+        let grid_for_enabled = color_correction_grid_widget;
         let synchronizing_enabled_for_toggle = Rc::clone(&synchronizing_enabled);
         enabled.connect_toggled(move |enabled| {
             if let Some(reset) = reset_for_enabled.as_ref() {
@@ -2131,7 +2144,7 @@ fn build_module_panel_with_action_revision(
                 result
             });
             let current_revision_for_reset = current_revision.clone();
-            let module_id_for_reset = module_id.clone();
+            let module_id_for_reset = module_id;
             let enabled_for_reset = enabled.clone();
             let synchronizing_enabled_for_reset = Rc::clone(&synchronizing_enabled);
             reset.connect_clicked(move |_| {
@@ -2219,7 +2232,7 @@ pub fn build_module_column_with_filter<'a>(
     build_module_column_with_filter_and_revision(modules, side, query, action_handler, None, None)
 }
 
-pub(crate) fn build_module_column_with_filter_at_revision<'a>(
+pub fn build_module_column_with_filter_at_revision<'a>(
     modules: impl Iterator<Item = &'a DarkroomModuleViewModel>,
     side: DarkroomModuleSide,
     query: &str,
@@ -2269,7 +2282,7 @@ fn build_module_column_with_filter_and_revision<'a>(
     column
 }
 
-pub(crate) fn build_module_column_without_empty_at_revision<'a>(
+pub fn build_module_column_without_empty_at_revision<'a>(
     modules: impl Iterator<Item = &'a DarkroomModuleViewModel>,
     side: DarkroomModuleSide,
     query: &str,
@@ -2320,7 +2333,7 @@ fn build_module_column_without_empty_and_revision<'a>(
     column
 }
 
-pub(crate) fn module_matches_search(module: &DarkroomModuleViewModel, query: &str) -> bool {
+pub fn module_matches_search(module: &DarkroomModuleViewModel, query: &str) -> bool {
     let query = query.trim().to_ascii_lowercase();
     module_matches_query(module, &query)
 }
@@ -2330,7 +2343,7 @@ fn module_matches_query(module: &DarkroomModuleViewModel, query: &str) -> bool {
     search_matches(query, module.title(), module.id(), &aliases)
 }
 
-pub(crate) fn search_matches(query: &str, title: &str, id: &str, aliases: &[&str]) -> bool {
+pub fn search_matches(query: &str, title: &str, id: &str, aliases: &[&str]) -> bool {
     let query = query.trim().to_ascii_lowercase();
     if query.is_empty() {
         return true;

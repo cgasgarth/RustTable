@@ -240,7 +240,7 @@ impl ProfileGammaHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ProfileGammaParametersV2, ProfileGammaError> {
+    pub const fn current(&self) -> Result<ProfileGammaParametersV2, ProfileGammaError> {
         match self {
             Self::V1(parameters) => Ok(migrate_v1_to_v2(*parameters)),
             Self::V2(parameters) => Ok(*parameters),
@@ -628,6 +628,10 @@ fn fast_log2(value: f32) -> f32 {
     contracted - 1.725_88_f32 / (0.352_088_72_f32 + mantissa)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The native exponent estimate keeps the ratio-of-logs operation order and rounding."
+)]
 fn estimate_exp(x: [f32; 4], y: [f32; 4]) -> [f32; 3] {
     let x0 = x[3];
     let y0 = y[3];
@@ -683,7 +687,11 @@ fn fallible_copy(bytes: &[u8]) -> Result<Vec<u8>, ProfileGammaError> {
     Ok(copied)
 }
 
-fn require_length(version: u16, bytes: &[u8], expected: usize) -> Result<(), ProfileGammaError> {
+const fn require_length(
+    version: u16,
+    bytes: &[u8],
+    expected: usize,
+) -> Result<(), ProfileGammaError> {
     if bytes.len() == expected {
         Ok(())
     } else {

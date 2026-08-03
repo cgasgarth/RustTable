@@ -1,10 +1,4 @@
 //! Durable export orchestration for copy jobs.
-#![allow(clippy::chunks_exact_to_as_chunks)]
-#![allow(clippy::collapsible_if)]
-#![allow(clippy::double_must_use)]
-#![allow(clippy::format_collect)]
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::unnested_or_patterns)]
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -26,6 +20,7 @@ use crate::copy::{
     self, Encoder as CopyEncoder, Receipt as CopyReceipt, Settings as CopySettings,
     SidecarSettings, SourceDescriptor,
 };
+use crate::hash_helpers::hex;
 use crate::{ExportPriority, ExportRequest};
 
 const COPY_SNAPSHOT_SCHEMA: &str = "rusttable.copy-queue-snapshot.v1";
@@ -46,6 +41,10 @@ pub struct CopyQueueRequest {
 
 impl CopyQueueRequest {
     /// Takes the exact canonical request bytes at enqueue time; later edits cannot change this job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the request, source identity, sidecar, or destination target is invalid.
     pub fn from_request(
         request: &ExportRequest,
         source_id: impl Into<String>,
@@ -116,6 +115,11 @@ impl From<ExportPriority> for ExportJobPriority {
 }
 
 pub trait CopySourceProvider {
+    /// Opens a source snapshot for one opaque source identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the source is unavailable, changed, or permanently missing.
     fn open_snapshot(&self, source_id: &str) -> Result<SourceSnapshot, SourceProviderError>;
 }
 
@@ -126,6 +130,11 @@ pub struct FileCopySourceProvider {
 }
 
 impl FileCopySourceProvider {
+    /// Creates a file-backed source provider with a byte limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the source limit is invalid.
     pub fn new(max_source_bytes: u64) -> Result<Self, QueueError> {
         Ok(Self {
             limits: ImportSourceLimits::new(max_source_bytes)
@@ -134,6 +143,11 @@ impl FileCopySourceProvider {
         })
     }
 
+    /// Registers an opaque source identifier and its local path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the source identifier is invalid.
     pub fn register(
         &mut self,
         source_id: impl Into<String>,
@@ -173,6 +187,11 @@ impl fmt::Display for SourceProviderError {
 impl std::error::Error for SourceProviderError {}
 
 pub trait CopyDestination {
+    /// Commits a staged bundle at a logical destination.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the target conflicts or filesystem operations fail.
     fn commit(
         &self,
         staging: &Path,
@@ -187,6 +206,11 @@ pub struct LocalBundleDestination {
 }
 
 impl LocalBundleDestination {
+    /// Creates a destination rooted at a filesystem directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the root directory cannot be created.
     pub fn new(root: impl Into<PathBuf>) -> Result<Self, DestinationError> {
         let root = root.into();
         fs::create_dir_all(&root).map_err(|source| DestinationError::Io {
@@ -318,6 +342,11 @@ pub struct ExportQueue {
 }
 
 impl ExportQueue {
+    /// Opens the durable queue and recovers interrupted jobs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when staging or queue storage cannot be initialized.
     pub fn open(database: &Path, staging_root: impl Into<PathBuf>) -> Result<Self, QueueError> {
         let staging_root = staging_root.into();
         fs::create_dir_all(&staging_root).map_err(QueueError::Staging)?;
@@ -329,6 +358,11 @@ impl ExportQueue {
         })
     }
 
+    /// Enqueues one immutable copy request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the next identifier or durable queue write fails.
     pub fn enqueue_copy(&self, request: CopyQueueRequest) -> Result<ExportJobRecord, QueueError> {
         let id = ExportJobId::new(next_job_id(&self.store)?)
             .ok_or(QueueError::Store(ExportQueueError::Corrupt))?;
@@ -347,22 +381,45 @@ impl ExportQueue {
         Ok(self.store.enqueue(job)?)
     }
 
-    #[must_use]
+    /// Returns one queued copy job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when queue storage cannot be read.
     pub fn get(&self, id: ExportJobId) -> Result<Option<ExportJobRecord>, QueueError> {
         Ok(self.store.get(id)?)
     }
 
+    /// Cancels one queued copy job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the job is unknown or its state cannot be persisted.
     pub fn cancel(&self, id: ExportJobId) -> Result<ExportJobRecord, QueueError> {
         Ok(self.store.cancel(id, queue_now_millis())?)
     }
+    /// Retries one interrupted or retryable copy job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the job is not retryable or persistence fails.
     pub fn retry(&self, id: ExportJobId) -> Result<ExportJobRecord, QueueError> {
         Ok(self.store.retry(id, queue_now_millis())?)
     }
+    /// Marks all in-process copy jobs interrupted for restart.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when queue storage cannot list or update jobs.
     pub fn recover(&self) -> Result<Vec<ExportJobRecord>, QueueError> {
         Ok(self.store.recover_in_process(queue_now_millis())?)
     }
 
     /// Runs one immutable-copy job through durable state, staging, and an atomic bundle commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when source access, encoding, cancellation, staging, or destination commit fails.
     pub fn execute_copy<P, D>(
         &self,
         id: ExportJobId,
@@ -374,26 +431,26 @@ impl ExportQueue {
         D: CopyDestination,
     {
         let result = self.execute_copy_inner(id, provider, destination);
-        if let Err(error) = &result {
-            if !self.is_cancelled(id) {
-                let retryable = is_retryable(error);
-                let attempt = self
-                    .store
-                    .get(id)
-                    .ok()
-                    .flatten()
-                    .map_or(0, |job| job.attempt());
-                let can_retry = retryable && attempt < 3;
-                let retry_at =
-                    can_retry.then(|| queue_now_millis().saturating_add(retry_delay(id, attempt)));
-                let _ = self.store.fail(
-                    id,
-                    can_retry,
-                    error.to_string(),
-                    retry_at,
-                    queue_now_millis(),
-                );
-            }
+        if let Err(error) = &result
+            && !self.is_cancelled(id)
+        {
+            let retryable = is_retryable(error);
+            let attempt = self
+                .store
+                .get(id)
+                .ok()
+                .flatten()
+                .map_or(0, |job| job.attempt());
+            let can_retry = retryable && attempt < 3;
+            let retry_at =
+                can_retry.then(|| queue_now_millis().saturating_add(retry_delay(id, attempt)));
+            let _ = self.store.fail(
+                id,
+                can_retry,
+                &error.to_string(),
+                retry_at,
+                queue_now_millis(),
+            );
         }
         result
     }
@@ -427,11 +484,12 @@ impl ExportQueue {
         let snapshot = provider
             .open_snapshot(&spec.source_id)
             .map_err(QueueError::Source)?;
-        let settings = if let Some(sidecar) = &spec.sidecar {
-            CopySettings::default().with_sidecar(sidecar.clone())
-        } else {
-            CopySettings::default()
-        };
+        let settings = spec
+            .sidecar
+            .as_ref()
+            .map_or_else(CopySettings::default, |sidecar| {
+                CopySettings::default().with_sidecar(sidecar.clone())
+            });
         let encoder = CopyEncoder::new(settings);
         let staging = self.staging_root.join(id.to_string());
         if staging.exists() {
@@ -458,11 +516,8 @@ impl ExportQueue {
                 );
             },
         )?;
-        self.store.set_staging_manifest(
-            id,
-            receipt.manifest.bytes().to_vec(),
-            queue_now_millis(),
-        )?;
+        self.store
+            .set_staging_manifest(id, receipt.manifest.bytes(), queue_now_millis())?;
         File::open(&staging)
             .and_then(|file| file.sync_all())
             .map_err(QueueError::Staging)?;
@@ -475,7 +530,8 @@ impl ExportQueue {
         let commit_receipt = destination
             .commit(&staging, job.destination_target(), job.idempotency_key())
             .map_err(QueueError::Destination)?;
-        self.store.succeed(id, commit_receipt, queue_now_millis())?;
+        self.store
+            .succeed(id, &commit_receipt, queue_now_millis())?;
         Ok(receipt)
     }
 
@@ -575,12 +631,14 @@ fn parse_hex(value: &str) -> Result<[u8; 32], QueueError> {
         return Err(QueueError::SourceProvider);
     }
     let mut bytes = [0_u8; 32];
-    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+    let (pairs, remainder) = value.as_bytes().as_chunks::<2>();
+    debug_assert!(remainder.is_empty());
+    for (index, pair) in pairs.iter().enumerate() {
         bytes[index] = (hex_digit(pair[0])? << 4) | hex_digit(pair[1])?;
     }
     Ok(bytes)
 }
-fn hex_digit(value: u8) -> Result<u8, QueueError> {
+const fn hex_digit(value: u8) -> Result<u8, QueueError> {
     match value {
         b'0'..=b'9' => Ok(value - b'0'),
         b'a'..=b'f' => Ok(value - b'a' + 10),
@@ -588,16 +646,14 @@ fn hex_digit(value: u8) -> Result<u8, QueueError> {
         _ => Err(QueueError::SourceProvider),
     }
 }
-fn hex(bytes: &[u8; 32]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn is_retryable(error: &QueueError) -> bool {
+const fn is_retryable(error: &QueueError) -> bool {
     matches!(
         error,
         QueueError::Source(SourceProviderError::Unavailable)
-            | QueueError::Copy(copy::Error::Io { .. })
-            | QueueError::Copy(copy::Error::SourceRead(SourceSnapshotReadError::Io { .. },))
+            | QueueError::Copy(
+                copy::Error::Io { .. }
+                    | copy::Error::SourceRead(SourceSnapshotReadError::Io { .. },),
+            )
             | QueueError::Destination(DestinationError::Io { .. })
     )
 }

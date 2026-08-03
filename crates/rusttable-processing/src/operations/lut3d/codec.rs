@@ -181,7 +181,7 @@ impl Lut3dParameters {
     }
 }
 
-fn read_i32(bytes: &[u8], offset: usize) -> i32 {
+const fn read_i32(bytes: &[u8], offset: usize) -> i32 {
     i32::from_le_bytes([
         bytes[offset],
         bytes[offset + 1],

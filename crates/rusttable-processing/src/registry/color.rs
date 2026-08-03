@@ -6,7 +6,7 @@ use crate::registry::{
 };
 use rusttable_core::Operation;
 
-pub(crate) fn colorin_definition() -> OperationDefinition {
+pub fn colorin_definition() -> OperationDefinition {
     definition(
         crate::descriptor::colorin_descriptor(),
         prepare_colorin,
@@ -29,7 +29,7 @@ pub(crate) fn colorin_definition() -> OperationDefinition {
     )
 }
 
-pub(crate) fn primaries_definition() -> OperationDefinition {
+pub fn primaries_definition() -> OperationDefinition {
     definition(
         crate::descriptor::primaries_descriptor(),
         prepare_primaries,
@@ -44,7 +44,7 @@ pub(crate) fn primaries_definition() -> OperationDefinition {
     )
 }
 
-pub(crate) fn colorout_definition() -> OperationDefinition {
+pub fn colorout_definition() -> OperationDefinition {
     definition(
         crate::descriptor::colorout_descriptor(),
         prepare_colorout,
@@ -68,7 +68,7 @@ pub(crate) fn colorout_definition() -> OperationDefinition {
     )
 }
 
-pub(crate) fn colorcorrection_definition() -> OperationDefinition {
+pub fn colorcorrection_definition() -> OperationDefinition {
     let descriptor = crate::descriptor::colorcorrection_descriptor();
     let gpu = GpuBinding::new(
         crate::operations::colorcorrection::COLORCORRECTION_WGPU_PASS_ID,

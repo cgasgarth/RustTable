@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native output arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use crate::operations::colorout::{ColorOutConfig, ColorOutPlan};
 use crate::{
     FiniteF32, RasterDimensions, RgbChannel, SrgbChannel, WorkingFrameDescriptor, WorkingRgbImage,
@@ -12,7 +17,7 @@ pub struct EncodedSrgb {
 }
 
 impl EncodedSrgb {
-    fn new(red: SrgbChannel, green: SrgbChannel, blue: SrgbChannel) -> Self {
+    const fn new(red: SrgbChannel, green: SrgbChannel, blue: SrgbChannel) -> Self {
         Self { red, green, blue }
     }
 
@@ -48,7 +53,7 @@ pub struct EncodedSrgbImage {
 }
 
 impl EncodedSrgbImage {
-    fn new(dimensions: RasterDimensions, pixels: Vec<EncodedSrgb>) -> Self {
+    const fn new(dimensions: RasterDimensions, pixels: Vec<EncodedSrgb>) -> Self {
         Self { dimensions, pixels }
     }
 
@@ -95,7 +100,7 @@ impl ChannelCounts {
         self.blue
     }
 
-    fn increment(&mut self, channel: RgbChannel) {
+    const fn increment(&mut self, channel: RgbChannel) {
         let count = match channel {
             RgbChannel::Red => &mut self.red,
             RgbChannel::Green => &mut self.green,

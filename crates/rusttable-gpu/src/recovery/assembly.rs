@@ -229,7 +229,7 @@ pub(super) struct Assembly {
 }
 
 impl Assembly {
-    pub(super) fn new(plan: AssemblyPlan, attempt: AttemptId) -> Self {
+    pub(super) const fn new(plan: AssemblyPlan, attempt: AttemptId) -> Self {
         Self {
             plan,
             attempt,

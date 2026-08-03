@@ -188,7 +188,7 @@ pub enum MetadataValue {
     Float(u64),
     DateTime(String),
     Binary(Vec<u8>),
-    Array(Vec<MetadataValue>),
+    Array(Vec<Self>),
     Region {
         x: u32,
         y: u32,

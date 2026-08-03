@@ -17,16 +17,20 @@
     clippy::similar_names,
     reason = "source-shaped f32 image loops preserve native equations"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Tone Equalizer filter equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use super::parameters::MIN_FLOAT;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FilterBlend {
+pub enum FilterBlend {
     Linear,
     Geomean,
 }
 
-pub(crate) fn alloc_f32(length: usize) -> Result<Vec<f32>, FilterError> {
+pub fn alloc_f32(length: usize) -> Result<Vec<f32>, FilterError> {
     let mut values = Vec::new();
     values
         .try_reserve_exact(length)
@@ -35,7 +39,7 @@ pub(crate) fn alloc_f32(length: usize) -> Result<Vec<f32>, FilterError> {
     Ok(values)
 }
 
-pub(crate) fn interpolate_bilinear(
+pub fn interpolate_bilinear(
     input: &[f32],
     width_in: usize,
     height_in: usize,
@@ -85,7 +89,7 @@ pub(crate) fn interpolate_bilinear(
     Ok(())
 }
 
-pub(crate) fn box_mean(
+pub fn box_mean(
     buffer: &mut [f32],
     width: usize,
     height: usize,
@@ -144,7 +148,7 @@ pub(crate) fn box_mean(
     Ok(())
 }
 
-pub(crate) fn quantize(
+pub fn quantize(
     input: &[f32],
     output: &mut [f32],
     sampling: f32,
@@ -242,7 +246,7 @@ fn apply_geomean(
 
 /// Source `fast_surface_blur`: downsample by four, use box-guided variance,
 /// average the `a,b` model, then bilinearly upsample the model.
-pub(crate) fn guided_surface_blur(
+pub fn guided_surface_blur(
     image: &mut [f32],
     width: usize,
     height: usize,
@@ -324,6 +328,10 @@ fn gaussian_params(sigma: f32) -> (f32, f32, f32, f32, f32, f32, f32, f32) {
     (a0, a1, a2, a3, b1, b2, coefp, coefn)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source Gaussian filter preserves row traversal, boundary handling, and cancellation polling as one algorithm."
+)]
 fn gaussian_blur(
     input: &[f32],
     output: &mut [f32],
@@ -587,7 +595,11 @@ fn eigf_blending_no_mask(
 
 /// Source `fast_eigf_surface_blur`, including its full-resolution mask and
 /// exposure-independent Gaussian statistics.
-pub(crate) fn eigf_surface_blur(
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source eigf surface blur keeps multiscale allocation, filtering, blending, and cancellation boundaries together."
+)]
+pub fn eigf_surface_blur(
     image: &mut [f32],
     width: usize,
     height: usize,
@@ -708,7 +720,7 @@ pub(crate) fn eigf_surface_blur(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FilterError {
+pub enum FilterError {
     AllocationFailed { elements: usize },
     InvalidDimensions,
     Cancelled,

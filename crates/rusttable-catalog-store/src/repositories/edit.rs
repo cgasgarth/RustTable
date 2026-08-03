@@ -29,7 +29,8 @@ impl RedbEditRepository {
         })
     }
 
-    pub(crate) const fn from_database(database: Arc<Database>) -> Self {
+    #[must_use]
+    pub const fn from_database(database: Arc<Database>) -> Self {
         Self { database }
     }
 }
@@ -153,7 +154,7 @@ impl RedbEditRepository {
                 let current = edits
                     .get(key.as_slice())
                     .map_err(|_| EditRepositoryError::Unavailable)?
-                    .ok_or(EditRepositoryError::UnknownEdit { edit_id: edit.id() })?;
+                    .ok_or_else(|| EditRepositoryError::UnknownEdit { edit_id: edit.id() })?;
                 edit_codec::decode(current.value())
                     .map_err(|()| EditRepositoryError::CorruptPersistedData)?
                     .revision()
@@ -177,7 +178,13 @@ impl RedbEditRepository {
         Ok(receipt)
     }
 
-    pub(crate) fn prepare_history(
+    /// Prepares the history transaction corresponding to an edit replacement.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed persistence or history consistency error when the edit
+    /// cannot be represented in the durable history stream.
+    pub fn prepare_history(
         &self,
         edit: &Edit,
     ) -> Result<
@@ -243,7 +250,7 @@ impl RedbEditRepository {
     }
 }
 
-fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> EditRepositoryError {
+const fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> EditRepositoryError {
     match error {
         rusttable_catalog::RepositoryError::Unavailable
         | rusttable_catalog::RepositoryError::CommitFailure => EditRepositoryError::Unavailable,
@@ -256,7 +263,9 @@ fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> EditRepositor
     }
 }
 
-fn map_history_error(error: &rusttable_catalog::HistoryRepositoryError) -> EditRepositoryError {
+const fn map_history_error(
+    error: &rusttable_catalog::HistoryRepositoryError,
+) -> EditRepositoryError {
     match error {
         rusttable_catalog::HistoryRepositoryError::VersionConflict { .. }
         | rusttable_catalog::HistoryRepositoryError::CommitFailure => {

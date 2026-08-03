@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Lens Correction geometry order is preserved for IEEE-754 parity."
+)]
+
 use super::parameters::{
     CorrectionFlags, LensCorrectionConfig, LensCorrectionMethod, LensCorrectionMode,
 };
@@ -402,7 +407,7 @@ impl LensCorrectionPlan {
             .ok_or(LensCorrectionCoordinateError::NonFiniteResult)
     }
 
-    pub(crate) fn vignetting_calibration(&self) -> Option<VignettingCalibration> {
+    pub(crate) const fn vignetting_calibration(&self) -> Option<VignettingCalibration> {
         self.vignetting
     }
 }
@@ -474,7 +479,7 @@ fn invert_radial(
     })
 }
 
-fn validate_dimensions(dimensions: RasterDimensions) -> Result<(), LensCorrectionPlanError> {
+const fn validate_dimensions(dimensions: RasterDimensions) -> Result<(), LensCorrectionPlanError> {
     if dimensions.width() > MAX_DIMENSION || dimensions.height() > MAX_DIMENSION {
         return Err(LensCorrectionPlanError::DimensionTooLarge);
     }
@@ -499,7 +504,7 @@ fn finite_point(point: [f32; 2]) -> Result<Point, LensCorrectionCoordinateError>
     }
 }
 
-fn checked_point(point: Point) -> Result<[f32; 2], LensCorrectionCoordinateError> {
+const fn checked_point(point: Point) -> Result<[f32; 2], LensCorrectionCoordinateError> {
     if point.x.is_finite() && point.y.is_finite() {
         let x = point.x as f32;
         let y = point.y as f32;

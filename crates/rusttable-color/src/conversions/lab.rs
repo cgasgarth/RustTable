@@ -3,6 +3,11 @@
 //! The rational constants and conversion order match the CIE equations recorded
 //! in [CSS Color 4 sample conversions](https://www.w3.org/TR/css-color-4/#color-conversion-code).
 
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "CIELAB equations retain their documented f32 operation order for native parity; FMA would change results."
+)]
+
 use super::{ColorMathError, finite_output, finite3, map_slice};
 use crate::WhitePoint;
 

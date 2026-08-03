@@ -60,6 +60,10 @@ use crate::descriptor::{
 /// Operation-local descriptor.  It is not exported through registry or
 /// evaluator hubs until the cross-crate operation seam is owned.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep native parameter declaration order together in the descriptor"
+)]
 pub fn colorbalancergb_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new(

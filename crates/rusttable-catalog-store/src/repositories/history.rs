@@ -73,11 +73,11 @@ impl RedbHistoryRepository {
     }
 }
 
-#[allow(
+#[expect(
     clippy::too_many_lines,
-    reason = "Keep the redb history commit invariant and transaction boundary auditable together."
+    reason = "the redb history commit keeps invariant checks and transaction boundaries auditable together"
 )]
-pub(crate) fn stage_history_commit(
+pub fn stage_history_commit(
     transaction: &WriteTransaction,
     photo_id: PhotoId,
     expected: HistoryVersion,
@@ -459,10 +459,6 @@ where
 }
 
 impl HistoryRepository for RedbHistoryRepository {
-    #[allow(
-        clippy::too_many_lines,
-        reason = "Keep the complete read-side invariant verification auditable in one snapshot."
-    )]
     fn load(&self) -> Result<Option<HistoryState>, HistoryRepositoryError> {
         let transaction = self
             .database
@@ -838,7 +834,7 @@ fn decode_blob_key(bytes: &[u8]) -> Result<ContentBlobId, ()> {
     Ok(ContentBlobId::from_parts(kind, schema, length, digest))
 }
 
-fn map_schema_error(error: &RepositoryError) -> HistoryRepositoryError {
+const fn map_schema_error(error: &RepositoryError) -> HistoryRepositoryError {
     match error {
         RepositoryError::Unavailable => HistoryRepositoryError::Unavailable,
         RepositoryError::CommitFailure => HistoryRepositoryError::CommitFailure,

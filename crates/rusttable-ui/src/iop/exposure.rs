@@ -54,7 +54,10 @@ impl ExposurePanel {
 
     /// Builds an Exposure panel from an existing typed module state.
     #[must_use]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The source-ordered Exposure GTK builder keeps hierarchy, controls, and signal wiring together."
+    )]
     pub fn from_state(initial_state: ExposureModuleState) -> Self {
         let state = Rc::new(RefCell::new(initial_state));
         let actions = Rc::new(RefCell::new(None));
@@ -236,7 +239,7 @@ impl ExposurePanel {
 
     /// Returns the root GTK expander.
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Expander {
+    pub const fn widget(&self) -> &gtk4::Expander {
         &self.expander
     }
 

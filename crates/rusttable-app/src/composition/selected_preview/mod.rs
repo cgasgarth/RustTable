@@ -1,7 +1,7 @@
 //! Worker-to-GTK bridge for selected darkroom previews and histogram analysis.
 
 mod lifecycle;
-pub(crate) mod presentation;
+pub mod presentation;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,7 +24,7 @@ use crate::composition::thumbnails::ThumbnailLifecycle;
 use crate::diagnostics::AppDiagnostics;
 use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
 
-pub(crate) use lifecycle::PreviewLifecycle;
+pub use lifecycle::PreviewLifecycle;
 use lifecycle::PreviewSelectionToken;
 
 struct PreviewResult {
@@ -38,7 +38,7 @@ struct PreviewResult {
     clippy::too_many_lines,
     reason = "selected preview keeps worker, generation, and GTK publication failure boundaries together"
 )]
-pub(crate) fn start_selected_preview(
+pub fn start_selected_preview(
     shell: &GtkShell,
     catalog: crate::gtk_controller::GtkCatalogController,
     lifecycle: Rc<RefCell<PreviewLifecycle>>,
@@ -438,7 +438,7 @@ fn install_preview_state(
     }
 }
 
-fn histogram_cause(error: &HistogramError) -> &'static str {
+const fn histogram_cause(error: &HistogramError) -> &'static str {
     match error {
         HistogramError::SizeOverflow => "size_overflow",
         HistogramError::Empty => "empty",

@@ -3,7 +3,10 @@
 //! This module intentionally contains no process, filesystem, encoding, or catalog code.  The
 //! GTK surface edits these bounded values and hands commands to an application-owned port.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The external-editor model exposes typed launch and service failures at its API boundary."
+)]
 
 use std::fmt;
 
@@ -148,7 +151,7 @@ impl ArgumentRow {
     }
 }
 
-fn is_forbidden_shell_character(value: char) -> bool {
+const fn is_forbidden_shell_character(value: char) -> bool {
     matches!(
         value,
         '\0' | '\n' | '\r' | '\'' | '"' | '`' | '\\' | '$' | '|' | '>' | '<' | '&' | ';'
@@ -188,7 +191,7 @@ pub struct ExecutableIdentity {
 impl ExecutableIdentity {
     /// Stores only privacy-safe aliases; the service owns the native executable identity.
     #[must_use]
-    pub fn new(
+    pub const fn new(
         stored_alias: PresentationText,
         current_alias: Option<PresentationText>,
         approval: ExecutableApproval,
@@ -216,7 +219,10 @@ impl ExecutableIdentity {
     }
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "These booleans are independent persisted external-editor policy switches."
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExternalEditorPreset {
     id: PresetId,
@@ -237,7 +243,10 @@ pub struct ExternalEditorPreset {
     qualification: QualificationState,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "These booleans are independent draft controls for the external-editor policy."
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExternalEditorDraft {
     pub id: Option<PresetId>,
@@ -262,7 +271,10 @@ impl ExternalEditorPreset {
     /// # Errors
     ///
     /// Returns an error for an empty/oversized list or a preset with no executable arguments.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The preset constructor keeps the persisted external-editor fields explicit."
+    )]
     pub fn new(
         id: PresetId,
         revision: Revision,
@@ -385,7 +397,7 @@ impl ExternalEditorPreset {
     }
 
     #[must_use]
-    pub fn launchability(&self, selection_count: usize) -> Launchability {
+    pub const fn launchability(&self, selection_count: usize) -> Launchability {
         if selection_count == 0 {
             return Launchability::NoSelection;
         }
@@ -494,7 +506,12 @@ pub struct ExternalEditorJob {
 
 impl ExternalEditorJob {
     #[must_use]
-    pub fn new(id: JobId, photo_id: PhotoId, stage: JobStage, detail: PresentationText) -> Self {
+    pub const fn new(
+        id: JobId,
+        photo_id: PhotoId,
+        stage: JobStage,
+        detail: PresentationText,
+    ) -> Self {
         Self {
             id,
             photo_id,

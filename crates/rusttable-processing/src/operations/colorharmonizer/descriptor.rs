@@ -29,6 +29,10 @@ pub const COLORHARMONIZER_UI_AVAILABLE: bool = false;
 pub const COLORHARMONIZER_GPU_AVAILABLE: bool = false;
 
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Color Harmonizer descriptor fields mirror the native parameter contract in one declaration."
+)]
 pub fn colorharmonizer_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new(

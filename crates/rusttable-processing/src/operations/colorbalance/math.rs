@@ -14,6 +14,10 @@
     clippy::doc_markdown,
     reason = "native matrices, approximation coefficients, bit operations, and source terminology are ported exactly"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Balance approximation and color-boundary equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 const D50: [f32; 3] = [0.9642, 1.0, 0.8249];
 const D50_INV: [f32; 3] = [1.0 / 0.9642, 1.0, 1.0 / 0.8249];
@@ -95,7 +99,7 @@ fn round_to_nearest_even(value: f32) -> i32 {
         target_feature = "sse2"
     ))
 ))]
-fn round_away_from_zero(value: f32) -> i32 {
+const fn round_away_from_zero(value: f32) -> i32 {
     value.round() as i32
 }
 
@@ -103,7 +107,7 @@ fn round_away_from_zero(value: f32) -> i32 {
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature = "sse2"
 ))]
-fn exp2_integer_part(value: f32) -> i32 {
+const fn exp2_integer_part(value: f32) -> i32 {
     round_to_nearest_even(value)
 }
 
@@ -111,7 +115,7 @@ fn exp2_integer_part(value: f32) -> i32 {
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature = "sse2"
 )))]
-fn exp2_integer_part(value: f32) -> i32 {
+const fn exp2_integer_part(value: f32) -> i32 {
     round_away_from_zero(value)
 }
 

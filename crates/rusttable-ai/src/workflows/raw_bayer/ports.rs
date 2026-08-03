@@ -44,7 +44,7 @@ impl<'a> RawBayerTileInput<'a> {
         &self.tile
     }
     #[must_use]
-    pub fn tensor(&self) -> &[f32] {
+    pub const fn tensor(&self) -> &[f32] {
         self.tensor
     }
 }
@@ -151,7 +151,9 @@ impl RawBayerDngPublisher for FileCfaBayerDngPublisher {
         if expected_path != &path || compact_samples(output) != probe.samples {
             return Err(RawBayerPublishError::Dng(DngError::RoundTripMismatch));
         }
-        Ok(output.clone())
+        let output = output.clone();
+        drop(guard);
+        Ok(output)
     }
 
     fn discard(&mut self, artifact: &PublishedCfaBayer) {
@@ -318,7 +320,7 @@ pub enum RawBayerCatalogError {
     Pending,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RawBayerWorkflowError {
     Request(super::types::RequestError),
     Frame(super::types::RawFrameError),
@@ -357,7 +359,7 @@ impl fmt::Display for RawBayerModelError {
 }
 impl std::error::Error for RawBayerModelError {}
 
-pub(crate) fn selected_provider(
+pub fn selected_provider(
     policy: ProviderPolicy,
     descriptor: &RawBayerModelDescriptor,
 ) -> Result<Provider, super::planning::RawBayerPlanError> {

@@ -10,6 +10,10 @@
     clippy::float_cmp,
     reason = "editor state follows native f32 coordinates and exact comparisons"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native RGB Curve editor geometry preserves source coordinate arithmetic."
+)]
 
 use std::fmt;
 
@@ -121,7 +125,7 @@ impl RgbCurveEditorState {
     }
 
     /// Native interpolator callback applies one type to all three channels.
-    pub fn set_interpolator(&mut self, curve_type: RgbCurveType) {
+    pub const fn set_interpolator(&mut self, curve_type: RgbCurveType) {
         self.parameters.curve_type = [curve_type; CHANNELS];
     }
 
@@ -264,7 +268,7 @@ impl RgbCurveEditorState {
 
     /// Native change-image reset: preserve a selected green or blue channel,
     /// while clearing transient selection and zoom/pan state.
-    pub fn change_image(&mut self) {
+    pub const fn change_image(&mut self) {
         self.selected = -1;
         self.offset_x = 0.0;
         self.offset_y = 0.0;
@@ -272,7 +276,7 @@ impl RgbCurveEditorState {
     }
 
     /// Native double-click/reset view behavior always returns to red.
-    pub fn reset_view(&mut self) {
+    pub const fn reset_view(&mut self) {
         self.channel = RgbCurveChannel::Red;
         self.change_image();
     }

@@ -8,7 +8,7 @@ use super::{
     BasicEditValueError,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BasicEditValues {
     exposure_stops: FiniteF64,
     rgb_red: FiniteF64,

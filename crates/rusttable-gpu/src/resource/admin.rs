@@ -28,6 +28,7 @@ impl GpuResourcePool {
         entry.state = ResourceState::Poisoned;
         state.idle.remove(&id);
         state.events.push_back(PoolEvent::Poisoned(id));
+        drop(state);
         Ok(())
     }
 }

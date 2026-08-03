@@ -1,8 +1,4 @@
 //! Durable export queue records and transactional state transitions.
-#![allow(clippy::match_same_arms)]
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::needless_pass_by_value)]
-#![allow(clippy::too_many_arguments)]
 
 use std::fmt;
 use std::path::Path;
@@ -29,7 +25,7 @@ pub struct ExportJobId(u128);
 
 impl ExportJobId {
     #[must_use]
-    pub fn new(value: u128) -> Option<Self> {
+    pub const fn new(value: u128) -> Option<Self> {
         if value == 0 { None } else { Some(Self(value)) }
     }
 
@@ -128,7 +124,11 @@ pub struct ExportJobRecord {
 
 impl ExportJobRecord {
     #[must_use]
-    pub fn new(
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the durable queue record's explicit serialized fields"
+    )]
+    pub const fn new(
         id: ExportJobId,
         request_hash: [u8; 32],
         idempotency_key: String,
@@ -361,6 +361,10 @@ pub struct RedbExportQueueStore {
 
 impl RedbExportQueueStore {
     /// Opens a queue alongside the catalog database and creates its tables once.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the database cannot be opened, initialized, or committed.
     pub fn open(path: &Path) -> Result<Self, ExportQueueError> {
         let database = Arc::new(Database::create(path).map_err(|_| ExportQueueError::Unavailable)?);
         let transaction = database
@@ -398,6 +402,10 @@ impl RedbExportQueueStore {
     }
 
     /// Enqueues an immutable snapshot. A duplicate key is safe to replay; a conflicting key is rejected.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when identity validation, serialization, persistence, or idempotency checks fail.
     pub fn enqueue(&self, mut job: ExportJobRecord) -> Result<ExportJobRecord, ExportQueueError> {
         if job.idempotency_key.trim().is_empty() || job.idempotency_key.contains('\0') {
             return Err(ExportQueueError::InvalidIdempotencyKey);
@@ -464,7 +472,7 @@ impl RedbExportQueueStore {
                 .map_err(|_| ExportQueueError::Unavailable)?;
             ids.insert(job.idempotency_key.as_bytes(), job_key.as_slice())
                 .map_err(|_| ExportQueueError::Unavailable)?;
-            append_transition(&transaction, &mut job)?;
+            append_transition(&transaction, &job)?;
         }
         transaction
             .commit()
@@ -472,6 +480,11 @@ impl RedbExportQueueStore {
         Ok(job)
     }
 
+    /// Returns one durable job by identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the queue transaction or stored record is corrupt.
     pub fn get(&self, id: ExportJobId) -> Result<Option<ExportJobRecord>, ExportQueueError> {
         let transaction = self
             .database
@@ -487,6 +500,11 @@ impl RedbExportQueueStore {
             .transpose()
     }
 
+    /// Lists all durable jobs in key order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the queue transaction or a stored record is corrupt.
     pub fn list(&self) -> Result<Vec<ExportJobRecord>, ExportQueueError> {
         let transaction = self
             .database
@@ -504,6 +522,11 @@ impl RedbExportQueueStore {
             .collect()
     }
 
+    /// Advances a job through the durable state machine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the transition is invalid or persistence fails.
     pub fn transition(
         &self,
         id: ExportJobId,
@@ -522,8 +545,9 @@ impl RedbExportQueueStore {
                 ExportJobState::Preparing => Some(ExportJobStage::Preparing),
                 ExportJobState::Rendering => Some(ExportJobStage::Rendering),
                 ExportJobState::Encoding => Some(ExportJobStage::Encoding),
-                ExportJobState::Committing => Some(ExportJobStage::Committing),
-                ExportJobState::Succeeded => Some(ExportJobStage::Committing),
+                ExportJobState::Committing | ExportJobState::Succeeded => {
+                    Some(ExportJobStage::Committing)
+                }
                 _ => job.stage,
             };
             if to == ExportJobState::Queued {
@@ -533,6 +557,11 @@ impl RedbExportQueueStore {
         })
     }
 
+    /// Records monotonic progress for a job stage.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when progress is invalid, regresses, or cannot be persisted.
     pub fn update_progress(
         &self,
         id: ExportJobId,
@@ -560,22 +589,32 @@ impl RedbExportQueueStore {
         })
     }
 
+    /// Stores the staged-output manifest for a job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the manifest transition or persistence fails.
     pub fn set_staging_manifest(
         &self,
         id: ExportJobId,
-        manifest: Vec<u8>,
+        manifest: &[u8],
         now: u64,
     ) -> Result<ExportJobRecord, ExportQueueError> {
         self.mutate(id, now, |job| {
-            job.staging_manifest = Some(manifest.clone());
+            job.staging_manifest = Some(manifest.to_vec());
             Ok(())
         })
     }
 
+    /// Marks a job successful and records its commit receipt.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the state transition or persistence fails.
     pub fn succeed(
         &self,
         id: ExportJobId,
-        receipt: Vec<u8>,
+        receipt: &[u8],
         now: u64,
     ) -> Result<ExportJobRecord, ExportQueueError> {
         self.mutate(id, now, |job| {
@@ -587,16 +626,21 @@ impl RedbExportQueueStore {
             }
             job.state = ExportJobState::Succeeded;
             job.progress = 10_000;
-            job.receipt = Some(receipt.clone());
+            job.receipt = Some(receipt.to_vec());
             Ok(())
         })
     }
 
+    /// Records a retryable or permanent job failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when retry timing, the state transition, or persistence is invalid.
     pub fn fail(
         &self,
         id: ExportJobId,
         retryable: bool,
-        error: String,
+        error: &str,
         retry_at: Option<u64>,
         now: u64,
     ) -> Result<ExportJobRecord, ExportQueueError> {
@@ -617,16 +661,26 @@ impl RedbExportQueueStore {
             }
             job.state = to;
             job.attempt = job.attempt.saturating_add(1);
-            job.last_error = Some(redact_error(&error));
+            job.last_error = Some(redact_error(error));
             job.next_retry_at = retry_at;
             Ok(())
         })
     }
 
+    /// Cancels a queued or in-process job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the cancellation transition or persistence fails.
     pub fn cancel(&self, id: ExportJobId, now: u64) -> Result<ExportJobRecord, ExportQueueError> {
         self.transition(id, ExportJobState::Cancelled, now)
     }
 
+    /// Requeues an interrupted or retryable job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the job is not retryable or persistence fails.
     pub fn retry(&self, id: ExportJobId, now: u64) -> Result<ExportJobRecord, ExportQueueError> {
         self.mutate(id, now, |job| {
             if !matches!(
@@ -648,15 +702,15 @@ impl RedbExportQueueStore {
     }
 
     /// Converts all in-process jobs to `Interrupted` before a worker is restarted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the job list or any recovery transition cannot be persisted.
     pub fn recover_in_process(&self, now: u64) -> Result<Vec<ExportJobRecord>, ExportQueueError> {
-        let ids = self
-            .list()?
+        self.list()?
             .into_iter()
             .filter(|job| job.state.is_in_process())
-            .map(|job| job.id)
-            .collect::<Vec<_>>();
-        ids.into_iter()
-            .map(|id| self.transition(id, ExportJobState::Interrupted, now))
+            .map(|job| self.transition(job.id, ExportJobState::Interrupted, now))
             .collect()
     }
 
@@ -690,7 +744,7 @@ impl RedbExportQueueStore {
         let encoded = encode(&job)?;
         jobs.insert(key.as_slice(), encoded.as_slice())
             .map_err(|_| ExportQueueError::Unavailable)?;
-        append_transition(&transaction, &mut job)?;
+        append_transition(&transaction, &job)?;
         drop(jobs);
         transaction
             .commit()
@@ -711,7 +765,7 @@ fn decode(bytes: &[u8]) -> Result<ExportJobRecord, ExportQueueError> {
 
 fn append_transition(
     transaction: &redb::WriteTransaction,
-    job: &mut ExportJobRecord,
+    job: &ExportJobRecord,
 ) -> Result<(), ExportQueueError> {
     let key = transition_key(job.id, job.transition_count);
     let value = to_allocvec(&(job.state, job.stage, job.progress, job.updated_at))

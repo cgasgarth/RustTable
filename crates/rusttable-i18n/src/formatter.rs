@@ -49,7 +49,7 @@ impl fmt::Display for FormattingError {
 
 impl std::error::Error for FormattingError {}
 
-pub(crate) fn format_integer(locale: &LocaleTag, value: i64) -> Result<String, FormattingError> {
+pub fn format_integer(locale: &LocaleTag, value: i64) -> Result<String, FormattingError> {
     let formatter = DecimalFormatter::try_new(
         locale_for_formatting(locale)?.into(),
         DecimalFormatterOptions::default(),
@@ -58,7 +58,7 @@ pub(crate) fn format_integer(locale: &LocaleTag, value: i64) -> Result<String, F
     Ok(formatter.format_to_string(&Decimal::from(value)))
 }
 
-pub(crate) fn format_decimal(locale: &LocaleTag, value: &str) -> Result<String, FormattingError> {
+pub fn format_decimal(locale: &LocaleTag, value: &str) -> Result<String, FormattingError> {
     let decimal = value
         .parse::<Decimal>()
         .map_err(|error| FormattingError::Decimal(error.to_string()))?;
@@ -70,7 +70,7 @@ pub(crate) fn format_decimal(locale: &LocaleTag, value: &str) -> Result<String, 
     Ok(formatter.format_to_string(&decimal))
 }
 
-pub(crate) fn format_percent(locale: &LocaleTag, value: &str) -> Result<String, FormattingError> {
+pub fn format_percent(locale: &LocaleTag, value: &str) -> Result<String, FormattingError> {
     let decimal = value
         .parse::<f64>()
         .map_err(|error| FormattingError::Decimal(error.to_string()))?;
@@ -79,17 +79,14 @@ pub(crate) fn format_percent(locale: &LocaleTag, value: &str) -> Result<String, 
     Ok(format!("{percent}{suffix}"))
 }
 
-pub(crate) fn format_byte_count(locale: &LocaleTag, value: u64) -> Result<String, FormattingError> {
+pub fn format_byte_count(locale: &LocaleTag, value: u64) -> Result<String, FormattingError> {
     Ok(format!(
         "{} B",
         format_integer(locale, i64::try_from(value).unwrap_or(i64::MAX))?
     ))
 }
 
-pub(crate) fn format_duration(
-    locale: &LocaleTag,
-    value: Duration,
-) -> Result<String, FormattingError> {
+pub fn format_duration(locale: &LocaleTag, value: Duration) -> Result<String, FormattingError> {
     let seconds = value.as_secs();
     let minutes = seconds / 60;
     let remaining_seconds = seconds % 60;
@@ -106,7 +103,7 @@ pub(crate) fn format_duration(
     ))
 }
 
-pub(crate) fn format_date(locale: &LocaleTag, value: DateValue) -> Result<String, FormattingError> {
+pub fn format_date(locale: &LocaleTag, value: DateValue) -> Result<String, FormattingError> {
     let date = Date::try_new_gregorian(value.year, value.month, value.day)
         .map_err(|error| FormattingError::Date(error.to_string()))?;
     let formatter = FixedCalendarDateTimeFormatter::try_new(
@@ -117,10 +114,7 @@ pub(crate) fn format_date(locale: &LocaleTag, value: DateValue) -> Result<String
     Ok(format!("{}", formatter.format(&date)))
 }
 
-pub(crate) fn format_list(
-    locale: &LocaleTag,
-    values: &[String],
-) -> Result<String, FormattingError> {
+pub fn format_list(locale: &LocaleTag, values: &[String]) -> Result<String, FormattingError> {
     let formatter = ListFormatter::try_new_and(
         locale_for_formatting(locale)?.into(),
         ListFormatterOptions::default(),
@@ -129,10 +123,7 @@ pub(crate) fn format_list(
     Ok(formatter.format_to_string(values.iter()))
 }
 
-pub(crate) fn plural_category(
-    locale: &LocaleTag,
-    value: i64,
-) -> Result<PluralCategory, FormattingError> {
+pub fn plural_category(locale: &LocaleTag, value: i64) -> Result<PluralCategory, FormattingError> {
     let rules = PluralRules::try_new(
         locale_for_formatting(locale)?.into(),
         PluralRulesOptions::default(),

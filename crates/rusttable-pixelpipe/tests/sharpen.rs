@@ -5,8 +5,6 @@
 //! connects neighborhood-aware CPU tile extraction; no GPU implementation is
 //! claimed by this milestone.
 
-#![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-
 use std::time::Duration;
 
 use rusttable_core::{
@@ -80,6 +78,10 @@ fn graph_from_operations(operations: Vec<Operation>) -> CompiledOperationGraph {
     CompiledOperationGraph::compile(&edit).expect("registered Sharpen graph")
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived Sharpen Lab fixture arithmetic order"
+)]
 fn input(width: u32, height: u32) -> RgbaF32Image {
     let dimensions = RasterDimensions::new(width, height).expect("nonzero dimensions");
     let pixels = (0..dimensions.pixel_count())
@@ -107,6 +109,10 @@ fn input(width: u32, height: u32) -> RgbaF32Image {
     .expect("valid Lab image")
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived Sharpen RGB fixture arithmetic order"
+)]
 fn linear_input(width: u32, height: u32) -> RgbaF32Image {
     let dimensions = RasterDimensions::new(width, height).expect("nonzero dimensions");
     let pixels = (0..dimensions.pixel_count())
@@ -357,6 +363,12 @@ fn sharpen_mask_blends_only_lightness_and_matches_overlapped_tiles() {
 }
 
 #[test]
+#[expect(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::suboptimal_flops,
+    reason = "Preserve native Sharpen coordinate conversions and luma arithmetic order"
+)]
 fn production_lab_route_matches_native_luma_equation_and_physical_borders() {
     const WIDTH: u32 = 23;
     const HEIGHT: u32 = 17;

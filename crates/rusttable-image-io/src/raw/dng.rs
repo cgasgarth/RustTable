@@ -184,7 +184,10 @@ fn build_receipt(input: &DngReceiptInput<'_>) -> Result<RawDecodeReceipt, RawDec
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "DNG frame assembly receives each independently validated TIFF/RAW component from the native pipeline boundary"
+)]
 fn build_frame(
     page: &crate::tiff::TiffPage,
     header: &TiffHeader,
@@ -650,9 +653,17 @@ fn crop_area(active: RawRect, metadata: &TiffDngMetadata) -> Result<RawRect, Raw
         return Ok(active);
     };
     let values = [origin[0], origin[1], size[0], size[1]];
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "DNG crop values are finite, nonnegative, integral, and u32-bounded before fixed-coordinate encoding"
+    )]
     let integers = values.map(|value| {
-        if !value.is_finite() || value < 0.0 || value.fract() != 0.0 {
+        let value = f64::from(value);
+        if !value.is_finite()
+            || !(0.0..=f64::from(u32::MAX)).contains(&value)
+            || value.fract() != 0.0
+        {
             None
         } else {
             u32::try_from(value as u64).ok()
@@ -714,7 +725,7 @@ fn default_channels(channels: u16) -> Vec<super::RawChannel> {
     }
 }
 
-fn channel(value: u8) -> super::RawChannel {
+const fn channel(value: u8) -> super::RawChannel {
     match value {
         0 => super::RawChannel::Red,
         1 => super::RawChannel::Green,
@@ -727,7 +738,7 @@ fn channel(value: u8) -> super::RawChannel {
     }
 }
 
-fn illuminant(value: u16) -> RawIlluminant {
+const fn illuminant(value: u16) -> RawIlluminant {
     match value {
         1 => RawIlluminant::Daylight,
         2 => RawIlluminant::Fluorescent,
@@ -752,7 +763,7 @@ fn illuminant(value: u16) -> RawIlluminant {
     }
 }
 
-fn orientation(value: rusttable_image::Orientation) -> RawOrientation {
+const fn orientation(value: rusttable_image::Orientation) -> RawOrientation {
     match value {
         rusttable_image::Orientation::Normal => RawOrientation::Normal,
         rusttable_image::Orientation::FlipHorizontal => RawOrientation::HorizontalFlip,
@@ -765,7 +776,7 @@ fn orientation(value: rusttable_image::Orientation) -> RawOrientation {
     }
 }
 
-fn tiff_limits(limits: RawDecodeLimits) -> TiffDecodeLimits {
+const fn tiff_limits(limits: RawDecodeLimits) -> TiffDecodeLimits {
     TiffDecodeLimits {
         max_source_bytes: limits.max_source_bytes,
         max_width: limits.max_width,
@@ -842,7 +853,7 @@ fn malformed(message: &str, probe: &RawContainerProbe) -> RawDecodeError {
     }
 }
 
-fn invalid(error: RawFrameValidationError) -> RawDecodeError {
+const fn invalid(error: RawFrameValidationError) -> RawDecodeError {
     RawDecodeError::InvalidFrame(error)
 }
 

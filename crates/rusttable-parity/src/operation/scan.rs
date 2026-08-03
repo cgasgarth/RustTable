@@ -59,6 +59,10 @@ pub fn scan_operations_with_identity(
 /// # Errors
 ///
 /// Returns an error when a registration, source declaration, override, or manifest invariant is invalid.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Source extraction keeps CMake branch tracking, native validation, and manifest assembly in one auditable boundary."
+)]
 pub fn scan_operations_with_overrides(
     source: &Path,
     overrides: &str,
@@ -225,7 +229,10 @@ pub fn scan_operations_with_overrides(
 
 // This function intentionally keeps the generated metadata policy together so
 // every inferred field receives the same source identity and evidence record.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "Generated metadata completion keeps every source-derived field and evidence policy together."
+)]
 fn complete_generated_metadata(operation: &mut Operation, source: &Path) {
     let source_commit = reference_commit(source);
     let callback_evidence = |path: &str| Evidence {
@@ -409,7 +416,7 @@ fn extract_operation(
     content: &str,
     programs: &[String],
 ) -> Operation {
-    let (module_version, _) = introspection(content).unwrap_or((1, "opaque".to_owned()));
+    let (module_version, _) = introspection(content).unwrap_or_else(|| (1, "opaque".to_owned()));
     let opencl_programs = opencl_programs(content, programs);
     let tolerance_class = if opencl_programs.is_empty() {
         "Pointwise".to_owned()

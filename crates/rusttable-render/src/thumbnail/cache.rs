@@ -1,15 +1,12 @@
-#![allow(
-    clippy::format_collect,
-    clippy::manual_let_else,
+#![expect(
     clippy::missing_errors_doc,
-    clippy::needless_pass_by_value,
-    clippy::single_match_else,
-    clippy::struct_field_names
+    reason = "thumbnail cache methods share one typed filesystem and lifecycle error boundary"
 )]
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
 use std::fmt;
+use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::mem;
@@ -49,6 +46,11 @@ impl CacheTime {
         Self(value)
     }
 
+    /// Returns the current Unix time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CacheError::Clock`] when the system clock predates the Unix epoch.
     pub fn now() -> Result<Self, CacheError> {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -64,39 +66,44 @@ impl CacheTime {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CacheLimits {
-    max_total_bytes: u64,
-    max_entry_bytes: u64,
-    max_age_seconds: Option<u64>,
+    total_bytes: u64,
+    entry_bytes: u64,
+    age_seconds: Option<u64>,
 }
 
 impl CacheLimits {
+    /// Creates nonzero durable-cache byte limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CacheError::InvalidLimits`] when either byte limit is zero.
     pub const fn new(max_total_bytes: u64, max_entry_bytes: u64) -> Result<Self, CacheError> {
         if max_total_bytes == 0 || max_entry_bytes == 0 {
             return Err(CacheError::InvalidLimits);
         }
         Ok(Self {
-            max_total_bytes,
-            max_entry_bytes,
-            max_age_seconds: None,
+            total_bytes: max_total_bytes,
+            entry_bytes: max_entry_bytes,
+            age_seconds: None,
         })
     }
 
     #[must_use]
     pub const fn with_max_age(mut self, seconds: u64) -> Self {
-        self.max_age_seconds = Some(seconds);
+        self.age_seconds = Some(seconds);
         self
     }
     #[must_use]
     pub const fn max_total_bytes(self) -> u64 {
-        self.max_total_bytes
+        self.total_bytes
     }
     #[must_use]
     pub const fn max_entry_bytes(self) -> u64 {
-        self.max_entry_bytes
+        self.entry_bytes
     }
     #[must_use]
     pub const fn max_age_seconds(self) -> Option<u64> {
-        self.max_age_seconds
+        self.age_seconds
     }
 }
 
@@ -182,36 +189,36 @@ struct CacheMetadata {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ResidentCacheEntry {
+pub struct ResidentCacheEntry {
     image: Arc<DecodedImage>,
     created_at: CacheTime,
 }
 
 impl ResidentCacheEntry {
-    pub(crate) fn new(image: DecodedImage, created_at: CacheTime) -> Self {
+    pub fn new(image: DecodedImage, created_at: CacheTime) -> Self {
         Self {
             image: Arc::new(image),
             created_at,
         }
     }
 
-    pub(crate) fn image(&self) -> Arc<DecodedImage> {
+    pub fn image(&self) -> Arc<DecodedImage> {
         Arc::clone(&self.image)
     }
 
-    pub(crate) const fn created_at(&self) -> CacheTime {
+    pub const fn created_at(&self) -> CacheTime {
         self.created_at
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum ResidentCacheSlot {
+pub enum ResidentCacheSlot {
     Vacant,
     Ready(ResidentCacheEntry),
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ThumbnailCacheCallbacks;
+pub struct ThumbnailCacheCallbacks;
 
 impl CommonCacheCallbacks<ThumbnailKey, ResidentCacheSlot> for ThumbnailCacheCallbacks {
     type Error = Infallible;
@@ -227,7 +234,7 @@ impl CommonCacheCallbacks<ThumbnailKey, ResidentCacheSlot> for ThumbnailCacheCal
     }
 }
 
-pub(crate) type ThumbnailCacheLease =
+pub type ThumbnailCacheLease =
     CommonCacheLease<ThumbnailKey, ResidentCacheSlot, ThumbnailCacheCallbacks>;
 
 /// Shared process-resident thumbnail tier. The durable cache remains authoritative.
@@ -256,21 +263,21 @@ impl ThumbnailMemoryCache {
         }
     }
 
-    pub(crate) fn begin_resolution(
+    pub fn begin_resolution(
         &self,
         key: ThumbnailKey,
     ) -> Result<ThumbnailResolutionGuard, CacheError> {
         ThumbnailResolutionGuard::begin(Arc::clone(&self.coordinator), key)
     }
 
-    pub(crate) fn begin_invalidation(
+    pub fn begin_invalidation(
         &self,
         event: CacheChangeEvent,
     ) -> Result<ThumbnailInvalidationGuard, CacheError> {
         ThumbnailInvalidationGuard::begin(Arc::clone(&self.coordinator), event)
     }
 
-    pub(crate) fn acquire(
+    pub fn acquire(
         &self,
         key: ThumbnailKey,
         mode: CommonCacheMode,
@@ -280,11 +287,11 @@ impl ThumbnailMemoryCache {
             .map_err(|_| CacheError::Memory)
     }
 
-    pub(crate) fn keys(&self) -> Result<Vec<ThumbnailKey>, CacheError> {
+    pub fn keys(&self) -> Result<Vec<ThumbnailKey>, CacheError> {
         self.inner.keys().map_err(|_| CacheError::Memory)
     }
 
-    pub(crate) fn remove(&self, key: &ThumbnailKey) -> Result<bool, CacheError> {
+    pub fn remove(&self, key: &ThumbnailKey) -> Result<bool, CacheError> {
         self.inner
             .remove(key)
             .map(|result| matches!(result, CommonCacheRemoveResult::Removed { .. }))
@@ -292,15 +299,22 @@ impl ThumbnailMemoryCache {
     }
 
     #[cfg(test)]
-    pub(crate) fn is_invalidating(&self) -> bool {
+    #[must_use]
+    pub fn is_invalidating(&self) -> bool {
         self.coordinator
             .state
             .lock()
             .map_or(true, |state| state.invalidation.is_some())
     }
 
+    /// Pauses the next memory-cache commit for concurrency tests.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the cache coordinator mutex is poisoned.
     #[cfg(test)]
-    pub(crate) fn pause_next_commit(&self) -> (mpsc::Receiver<()>, mpsc::Sender<()>) {
+    #[must_use]
+    pub fn pause_next_commit(&self) -> (mpsc::Receiver<()>, mpsc::Sender<()>) {
         let (reached_sender, reached_receiver) = mpsc::channel();
         let (resume_sender, resume_receiver) = mpsc::channel();
         *self
@@ -329,7 +343,7 @@ struct ThumbnailCacheCoordinatorState {
 }
 
 #[derive(Debug)]
-pub(crate) struct ThumbnailResolutionGuard {
+pub struct ThumbnailResolutionGuard {
     coordinator: Arc<ThumbnailCacheCoordinator>,
     key: ThumbnailKey,
     generation: u64,
@@ -358,20 +372,22 @@ impl ThumbnailResolutionGuard {
         })
     }
 
-    pub(crate) fn commit<T>(
+    pub fn commit<T>(
         &self,
         commit: impl FnOnce() -> Result<T, CacheError>,
     ) -> Result<T, CacheError> {
         #[cfg(test)]
-        if let Some((reached, resume)) = self
-            .coordinator
-            .commit_pause
-            .lock()
-            .map_err(|_| CacheError::Memory)?
-            .take()
         {
-            reached.send(()).map_err(|_| CacheError::Memory)?;
-            resume.recv().map_err(|_| CacheError::Memory)?;
+            let pause = self
+                .coordinator
+                .commit_pause
+                .lock()
+                .map_err(|_| CacheError::Memory)?
+                .take();
+            if let Some((reached, resume)) = pause {
+                reached.send(()).map_err(|_| CacheError::Memory)?;
+                resume.recv().map_err(|_| CacheError::Memory)?;
+            }
         }
         let _publication = self
             .coordinator
@@ -409,11 +425,12 @@ impl Drop for ThumbnailResolutionGuard {
             }
         }
         self.coordinator.changed.notify_all();
+        drop(state);
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct ThumbnailInvalidationGuard {
+pub struct ThumbnailInvalidationGuard {
     coordinator: Arc<ThumbnailCacheCoordinator>,
     active_keys: Vec<ThumbnailKey>,
 }
@@ -468,7 +485,7 @@ impl ThumbnailInvalidationGuard {
         }
     }
 
-    pub(crate) fn active_keys(&self) -> &[ThumbnailKey] {
+    pub fn active_keys(&self) -> &[ThumbnailKey] {
         &self.active_keys
     }
 }
@@ -481,6 +498,7 @@ impl Drop for ThumbnailInvalidationGuard {
         };
         state.invalidation = None;
         self.coordinator.changed.notify_all();
+        drop(state);
     }
 }
 
@@ -545,15 +563,20 @@ impl CachePin {
 
 impl CacheStore {
     /// Opens a cache directory and reconstructs its minimal index from headers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O, limit, or cache-state error when the directory cannot
+    /// be created, canonicalized, or reconciled.
     pub fn open(
         root: impl Into<PathBuf>,
         limits: CacheLimits,
     ) -> Result<(Self, ReconciliationReport), CacheError> {
         let requested_root = root.into();
         fs::create_dir_all(&requested_root)
-            .map_err(|error| io_error("create cache directory", &requested_root, error))?;
+            .map_err(|error| io_error("create cache directory", &requested_root, &error))?;
         let root = fs::canonicalize(&requested_root)
-            .map_err(|error| io_error("canonicalize cache directory", &requested_root, error))?;
+            .map_err(|error| io_error("canonicalize cache directory", &requested_root, &error))?;
         let coordinator = durable_coordinator(&root, limits)?;
         let store = Self {
             root,
@@ -619,17 +642,23 @@ impl CacheStore {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(metadata) = state.entries.get_mut(&key.digest()) else {
-            return false;
+        let touched = match state.entries.get_mut(&key.digest()) {
+            Some(metadata) if metadata.key == key => {
+                metadata.last_access = now;
+                true
+            }
+            _ => false,
         };
-        if metadata.key != key {
-            return false;
-        }
-        metadata.last_access = now;
-        true
+        drop(state);
+        touched
     }
 
     /// Reads and independently verifies the header, key, dimensions, length, and payload digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O, corruption, schema, or cache-state error when the entry
+    /// cannot be read or its reservation cannot be released.
     pub fn get(
         &mut self,
         key: ThumbnailKey,
@@ -637,19 +666,29 @@ impl CacheStore {
     ) -> Result<Option<CacheEntry>, CacheError> {
         let coordinator = Arc::clone(&self.coordinator);
         let digest = key.digest();
-        let (path, revision) = {
+        let reservation = (|| -> Result<Option<(PathBuf, u64)>, CacheError> {
             let mut state = coordinator.state.lock().map_err(|_| CacheError::Memory)?;
             let Some(metadata) = state.entries.get(&digest) else {
+                drop(state);
                 return Ok(None);
             };
             if metadata.key != key {
+                drop(state);
                 return Ok(None);
             }
             let path = metadata.path.clone();
             let revision = metadata.revision;
             let count = state.in_use.entry(digest).or_default();
-            *count = count.checked_add(1).ok_or(CacheError::Memory)?;
-            (path, revision)
+            let Some(next_count) = count.checked_add(1) else {
+                drop(state);
+                return Err(CacheError::Memory);
+            };
+            *count = next_count;
+            drop(state);
+            Ok(Some((path, revision)))
+        })()?;
+        let Some((path, revision)) = reservation else {
+            return Ok(None);
         };
 
         #[cfg(test)]
@@ -659,38 +698,47 @@ impl CacheStore {
         #[cfg(not(test))]
         let result = read_entry(&path, key, self.limits);
         let mut state = coordinator.state.lock().map_err(|_| CacheError::Memory)?;
-        decrement(&mut state.in_use, digest)?;
-        let is_current = state
-            .entries
-            .get(&digest)
-            .is_some_and(|metadata| metadata.key == key && metadata.revision == revision);
-        match result {
-            Ok(entry) => {
-                if is_current && let Some(metadata) = state.entries.get_mut(&digest) {
-                    metadata.last_access = now;
+        let result = (|| {
+            decrement(&mut state.in_use, digest)?;
+            let is_current = state
+                .entries
+                .get(&digest)
+                .is_some_and(|metadata| metadata.key == key && metadata.revision == revision);
+            match result {
+                Ok(entry) => {
+                    if is_current && let Some(metadata) = state.entries.get_mut(&digest) {
+                        metadata.last_access = now;
+                    }
+                    Ok(Some(entry))
                 }
-                Ok(Some(entry))
-            }
-            Err(CacheError::CorruptEntry | CacheError::UnsupportedSchema(_)) => {
-                if is_current && !Self::is_protected_locked(&state, digest) {
-                    self.remove_digest_locked(&mut state, digest)?;
+                Err(CacheError::CorruptEntry | CacheError::UnsupportedSchema(_)) => {
+                    if is_current && !Self::is_protected_locked(&state, digest) {
+                        self.remove_digest_locked(&mut state, digest)?;
+                    }
+                    Ok(None)
                 }
-                Ok(None)
-            }
-            Err(CacheError::Io {
-                operation: "open cache entry",
-                ..
-            }) if !path.exists() => {
-                if is_current && !Self::is_protected_locked(&state, digest) {
-                    self.remove_digest_locked(&mut state, digest)?;
+                Err(CacheError::Io {
+                    operation: "open cache entry",
+                    ..
+                }) if !path.exists() => {
+                    if is_current && !Self::is_protected_locked(&state, digest) {
+                        self.remove_digest_locked(&mut state, digest)?;
+                    }
+                    Ok(None)
                 }
-                Ok(None)
+                Err(error) => Err(error),
             }
-            Err(error) => Err(error),
-        }
+        })();
+        drop(state);
+        result
     }
 
     /// Publishes a complete entry using a same-directory staged file and atomic rename.
+    ///
+    /// # Errors
+    ///
+    /// Returns an image, size, I/O, or cache-state error when the entry cannot
+    /// be serialized, staged, published, or accounted for.
     pub fn put(
         &mut self,
         key: ThumbnailKey,
@@ -705,10 +753,10 @@ impl CacheStore {
         let payload = image.pixels();
         let key_bytes = key.canonical_bytes();
         let file_bytes = serialized_size(key_bytes.len(), payload.len())?;
-        if file_bytes > self.limits.max_entry_bytes {
+        if file_bytes > self.limits.entry_bytes {
             return Err(CacheError::EntryTooLarge {
                 bytes: file_bytes,
-                limit: self.limits.max_entry_bytes,
+                limit: self.limits.entry_bytes,
             });
         }
         let digest = key.digest();
@@ -727,9 +775,10 @@ impl CacheStore {
             let occupied_without_target = Self::total_bytes_locked(&state).saturating_sub(previous);
             let available = self
                 .limits
-                .max_total_bytes
+                .total_bytes
                 .saturating_sub(occupied_without_target);
             if file_bytes > available {
+                drop(state);
                 return Err(CacheError::CacheFull {
                     required: file_bytes,
                     available,
@@ -737,7 +786,7 @@ impl CacheStore {
             }
             let revision = Self::next_revision_locked(&mut state)?;
             fs::rename(&temporary_path, &final_path)
-                .map_err(|error| io_error("publish cache entry", &final_path, error))?;
+                .map_err(|error| io_error("publish cache entry", &final_path, &error))?;
             state.entries.insert(
                 digest,
                 CacheMetadata {
@@ -749,6 +798,7 @@ impl CacheStore {
                     revision,
                 },
             );
+            drop(state);
             Ok(())
         })();
         if result.is_err() {
@@ -767,14 +817,18 @@ impl CacheStore {
     }
 
     #[cfg(test)]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CacheError::Memory`] when the test synchronization state is poisoned.
     fn pause_read_after_reservation(&self) -> Result<(), CacheError> {
-        if let Some((reached, resume)) = self
+        let pause = self
             .coordinator
             .read_pause
             .lock()
             .map_err(|_| CacheError::Memory)?
-            .take()
-        {
+            .take();
+        if let Some((reached, resume)) = pause {
             reached.send(()).map_err(|_| CacheError::Memory)?;
             resume.recv().map_err(|_| CacheError::Memory)?;
         }
@@ -782,16 +836,29 @@ impl CacheStore {
     }
 
     /// Removes one exact key. A missing key is a successful no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CacheError::Protected`] for a leased or pinned entry, or an
+    /// I/O/cache-state error when removal cannot be completed.
     pub fn invalidate(&mut self, key: ThumbnailKey) -> Result<bool, CacheError> {
         let coordinator = Arc::clone(&self.coordinator);
         let mut state = coordinator.state.lock().map_err(|_| CacheError::Memory)?;
         if Self::is_protected_locked(&state, key.digest()) {
+            drop(state);
             return Err(CacheError::Protected);
         }
-        self.remove_digest_locked(&mut state, key.digest())
+        let result = self.remove_digest_locked(&mut state, key.digest());
+        drop(state);
+        result
     }
 
     /// Acquires a lease that prevents eviction or invalidation until released.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache-state error when the in-memory index cannot be locked or
+    /// the lease count cannot be incremented.
     pub fn lease(&mut self, key: ThumbnailKey) -> Result<Option<CacheLease>, CacheError> {
         let mut state = self
             .coordinator
@@ -800,22 +867,37 @@ impl CacheStore {
             .map_err(|_| CacheError::Memory)?;
         let digest = key.digest();
         if !state.entries.contains_key(&digest) {
+            drop(state);
             return Ok(None);
         }
         *state.leases.entry(digest).or_default() += 1;
+        drop(state);
         Ok(Some(CacheLease { digest }))
     }
 
+    /// Releases a previously acquired lease.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache-state error when the lease count is missing, underflows,
+    /// or the index lock is poisoned.
     pub fn release_lease(&mut self, lease: CacheLease) -> Result<(), CacheError> {
         let mut state = self
             .coordinator
             .state
             .lock()
             .map_err(|_| CacheError::Memory)?;
-        decrement(&mut state.leases, lease.digest)
+        let result = decrement(&mut state.leases, lease.digest);
+        drop(state);
+        result
     }
 
     /// Acquires a durable-session pin that survives ordinary eviction passes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache-state error when the in-memory index cannot be locked or
+    /// the pin count cannot be incremented.
     pub fn pin(&mut self, key: ThumbnailKey) -> Result<Option<CachePin>, CacheError> {
         let mut state = self
             .coordinator
@@ -824,27 +906,42 @@ impl CacheStore {
             .map_err(|_| CacheError::Memory)?;
         let digest = key.digest();
         if !state.entries.contains_key(&digest) {
+            drop(state);
             return Ok(None);
         }
         *state.pins.entry(digest).or_default() += 1;
+        drop(state);
         Ok(Some(CachePin { digest }))
     }
 
+    /// Releases a previously acquired durable-session pin.
+    ///
+    /// # Errors
+    ///
+    /// Returns a cache-state error when the pin count is missing, underflows,
+    /// or the index lock is poisoned.
     pub fn unpin(&mut self, pin: CachePin) -> Result<(), CacheError> {
         let mut state = self
             .coordinator
             .state
             .lock()
             .map_err(|_| CacheError::Memory)?;
-        decrement(&mut state.pins, pin.digest)
+        let result = decrement(&mut state.pins, pin.digest);
+        drop(state);
+        result
     }
 
     /// Removes expired entries and least-recently-used entries until the budget holds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O or cache-state error when an entry cannot be removed or
+    /// the in-memory index cannot be updated.
     pub fn evict(&mut self, now: CacheTime) -> Result<usize, CacheError> {
         let coordinator = Arc::clone(&self.coordinator);
         let mut state = coordinator.state.lock().map_err(|_| CacheError::Memory)?;
         let before = state.entries.len();
-        if let Some(age) = self.limits.max_age_seconds {
+        if let Some(age) = self.limits.age_seconds {
             let expired = state
                 .entries
                 .iter()
@@ -859,7 +956,9 @@ impl CacheStore {
             }
         }
         self.evict_to_fit_locked(&mut state, 0, None)?;
-        Ok(before - state.entries.len())
+        let removed = before - state.entries.len();
+        drop(state);
+        Ok(removed)
     }
 
     fn evict_for_replacement_locked(
@@ -882,9 +981,7 @@ impl CacheStore {
         additional: u64,
         excluded: Option<[u8; 32]>,
     ) -> Result<(), CacheError> {
-        while Self::total_bytes_locked(state).saturating_add(additional)
-            > self.limits.max_total_bytes
-        {
+        while Self::total_bytes_locked(state).saturating_add(additional) > self.limits.total_bytes {
             let Some(digest) = state
                 .entries
                 .iter()
@@ -920,13 +1017,7 @@ impl CacheStore {
     }
 
     fn path_for(&self, digest: [u8; 32]) -> PathBuf {
-        self.root.join(format!(
-            "{}.mip",
-            digest
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        ))
+        self.root.join(format!("{}.mip", digest_hex(digest)))
     }
 
     fn temporary_path(&self, key: ThumbnailKey) -> PathBuf {
@@ -953,7 +1044,7 @@ impl CacheStore {
         match fs::remove_file(&path) {
             Ok(()) => Ok(true),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(was_indexed),
-            Err(error) => Err(io_error("remove cache entry", &path, error)),
+            Err(error) => Err(io_error("remove cache entry", &path, &error)),
         }
     }
 
@@ -964,15 +1055,15 @@ impl CacheStore {
         let previous = mem::take(&mut state.entries);
         let mut report = ReconciliationReport::default();
         let directory = fs::read_dir(&self.root)
-            .map_err(|error| io_error("read cache directory", &self.root, error))?;
+            .map_err(|error| io_error("read cache directory", &self.root, &error))?;
         for item in directory {
             let item =
-                item.map_err(|error| io_error("read cache directory entry", &self.root, error))?;
+                item.map_err(|error| io_error("read cache directory entry", &self.root, &error))?;
             let path = item.path();
             if path.extension().is_some_and(|extension| extension == "tmp") {
                 if temporary_entry_is_stale(&path) {
                     fs::remove_file(&path)
-                        .map_err(|error| io_error("remove temporary cache entry", &path, error))?;
+                        .map_err(|error| io_error("remove temporary cache entry", &path, &error))?;
                     report.removed_temporary += 1;
                 }
                 continue;
@@ -982,15 +1073,11 @@ impl CacheStore {
             }
             match read_header(&path, self.limits) {
                 Ok(header) => {
-                    let key = match ThumbnailKey::from_canonical_bytes(&header.key_bytes) {
-                        Ok(key) => key,
-                        Err(_) => {
-                            fs::remove_file(&path).map_err(|error| {
-                                io_error("remove invalid cache key", &path, error)
-                            })?;
-                            report.removed_corrupt += 1;
-                            continue;
-                        }
+                    let Ok(key) = ThumbnailKey::from_canonical_bytes(&header.key_bytes) else {
+                        fs::remove_file(&path)
+                            .map_err(|error| io_error("remove invalid cache key", &path, &error))?;
+                        report.removed_corrupt += 1;
+                        continue;
                     };
                     let last_access = previous
                         .get(&header.digest)
@@ -1011,7 +1098,7 @@ impl CacheStore {
                 }
                 Err(CacheError::CorruptEntry | CacheError::UnsupportedSchema(_)) => {
                     fs::remove_file(&path)
-                        .map_err(|error| io_error("remove corrupt cache entry", &path, error))?;
+                        .map_err(|error| io_error("remove corrupt cache entry", &path, &error))?;
                     report.removed_corrupt += 1;
                 }
                 Err(error) => return Err(error),
@@ -1031,11 +1118,13 @@ fn durable_coordinator(
     registry.retain(|_, coordinator| coordinator.strong_count() > 0);
     if let Some(coordinator) = registry.get(root).and_then(Weak::upgrade) {
         if coordinator.limits != limits {
+            drop(registry);
             return Err(CacheError::LimitsMismatch {
                 existing: coordinator.limits,
                 requested: limits,
             });
         }
+        drop(registry);
         return Ok(coordinator);
     }
     let coordinator = Arc::new(DurableRootCoordinator {
@@ -1045,6 +1134,7 @@ fn durable_coordinator(
         read_pause: Mutex::new(None),
     });
     registry.insert(root.to_owned(), Arc::downgrade(&coordinator));
+    drop(registry);
     Ok(coordinator)
 }
 
@@ -1137,12 +1227,12 @@ fn write_entry(
         .write(true)
         .create_new(true)
         .open(path)
-        .map_err(|error| io_error("stage cache entry", path, error))?;
+        .map_err(|error| io_error("stage cache entry", path, &error))?;
     let result = file
         .write_all(&header)
         .and_then(|()| file.write_all(payload))
         .and_then(|()| file.sync_all())
-        .map_err(|error| io_error("write cache entry", path, error));
+        .map_err(|error| io_error("write cache entry", path, &error));
     if result.is_err() {
         let _ = fs::remove_file(path);
     }
@@ -1181,12 +1271,12 @@ fn read_entry(
 }
 
 fn read_header(path: &Path, limits: CacheLimits) -> Result<Header, CacheError> {
-    let mut file = File::open(path).map_err(|error| io_error("open cache entry", path, error))?;
+    let mut file = File::open(path).map_err(|error| io_error("open cache entry", path, &error))?;
     let initial_length = file
         .metadata()
-        .map_err(|error| io_error("read cache entry metadata", path, error))?
+        .map_err(|error| io_error("read cache entry metadata", path, &error))?
         .len();
-    if initial_length > limits.max_entry_bytes {
+    if initial_length > limits.entry_bytes {
         return Err(CacheError::CorruptEntry);
     }
 
@@ -1202,7 +1292,7 @@ fn read_header(path: &Path, limits: CacheLimits) -> Result<Header, CacheError> {
         .checked_add(key_len)
         .and_then(|value| value.checked_add(HEADER_DIGEST_BYTES))
         .ok_or(CacheError::CorruptEntry)?;
-    if u64::try_from(header_bytes).map_err(|_| CacheError::CorruptEntry)? > limits.max_entry_bytes {
+    if u64::try_from(header_bytes).map_err(|_| CacheError::CorruptEntry)? > limits.entry_bytes {
         return Err(CacheError::CorruptEntry);
     }
 
@@ -1215,7 +1305,7 @@ fn read_header(path: &Path, limits: CacheLimits) -> Result<Header, CacheError> {
     read_header_exact(&mut file, &mut bytes[FIXED_HEADER_BYTES..], path)?;
     let observed_length = file
         .metadata()
-        .map_err(|error| io_error("read cache entry metadata", path, error))?
+        .map_err(|error| io_error("read cache entry metadata", path, &error))?
         .len();
     parse_header(&bytes, observed_length, limits)
 }
@@ -1225,18 +1315,18 @@ fn read_header_exact(file: &mut File, bytes: &mut [u8], path: &Path) -> Result<(
         if error.kind() == std::io::ErrorKind::UnexpectedEof {
             CacheError::CorruptEntry
         } else {
-            io_error("read cache entry header", path, error)
+            io_error("read cache entry header", path, &error)
         }
     })
 }
 
 fn read_bounded_entry(path: &Path, limits: CacheLimits) -> Result<Vec<u8>, CacheError> {
-    let file = File::open(path).map_err(|error| io_error("open cache entry", path, error))?;
+    let file = File::open(path).map_err(|error| io_error("open cache entry", path, &error))?;
     let length = file
         .metadata()
-        .map_err(|error| io_error("read cache entry metadata", path, error))?
+        .map_err(|error| io_error("read cache entry metadata", path, &error))?
         .len();
-    if length > limits.max_entry_bytes {
+    if length > limits.entry_bytes {
         return Err(CacheError::CorruptEntry);
     }
     let capacity = usize::try_from(length).map_err(|_| CacheError::CorruptEntry)?;
@@ -1245,22 +1335,22 @@ fn read_bounded_entry(path: &Path, limits: CacheLimits) -> Result<Vec<u8>, Cache
         .try_reserve_exact(capacity)
         .map_err(|_| CacheError::CorruptEntry)?;
     (&file)
-        .take(limits.max_entry_bytes.saturating_add(1))
+        .take(limits.entry_bytes.saturating_add(1))
         .read_to_end(&mut bytes)
-        .map_err(|error| io_error("read cache entry", path, error))?;
+        .map_err(|error| io_error("read cache entry", path, &error))?;
     let observed_length = file
         .metadata()
-        .map_err(|error| io_error("read cache entry metadata", path, error))?
+        .map_err(|error| io_error("read cache entry metadata", path, &error))?
         .len();
     let read_length = u64::try_from(bytes.len()).map_err(|_| CacheError::CorruptEntry)?;
-    if observed_length > limits.max_entry_bytes || read_length != observed_length {
+    if observed_length > limits.entry_bytes || read_length != observed_length {
         return Err(CacheError::CorruptEntry);
     }
     Ok(bytes)
 }
 
 fn parse_header(bytes: &[u8], file_bytes: u64, limits: CacheLimits) -> Result<Header, CacheError> {
-    if file_bytes > limits.max_entry_bytes {
+    if file_bytes > limits.entry_bytes {
         return Err(CacheError::CorruptEntry);
     }
     let mut reader = Reader { bytes, offset: 0 };
@@ -1364,7 +1454,15 @@ impl<'a> Reader<'a> {
     }
 }
 
-fn io_error(operation: &'static str, path: &Path, error: std::io::Error) -> CacheError {
+fn digest_hex(digest: [u8; 32]) -> String {
+    let mut output = String::with_capacity(64);
+    for byte in digest {
+        write!(output, "{byte:02x}").expect("writing hexadecimal digest to String");
+    }
+    output
+}
+
+fn io_error(operation: &'static str, path: &Path, error: &std::io::Error) -> CacheError {
     CacheError::Io {
         operation,
         path: path.to_owned(),

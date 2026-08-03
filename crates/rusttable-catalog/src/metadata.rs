@@ -167,7 +167,7 @@ impl CatalogMetadataValue {
         }))
     }
 
-    fn validate(&self) -> Result<(), CatalogMetadataError> {
+    const fn validate(&self) -> Result<(), CatalogMetadataError> {
         match self {
             Self::Text(value) | Self::DateTime(value) if value.len() > MAX_TEXT_BYTES => {
                 Err(CatalogMetadataError::ValueTooLarge)
@@ -405,7 +405,7 @@ impl CatalogMetadataField {
     }
 }
 
-fn candidate_rank(candidate: &CatalogMetadataCandidate) -> u8 {
+const fn candidate_rank(candidate: &CatalogMetadataCandidate) -> u8 {
     candidate.provenance.source.precedence()
 }
 
@@ -420,7 +420,7 @@ pub struct CatalogMetadataDocument {
 
 impl CatalogMetadataDocument {
     #[must_use]
-    pub fn empty(photo_id: PhotoId) -> Self {
+    pub const fn empty(photo_id: PhotoId) -> Self {
         Self {
             schema_version: CATALOG_METADATA_SCHEMA_VERSION,
             photo_id,
@@ -490,7 +490,7 @@ impl CatalogMetadataDocument {
     }
 
     #[must_use]
-    pub fn fields(&self) -> &BTreeMap<CatalogMetadataKey, CatalogMetadataField> {
+    pub const fn fields(&self) -> &BTreeMap<CatalogMetadataKey, CatalogMetadataField> {
         &self.fields
     }
 

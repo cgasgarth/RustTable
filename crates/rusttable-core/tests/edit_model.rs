@@ -37,7 +37,7 @@ fn new_and_reconstructed_edits_preserve_identity_revisions_and_order() {
         value.photo_id(),
         value.base_photo_revision(),
         Revision::from_u64(4),
-        value.operations().cloned().collect::<Vec<_>>(),
+        value.operations().cloned(),
     )
     .expect("valid reconstruction");
 

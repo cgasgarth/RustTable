@@ -121,7 +121,7 @@ pub struct AttemptResources {
 
 impl AttemptResources {
     #[must_use]
-    pub fn new(leases: Vec<ResourceLease>) -> Self {
+    pub const fn new(leases: Vec<ResourceLease>) -> Self {
         Self { leases }
     }
 

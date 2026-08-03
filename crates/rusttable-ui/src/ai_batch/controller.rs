@@ -1,13 +1,16 @@
-#![allow(
+#![expect(
     clippy::manual_inspect,
     clippy::manual_let_else,
     clippy::missing_errors_doc,
     clippy::redundant_closure_for_method_calls,
     clippy::semicolon_if_nothing_returned,
-    clippy::wildcard_imports
+    reason = "The AI batch controller preserves the source workflow transitions and typed service boundary."
 )]
 
-use super::model::*;
+use super::model::{
+    AiBatchAction, AiBatchRecipe, AiBatchReview, AiBatchSelection, AiBatchServiceError,
+    AiBatchServicePort, AiBatchState,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AiBatchControllerError {
@@ -125,6 +128,7 @@ impl<S: AiBatchServicePort> AiBatchController<S> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::model::AiBatchPreflight;
     use super::*;
     struct Unavailable;
     impl AiBatchServicePort for Unavailable {

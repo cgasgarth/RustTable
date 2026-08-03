@@ -5,6 +5,10 @@
     clippy::unreadable_literal,
     reason = "source-derived ABI and scalar golden vectors intentionally assert exact f32 bits"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Correction test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 // The bounded leaf is intentionally not exported through shared hubs. Re-export
 // descriptor types so its operation-local descriptor can compile in isolation.
@@ -90,7 +94,7 @@ fn pixel_bits(pixels: &[ColorCorrectionPixel]) -> Vec<[u32; 4]> {
         .collect()
 }
 
-fn sentinel_pixel() -> ColorCorrectionPixel {
+const fn sentinel_pixel() -> ColorCorrectionPixel {
     ColorCorrectionPixel::from_channels([
         f32::from_bits(0x3f01_2345),
         f32::from_bits(0x3f12_3456),
@@ -648,10 +652,10 @@ fn native_alignment_and_schedule_are_explicit_serial_vec_rust_adaptations() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    reason = "the in-range f32-to-size conversion is the native boundary under test"
+    reason = "The in-range f32-to-size conversion is the native boundary under test."
 )]
 fn native_f32_budget_and_checked_integer_boundary_are_deliberately_distinct() {
     assert_eq!(COLORCORRECTION_BUDGET_BOUNDARY_EDGE, 4_097);

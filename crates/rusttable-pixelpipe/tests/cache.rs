@@ -151,7 +151,7 @@ fn concurrent_oversize_consumers_share_one_successful_build() {
     while builds.load(Ordering::Acquire) == 0 {
         thread::yield_now();
     }
-    let waiter_cache = cache.clone();
+    let waiter_cache = cache;
     let waiter = thread::spawn(move || {
         waiter_cache
             .get_or_build::<TestValue, _>(key(8), &CancellationToken::new(), |_| Ok(TestValue(99)))
@@ -284,7 +284,7 @@ fn one_single_flight_build_is_shared_and_waiter_cancellation_is_independent() {
     while builds.load(Ordering::Acquire) == 0 {
         thread::yield_now();
     }
-    let waiter_cache = cache.clone();
+    let waiter_cache = cache;
     let waiter = thread::spawn(move || {
         let token = CancellationToken::new();
         token.cancel();

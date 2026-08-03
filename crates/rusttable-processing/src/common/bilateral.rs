@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native bilateral-grid arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Safe CPU port of Darktable's `src/common/bilateral.c` and
 //! `src/common/bilateral.h`.
 //!
@@ -624,11 +629,12 @@ impl BilateralGrid {
                 actual: input.len(),
             });
         }
-        if let Some(pixel) = input.iter().position(|value| !value[0].is_finite()) {
-            Err(BilateralError::NonFiniteLightness { pixel })
-        } else {
-            Ok(())
-        }
+        input
+            .iter()
+            .position(|value| !value[0].is_finite())
+            .map_or(Ok(()), |pixel| {
+                Err(BilateralError::NonFiniteLightness { pixel })
+            })
     }
 
     fn validate_output(&self, output: &[[f32; 4]]) -> Result<(), BilateralError> {
@@ -638,11 +644,12 @@ impl BilateralGrid {
                 actual: output.len(),
             });
         }
-        if let Some(pixel) = output.iter().position(|value| !value[0].is_finite()) {
-            Err(BilateralError::NonFiniteOutput { pixel })
-        } else {
-            Ok(())
-        }
+        output
+            .iter()
+            .position(|value| !value[0].is_finite())
+            .map_or(Ok(()), |pixel| {
+                Err(BilateralError::NonFiniteOutput { pixel })
+            })
     }
 
     fn image_to_grid(&self, x: usize, y: usize, lightness: f32) -> (usize, f32, f32, f32) {
@@ -751,7 +758,7 @@ impl BilateralGrid {
     }
 }
 
-fn validate_detail(detail: f32) -> Result<(), BilateralError> {
+const fn validate_detail(detail: f32) -> Result<(), BilateralError> {
     if detail.is_finite() {
         Ok(())
     } else {
@@ -759,7 +766,7 @@ fn validate_detail(detail: f32) -> Result<(), BilateralError> {
     }
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "arguments preserve Darktable's stride-oriented blur helper"
 )]
@@ -827,7 +834,7 @@ where
     Ok(())
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "arguments preserve Darktable's stride-oriented blur helper"
 )]
@@ -889,7 +896,7 @@ where
     Ok(())
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "arguments preserve Darktable's stride-oriented blur helper"
 )]

@@ -18,10 +18,10 @@ fn dataset(record: u8, number: u8, value: &[u8]) -> Vec<u8> {
 fn iptc_fixture() -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.extend(dataset(1, 90, b"\x1b%G"));
-    bytes.extend(dataset(2, 80, "Ada Lovelace".as_bytes()));
-    bytes.extend(dataset(2, 25, "rust".as_bytes()));
-    bytes.extend(dataset(2, 25, "metadata".as_bytes()));
-    bytes.extend(dataset(2, 120, "A bounded caption".as_bytes()));
+    bytes.extend(dataset(2, 80, b"Ada Lovelace"));
+    bytes.extend(dataset(2, 25, b"rust"));
+    bytes.extend(dataset(2, 25, b"metadata"));
+    bytes.extend(dataset(2, 120, b"A bounded caption"));
     bytes.extend(dataset(2, 200, &[0xde, 0xad]));
     bytes
 }

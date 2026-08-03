@@ -164,7 +164,7 @@ impl MessageId {
 }
 
 /// Typed values accepted by localized messages.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageValue {
     /// User-provided or catalog-owned text.
     Text(String),
@@ -187,7 +187,7 @@ pub enum MessageValue {
 }
 
 /// Named typed arguments for a Fluent message.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MessageArgs(BTreeMap<String, MessageValue>);
 
 impl MessageArgs {

@@ -7,7 +7,7 @@ use rusttable_ui::{
 };
 
 #[derive(Debug, Default)]
-pub(crate) struct UnavailableMaskManagerService;
+pub struct UnavailableMaskManagerService;
 
 impl MaskManagerServicePort for UnavailableMaskManagerService {
     fn snapshot(
@@ -30,7 +30,7 @@ impl MaskManagerServicePort for UnavailableMaskManagerService {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct UnavailableMultiscaleRetouchService;
+pub struct UnavailableMultiscaleRetouchService;
 
 impl MultiscaleRetouchServicePort for UnavailableMultiscaleRetouchService {
     fn snapshot(

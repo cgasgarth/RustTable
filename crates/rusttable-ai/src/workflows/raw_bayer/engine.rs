@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "raw Bayer calibration and blend equations preserve source operation order"
+)]
+
 use super::planning;
 use super::ports::{
     ImportGroupingOutcome, RawBayerCatalogPort, RawBayerControl, RawBayerDenoiseModel,
@@ -536,7 +541,7 @@ fn blend_weight(x: u32, y: u32, width: u32, height: u32, overlap: u32) -> f32 {
     (edge.min(overlap) + 1) as f32 / (overlap + 1) as f32
 }
 
-fn reflect(value: u32, limit: u32) -> u32 {
+const fn reflect(value: u32, limit: u32) -> u32 {
     if limit <= 1 {
         return 0;
     }

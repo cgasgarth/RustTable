@@ -431,7 +431,7 @@ fn rejects_truncation_duplicate_iend_and_invalid_compressed_text() {
         Err(PngDecodeError::Malformed(message)) if message.contains("truncated")
     ));
 
-    let mut duplicate = source.clone();
+    let mut duplicate = source;
     chunk(&mut duplicate, *b"IEND", &[]);
     assert!(matches!(
         PngDecoder::new().inspect_bytes(&duplicate, limits(4096)),

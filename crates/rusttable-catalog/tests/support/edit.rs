@@ -92,7 +92,7 @@ impl EditRepository for FakeEditRepository {
         let current = self
             .edits
             .get(&edit.id())
-            .ok_or(EditRepositoryError::UnknownEdit { edit_id: edit.id() })?;
+            .ok_or_else(|| EditRepositoryError::UnknownEdit { edit_id: edit.id() })?;
         if current.revision() != expected_edit_revision {
             return Err(EditRepositoryError::EditRevisionConflict {
                 edit_id: edit.id(),

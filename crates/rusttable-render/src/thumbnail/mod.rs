@@ -1,11 +1,5 @@
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::format_collect,
-    clippy::manual_div_ceil,
-    clippy::missing_errors_doc
-)]
-
 use std::fmt;
+use std::fmt::Write as _;
 
 use rusttable_core::{
     AssetId, ContentHash, Edit, EditId, ParameterValue, PhotoId, RenderSizeError,
@@ -25,6 +19,11 @@ pub struct MipmapLevel(u8);
 
 impl MipmapLevel {
     /// Creates a level whose shift is representable by a 32-bit image axis.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ThumbnailKeyError::LevelTooLarge`] when the shift cannot be
+    /// represented by the checked 32-bit image envelope.
     pub const fn new(value: u8) -> Result<Self, ThumbnailKeyError> {
         if value > 31 {
             Err(ThumbnailKeyError::LevelTooLarge)
@@ -52,6 +51,12 @@ pub enum ThumbnailSize {
 }
 
 impl ThumbnailSize {
+    /// Creates an aspect-preserving fit request.
+    ///
+    /// # Errors
+    ///
+    /// Returns the render-size error when either requested bound is zero or
+    /// exceeds the checked render envelope.
     pub fn fit(width: u32, height: u32) -> Result<Self, RenderSizeError> {
         RenderSizeRequest::fit(width, height).map(|_| Self::Fit {
             max_width: width,
@@ -59,6 +64,12 @@ impl ThumbnailSize {
         })
     }
 
+    /// Creates an exact-size request.
+    ///
+    /// # Errors
+    ///
+    /// Returns the render-size error when either dimension is zero or exceeds
+    /// the checked render envelope.
     pub fn exact(width: u32, height: u32) -> Result<Self, RenderSizeError> {
         RenderSizeRequest::exact(width, height).map(|_| Self::Exact { width, height })
     }
@@ -170,7 +181,10 @@ pub struct ThumbnailKey {
 
 impl ThumbnailKey {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "thumbnail cache key construction mirrors the complete versioned identity tuple so no source, edit, profile, or request field is implicit"
+    )]
     pub const fn new(
         source_content: ContentHash,
         photo_id: PhotoId,
@@ -294,10 +308,11 @@ impl ThumbnailKey {
 
     #[must_use]
     pub fn digest_hex(self) -> String {
-        self.digest()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
+        let mut output = String::with_capacity(64);
+        for byte in self.digest() {
+            write!(output, "{byte:02x}").expect("writing hexadecimal digest to String");
+        }
+        output
     }
 
     pub(crate) fn from_canonical_bytes(bytes: &[u8]) -> Result<Self, ThumbnailKeyError> {
@@ -443,6 +458,11 @@ pub struct ThumbnailGenerator;
 impl ThumbnailGenerator {
     /// Generates a complete image in memory. Cancellation is checked per row
     /// and per resampling sample, so no partial image can be published.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when output limits, source dimensions, image layout,
+    /// allocation, or cancellation prevents a complete thumbnail.
     pub fn generate(
         source: &DecodedImage,
         request: ThumbnailRequest,
@@ -463,21 +483,20 @@ impl ThumbnailGenerator {
         }
         let capacity = usize::try_from(bytes).map_err(|_| ThumbnailError::ArithmeticOverflow)?;
         let mut output = Vec::with_capacity(capacity);
+        let sample_context = SampleContext {
+            source,
+            request,
+            level_dimensions,
+            oriented_dimensions,
+            output_dimensions: dimensions,
+            cancellation,
+        };
         for y in 0..dimensions.height() {
             if cancellation.is_cancelled() {
                 return Err(ThumbnailError::Cancelled);
             }
             for x in 0..dimensions.width() {
-                output.extend_from_slice(&sample_pixel(
-                    source,
-                    request,
-                    level_dimensions,
-                    oriented_dimensions,
-                    dimensions,
-                    x,
-                    y,
-                    cancellation,
-                )?);
+                output.extend_from_slice(&sample_pixel(&sample_context, x, y)?);
             }
         }
         DecodedImage::new_with_color_encoding(dimensions, output, ColorEncoding::Srgb)
@@ -506,23 +525,32 @@ fn resolve_size(
 fn mipmap_dimensions(source: ImageDimensions, level: MipmapLevel) -> ImageDimensions {
     let factor = 1_u64 << level.get();
     ImageDimensions::new(
-        (u64::from(source.width()) / factor).max(1) as u32,
-        (u64::from(source.height()) / factor).max(1) as u32,
+        u32::try_from((u64::from(source.width()) / factor).max(1))
+            .expect("mipmap width remains within source u32 dimension"),
+        u32::try_from((u64::from(source.height()) / factor).max(1))
+            .expect("mipmap height remains within source u32 dimension"),
     )
     .expect("source dimensions are nonzero")
 }
 
-#[allow(clippy::too_many_arguments)]
-fn sample_pixel(
-    source: &DecodedImage,
+struct SampleContext<'a> {
+    source: &'a DecodedImage,
     request: ThumbnailRequest,
     level_dimensions: ImageDimensions,
     oriented_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
-    x: u32,
-    y: u32,
-    cancellation: &CancellationToken,
-) -> Result<[u8; 4], ThumbnailError> {
+    cancellation: &'a CancellationToken,
+}
+
+fn sample_pixel(context: &SampleContext<'_>, x: u32, y: u32) -> Result<[u8; 4], ThumbnailError> {
+    let SampleContext {
+        source,
+        request,
+        level_dimensions,
+        oriented_dimensions,
+        output_dimensions,
+        cancellation,
+    } = *context;
     let (x_start, x_end, y_start, y_end) = match request.quality {
         ResamplingQuality::Nearest => {
             let sx = center_index(x, output_dimensions.width(), oriented_dimensions.width());
@@ -531,15 +559,17 @@ fn sample_pixel(
         }
         ResamplingQuality::Box => (
             x * oriented_dimensions.width() / output_dimensions.width(),
-            (((u64::from(x) + 1) * u64::from(oriented_dimensions.width())
-                + u64::from(output_dimensions.width())
-                - 1)
-                / u64::from(output_dimensions.width())) as u32,
+            u32::try_from(
+                ((u64::from(x) + 1) * u64::from(oriented_dimensions.width()))
+                    .div_ceil(u64::from(output_dimensions.width())),
+            )
+            .expect("thumbnail x range remains within oriented dimensions"),
             y * oriented_dimensions.height() / output_dimensions.height(),
-            (((u64::from(y) + 1) * u64::from(oriented_dimensions.height())
-                + u64::from(output_dimensions.height())
-                - 1)
-                / u64::from(output_dimensions.height())) as u32,
+            u32::try_from(
+                ((u64::from(y) + 1) * u64::from(oriented_dimensions.height()))
+                    .div_ceil(u64::from(output_dimensions.height())),
+            )
+            .expect("thumbnail y range remains within oriented dimensions"),
         ),
     };
     let mut sum = [0_u64; 4];
@@ -555,10 +585,16 @@ fn sample_pixel(
                 oriented_y,
             );
             let factor = 1_u64 << request.level.get();
-            let source_x = (u64::from(level_x) * factor + factor / 2)
-                .min(u64::from(source.dimensions().width() - 1)) as u32;
-            let source_y = (u64::from(level_y) * factor + factor / 2)
-                .min(u64::from(source.dimensions().height() - 1)) as u32;
+            let source_x = u32::try_from(
+                (u64::from(level_x) * factor + factor / 2)
+                    .min(u64::from(source.dimensions().width() - 1)),
+            )
+            .expect("sample x remains within source dimensions");
+            let source_y = u32::try_from(
+                (u64::from(level_y) * factor + factor / 2)
+                    .min(u64::from(source.dimensions().height() - 1)),
+            )
+            .expect("sample y remains within source dimensions");
             let offset = source
                 .descriptor()
                 .pixel_offset(source_x, source_y)
@@ -581,8 +617,11 @@ fn sample_pixel(
 }
 
 fn center_index(index: u32, output: u32, source: u32) -> u32 {
-    (((u64::from(index) * 2 + 1) * u64::from(source)) / (2 * u64::from(output)))
-        .min(u64::from(source - 1)) as u32
+    u32::try_from(
+        (((u64::from(index) * 2 + 1) * u64::from(source)) / (2 * u64::from(output)))
+            .min(u64::from(source - 1)),
+    )
+    .expect("center sample remains within source dimensions")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -644,6 +683,6 @@ impl<'a> KeyReader<'a> {
         Ok(self.take(N)?.try_into().expect("checked length"))
     }
 }
-pub(crate) mod cache;
-pub(crate) mod lifecycle;
-pub(crate) mod scheduler;
+pub mod cache;
+pub mod lifecycle;
+pub mod scheduler;

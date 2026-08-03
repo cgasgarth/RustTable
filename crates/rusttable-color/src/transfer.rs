@@ -6,6 +6,11 @@
 //! PQ values are normalized so linear `1.0` means 10,000 cd/m². HLG is the
 //! scene-light OETF/inverse OETF; display OOTF policy is deliberately excluded.
 
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Transfer equations retain the documented native f32 operation order; FMA would change parity bits."
+)]
+
 use crate::{FiniteF32, TransferFunction};
 use rusttable_core::numerics::{NonFinitePolicy, ordered::ordered_clamp_f32};
 use std::fmt;
@@ -186,7 +191,7 @@ impl TransferFunction {
     }
 }
 
-fn finite_or_policy(
+const fn finite_or_policy(
     value: f32,
     policy: NonFinitePolicy,
 ) -> Result<Option<f32>, TransferFunctionError> {
@@ -199,7 +204,7 @@ fn finite_or_policy(
     }
 }
 
-fn non_finite_value(value: f32, policy: NonFinitePolicy) -> f32 {
+const fn non_finite_value(value: f32, policy: NonFinitePolicy) -> f32 {
     if matches!(policy, NonFinitePolicy::CanonicalizeNaN) && value.is_nan() {
         f32::from_bits(0x7fc0_0000)
     } else {

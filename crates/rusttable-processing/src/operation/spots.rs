@@ -1,9 +1,7 @@
 use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 use rusttable_core::{Operation, ParameterName, ParameterValue};
 
-pub(crate) fn compile_spots(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_spots(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     let parameter = ParameterName::new("payload").expect("static spots parameter");
     let payload =
         operation
@@ -77,7 +75,7 @@ fn decode_hex(
         .map_err(|reason| invalid(operation, reason))
 }
 
-fn hex_digit(value: u8) -> Option<u8> {
+const fn hex_digit(value: u8) -> Option<u8> {
     match value {
         b'0'..=b'9' => Some(value - b'0'),
         b'a'..=b'f' => Some(value - b'a' + 10),

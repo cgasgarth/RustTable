@@ -84,7 +84,7 @@ impl BasicEditSession {
     /// Returns the number of currently available redo operations.
     #[cfg(test)]
     #[must_use]
-    pub fn redo_len(&self) -> usize {
+    pub const fn redo_len(&self) -> usize {
         self.redo.len()
     }
 

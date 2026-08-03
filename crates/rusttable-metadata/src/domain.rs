@@ -155,7 +155,7 @@ impl Confidence {
     /// # Errors
     ///
     /// Returns an error for values greater than 100.
-    pub fn new(value: u8) -> Result<Self, MetadataDomainError> {
+    pub const fn new(value: u8) -> Result<Self, MetadataDomainError> {
         if value > 100 {
             return Err(MetadataDomainError::ConfidenceOutOfRange(value));
         }
@@ -216,7 +216,7 @@ impl RawRepresentation {
     }
 
     #[must_use]
-    pub fn expect(self, _message: &str) -> Self {
+    pub const fn expect(self, _message: &str) -> Self {
         self
     }
 
@@ -242,7 +242,11 @@ pub struct MetadataProvenance {
 
 impl MetadataProvenance {
     #[must_use]
-    pub fn new(source: MetadataSource, confidence: Confidence, privacy: PrivacyClass) -> Self {
+    pub const fn new(
+        source: MetadataSource,
+        confidence: Confidence,
+        privacy: PrivacyClass,
+    ) -> Self {
         Self {
             source,
             confidence,
@@ -283,7 +287,7 @@ impl MetadataProvenance {
     }
 
     #[must_use]
-    pub fn raw(&self) -> Option<&RawRepresentation> {
+    pub const fn raw(&self) -> Option<&RawRepresentation> {
         self.raw.as_ref()
     }
 
@@ -372,7 +376,10 @@ impl MetadataDateTime {
     /// # Errors
     ///
     /// Returns an error when calendar, clock, timezone, or precision bounds are invalid.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the source metadata date-time field order at the domain boundary"
+    )]
     pub fn new(
         year: i32,
         month: u8,
@@ -618,7 +625,7 @@ pub enum DomainValue {
     Rational(Rational),
     Text(String),
     Binary(Vec<u8>),
-    List(Vec<DomainValue>),
+    List(Vec<Self>),
     LanguageAlternative(LanguageAlternative),
     Structure(StructuredValue),
     DateTime(MetadataDateTime),
@@ -637,7 +644,7 @@ pub struct MetadataRecord {
 
 impl MetadataRecord {
     #[must_use]
-    pub fn new(key: MetadataKey, value: DomainValue, provenance: MetadataProvenance) -> Self {
+    pub const fn new(key: MetadataKey, value: DomainValue, provenance: MetadataProvenance) -> Self {
         Self {
             key,
             value,
@@ -646,15 +653,15 @@ impl MetadataRecord {
     }
 
     #[must_use]
-    pub fn key(&self) -> &MetadataKey {
+    pub const fn key(&self) -> &MetadataKey {
         &self.key
     }
     #[must_use]
-    pub fn value(&self) -> &DomainValue {
+    pub const fn value(&self) -> &DomainValue {
         &self.value
     }
     #[must_use]
-    pub fn provenance(&self) -> &MetadataProvenance {
+    pub const fn provenance(&self) -> &MetadataProvenance {
         &self.provenance
     }
 }
@@ -812,7 +819,7 @@ fn normalize_value(value: DomainValue) -> Result<DomainValue, MetadataDomainErro
     }
 }
 
-fn validate_provenance(provenance: &MetadataProvenance) -> Result<(), MetadataDomainError> {
+const fn validate_provenance(provenance: &MetadataProvenance) -> Result<(), MetadataDomainError> {
     if let Some(raw) = &provenance.raw
         && raw.bytes.len() > MAX_METADATA_RAW_BYTES
     {

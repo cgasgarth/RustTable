@@ -325,7 +325,7 @@ impl LevelsHistory {
         }
     }
 
-    pub fn current(&self) -> Result<LevelsParametersV2, LevelsCodecError> {
+    pub const fn current(&self) -> Result<LevelsParametersV2, LevelsCodecError> {
         match self {
             Self::V2(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(LevelsCodecError::UnsupportedVersion(*version)),

@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use rusttable_image::ImageDimensions;
 
 use super::{CacheAction, Failure, FailureBackend, PolicyAction, PublicationAction};
@@ -17,7 +15,7 @@ pub struct AttemptReceipt {
 
 impl AttemptReceipt {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         number: u8,
         backend: FailureBackend,
         action: PolicyAction,
@@ -136,6 +134,11 @@ pub enum OutputValidationError {
 pub struct OutputValidator;
 
 impl OutputValidator {
+    /// Validates dimensions, storage length, finiteness, lease state, and cancellation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first failed output boundary invariant.
     pub fn validate(
         expected: OutputExpectation,
         actual: OutputCandidate,

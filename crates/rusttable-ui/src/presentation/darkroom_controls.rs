@@ -428,12 +428,12 @@ impl DarkroomControlViewModel {
     }
 
     #[must_use]
-    pub fn id(&self) -> &ControlId {
+    pub const fn id(&self) -> &ControlId {
         &self.id
     }
 
     #[must_use]
-    pub fn label(&self) -> &PresentationText {
+    pub const fn label(&self) -> &PresentationText {
         &self.label
     }
 
@@ -590,7 +590,7 @@ fn validate_slider(
     Ok(())
 }
 
-fn validate_text(value: &str, maximum: usize) -> Result<(), ControlValidationError> {
+const fn validate_text(value: &str, maximum: usize) -> Result<(), ControlValidationError> {
     if value.len() > maximum {
         return Err(ControlValidationError::TextTooLong {
             byte_length: value.len(),

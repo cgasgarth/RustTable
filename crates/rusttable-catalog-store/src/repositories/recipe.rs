@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-
 use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::Arc;
@@ -31,16 +29,26 @@ pub enum RecipeStoreError {
 
 impl RedbRecipeRepository {
     /// Opens a recipe repository, sharing the same schema migration as the catalog store.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed schema, availability, or corruption error.
     pub fn open(path: &Path) -> Result<Self, RecipeStoreError> {
         Ok(Self {
             database: schema::open(path).map_err(|error| map_schema_error(&error))?,
         })
     }
 
-    pub(crate) const fn from_database(database: Arc<Database>) -> Self {
+    #[must_use]
+    pub const fn from_database(database: Arc<Database>) -> Self {
         Self { database }
     }
 
+    /// Creates the first durable revision for a recipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation, conflict, storage, or commit error.
     pub fn create(&self, recipe: &ExportRecipe) -> Result<(), RecipeStoreError> {
         recipe.validate().map_err(RecipeStoreError::InvalidRecipe)?;
         if recipe.revision() != RecipeRevision::FIRST {
@@ -79,6 +87,12 @@ impl RedbRecipeRepository {
             .map_err(|_| RecipeStoreError::CommitFailed)
     }
 
+    /// Finds one recipe revision, or the current head when no revision is supplied.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation or persistence error when the stored recipe cannot
+    /// be decoded.
     pub fn find(
         &self,
         id: &RecipeId,
@@ -118,6 +132,12 @@ impl RedbRecipeRepository {
         .map_err(RecipeStoreError::InvalidRecipe)
     }
 
+    /// Lists the current head revision of every durable recipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation or persistence error when a stored head cannot be
+    /// decoded.
     pub fn list(&self) -> Result<Vec<ExportRecipe>, RecipeStoreError> {
         let transaction = self
             .database
@@ -152,6 +172,11 @@ impl RedbRecipeRepository {
         Ok(recipes)
     }
 
+    /// Stores the next optimistic-concurrency revision of a recipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation, conflict, storage, or commit error.
     pub fn update(
         &self,
         expected: RecipeRevision,
@@ -180,6 +205,11 @@ impl RedbRecipeRepository {
         self.insert_revision(recipe, expected)
     }
 
+    /// Creates a disabled revision for a mutable recipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict, validation, storage, or commit error.
     pub fn disable(
         &self,
         expected: RecipeRevision,
@@ -200,6 +230,11 @@ impl RedbRecipeRepository {
         Ok(disabled)
     }
 
+    /// Copies a recipe into a new durable identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict, validation, storage, or commit error.
     pub fn clone_recipe(
         &self,
         source: &RecipeId,
@@ -213,6 +248,11 @@ impl RedbRecipeRepository {
         Ok(cloned)
     }
 
+    /// Deletes all revisions of an unreferenced mutable recipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict, storage, or commit error.
     pub fn delete(&self, id: &RecipeId) -> Result<(), RecipeStoreError> {
         let recipe = self.find(id, None)?.ok_or(RecipeStoreError::Conflict)?;
         if recipe.built_in() {
@@ -268,6 +308,11 @@ impl RedbRecipeRepository {
             .map_err(|_| RecipeStoreError::CommitFailed)
     }
 
+    /// Records an external reference that prevents recipe deletion.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict, storage, or commit error.
     pub fn mark_reference(&self, id: &RecipeId, reference: &str) -> Result<(), RecipeStoreError> {
         if self.find(id, None)?.is_none() {
             return Err(RecipeStoreError::Conflict);
@@ -287,6 +332,11 @@ impl RedbRecipeRepository {
             .map_err(|_| RecipeStoreError::CommitFailed)
     }
 
+    /// Imports one canonical recipe document under the selected conflict policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation, conflict, storage, or commit error.
     pub fn import_json(
         &self,
         json: &str,
@@ -321,18 +371,14 @@ impl RedbRecipeRepository {
                 Ok(recipe)
             }
             ImportConflictPolicy::ReplaceMatchingRevision => {
-                let current = self.find(recipe.id(), None)?;
-                if current
-                    .as_ref()
-                    .is_some_and(|current| current.revision() != recipe.revision())
-                {
+                let Some(current) = self.find(recipe.id(), None)? else {
+                    return Err(RecipeStoreError::Conflict);
+                };
+                if current.revision() != recipe.revision() {
                     return Err(RecipeStoreError::OptimisticConcurrency {
                         expected: recipe.revision(),
-                        actual: current.expect("checked above").revision(),
+                        actual: current.revision(),
                     });
-                }
-                if current.is_none() {
-                    return Err(RecipeStoreError::Conflict);
                 }
                 let transaction = self.write_transaction()?;
                 {
@@ -444,7 +490,7 @@ fn hex(bytes: &[u8]) -> String {
     }
     output
 }
-fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> RecipeStoreError {
+const fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> RecipeStoreError {
     match error {
         rusttable_catalog::RepositoryError::Unavailable => RecipeStoreError::Unavailable,
         rusttable_catalog::RepositoryError::CommitFailure => RecipeStoreError::CommitFailed,

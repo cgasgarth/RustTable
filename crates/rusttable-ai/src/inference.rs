@@ -101,13 +101,15 @@ impl InferenceService {
             runtime_configuration: configuration_hash(&configuration),
         };
         let mut outputs = Vec::with_capacity(request.inputs.len());
-        let mut sessions = self
-            .sessions
-            .lock()
-            .map_err(|_| InferenceError::PoisonedState)?;
-        if let Some(session) = sessions.get_mut(&key) {
-            run_session(&mut **session, request, &mut outputs)?;
-            return Ok(outputs);
+        {
+            let mut sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| InferenceError::PoisonedState)?;
+            if let Some(session) = sessions.get_mut(&key) {
+                run_session(&mut **session, request, &mut outputs)?;
+                return Ok(outputs);
+            }
         }
         let mut session = self
             .adapter
@@ -119,7 +121,12 @@ impl InferenceService {
             .map_err(InferenceError::Adapter)?;
         let memory = session.memory_bytes();
         run_session(&mut *session, request, &mut outputs)?;
+        let mut sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| InferenceError::PoisonedState)?;
         let _ = sessions.insert(key, session, memory);
+        drop(sessions);
         Ok(outputs)
     }
 

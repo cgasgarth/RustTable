@@ -41,7 +41,8 @@ impl RedbVirtualCopyRepository {
         Self::open_with_hook(path, Some(Arc::new(hook)))
     }
 
-    pub(crate) const fn from_database(database: Arc<Database>) -> Self {
+    #[must_use]
+    pub const fn from_database(database: Arc<Database>) -> Self {
         Self {
             database,
             before_commit: None,
@@ -296,7 +297,9 @@ impl VirtualCopyRepository for RedbVirtualCopyRepository {
     }
 }
 
-fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> VirtualCopyRepositoryError {
+const fn map_schema_error(
+    error: &rusttable_catalog::RepositoryError,
+) -> VirtualCopyRepositoryError {
     match error {
         rusttable_catalog::RepositoryError::Unavailable => VirtualCopyRepositoryError::Unavailable,
         rusttable_catalog::RepositoryError::CommitFailure => {

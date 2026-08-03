@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Perspective geometry arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_lossless,
     clippy::missing_errors_doc,
@@ -413,7 +417,7 @@ fn apply_raw(c: [f64; 9], point: Point) -> Result<Point, HomographyError> {
         .map(|()| result)
 }
 
-fn swap_xy() -> [f64; 9] {
+const fn swap_xy() -> [f64; 9] {
     [0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 }
 
@@ -464,7 +468,7 @@ fn vertical_factor(config: &PerspectiveConfig, width: f64, height: f64, vertical
     } else {
         config.lensshift_h()
     };
-    let rad = fdb * (f64::from(shift.get()).exp() - 1.0) / (f64::from(shift.get()).exp() + 1.0);
+    let rad = fdb * f64::from(shift.get()).exp_m1() / (f64::from(shift.get()).exp() + 1.0);
     let alpha = rad.atan().clamp(-1.5, 1.5);
     let sine = (0.5 * alpha).sin();
     (1.0 + 2.0 * ((100.0 - f64::from(config.orthocorr().get())) / -100.0) * sine * sine).max(0.1)

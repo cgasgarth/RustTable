@@ -53,7 +53,7 @@ impl<'a> RawLinearTileInput<'a> {
         (self.width, self.height)
     }
     #[must_use]
-    pub fn nchw_rgb(&self) -> &[f32] {
+    pub const fn nchw_rgb(&self) -> &[f32] {
         self.nchw_rgb
     }
 }
@@ -195,7 +195,7 @@ pub enum RawLinearCatalogError {
     Pending,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RawLinearWorkflowError {
     Request(super::types::RequestError),
     Plan(super::planning::RawLinearPlanError),
@@ -236,7 +236,7 @@ impl fmt::Display for RawLinearModelError {
 }
 impl std::error::Error for RawLinearModelError {}
 
-pub(crate) fn selected_provider(
+pub fn selected_provider(
     policy: ProviderPolicy,
     descriptor: &RawLinearModelDescriptor,
 ) -> Result<Provider, RawLinearWorkflowError> {

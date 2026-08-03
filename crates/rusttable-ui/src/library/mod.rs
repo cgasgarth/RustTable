@@ -16,19 +16,19 @@ pub struct LibraryFailureProjection {
 
 impl LibraryFailureProjection {
     #[must_use]
-    pub fn title(self) -> &'static str {
+    pub const fn title(self) -> &'static str {
         self.title
     }
 
     #[must_use]
-    pub fn detail(self) -> &'static str {
+    pub const fn detail(self) -> &'static str {
         self.detail
     }
 }
 
 impl LibraryFailureKind {
     #[must_use]
-    pub fn projection(self) -> LibraryFailureProjection {
+    pub const fn projection(self) -> LibraryFailureProjection {
         let detail = match self {
             Self::CatalogLocationUnavailable => "The catalog location is unavailable.",
             Self::RepositoryUnavailable => "The catalog repository is unavailable.",
@@ -53,7 +53,7 @@ pub enum LibraryState {
 
 impl LibraryState {
     #[must_use]
-    pub fn ready_workspace(&self) -> Option<&PhotoWorkspaceViewModel> {
+    pub const fn ready_workspace(&self) -> Option<&PhotoWorkspaceViewModel> {
         match self {
             Self::Ready(workspace) => Some(workspace),
             Self::Loading | Self::Empty | Self::Failed(_) => None,

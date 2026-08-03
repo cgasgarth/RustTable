@@ -174,7 +174,10 @@ pub struct BilateralGridRequest<'a> {
 impl<'a> BilateralGridRequest<'a> {
     /// Builds a request matching retained `dt_bilateral_slice_cl`.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "request fields mirror the native bilateral slice ABI and resolved geometry"
+    )]
     pub const fn slice(
         pixels: &'a [[f32; 4]],
         width: usize,
@@ -201,7 +204,10 @@ impl<'a> BilateralGridRequest<'a> {
 
     /// Builds a request matching retained `dt_bilateral_slice_to_output_cl`.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "request fields mirror the native bilateral add-to-output ABI and resolved geometry"
+    )]
     pub const fn slice_to_output(
         pixels: &'a [[f32; 4]],
         target: &'a [[f32; 4]],
@@ -395,6 +401,10 @@ impl ValidatedRequest {
         Self::new_with_program(request, limits, program)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Preserves the native bilateral validation order and GPU resource-admission contract in one path"
+    )]
     fn new_with_program(
         request: BilateralGridRequest<'_>,
         limits: &wgpu::Limits,
@@ -657,7 +667,10 @@ fn aggregate_transient_bytes(
 impl GpuRuntime {
     /// Runs zero, splat, x blur, y blur, z derivative, and slice for one
     /// checked full-frame request.
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the GPU dispatch sequence preserves native zero, splat, blur, derivative, and slice order"
+    )]
     pub fn execute_bilateral_grid(
         &self,
         request: BilateralGridRequest<'_>,
@@ -1165,7 +1178,7 @@ fn first_non_finite(pixels: &[[f32; 4]]) -> Option<(usize, usize)> {
     })
 }
 
-fn pixel_from_bytes(bytes: &[u8; PIXEL_BYTES]) -> [f32; 4] {
+const fn pixel_from_bytes(bytes: &[u8; PIXEL_BYTES]) -> [f32; 4] {
     let [
         l0,
         l1,
@@ -1222,6 +1235,10 @@ fn pack_params(validated: &ValidatedRequest, dispatch: DispatchPlan) -> [u8; 64]
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::suboptimal_flops,
+        reason = "Reference tests preserve native arithmetic operation order."
+    )]
     #![allow(
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss,
@@ -1598,6 +1615,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keeps the native bilateral validation rejection contract together as one ordered matrix"
+    )]
     fn validation_rejects_shape_nonfinite_detail_and_target() {
         let limits = wgpu::Limits::downlevel_defaults();
         let short = [[1.0, 2.0, 3.0, 4.0]; 5];

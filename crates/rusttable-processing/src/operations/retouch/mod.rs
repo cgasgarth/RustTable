@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Retouch arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
@@ -144,7 +148,7 @@ impl RetouchForm {
         self.algorithm
     }
     #[must_use]
-    pub fn mask(&self) -> &MaskRaster {
+    pub const fn mask(&self) -> &MaskRaster {
         &self.mask
     }
     #[must_use]
@@ -805,7 +809,7 @@ fn apply_form(
 ) -> Result<(), RetouchExecutionError> {
     let source = level.to_vec();
     let candidate = match form.algorithm {
-        RetouchAlgorithm::Clone => source.clone(),
+        RetouchAlgorithm::Clone => source,
         RetouchAlgorithm::Heal => heal(&source, form, dimensions, is_cancelled)?,
         RetouchAlgorithm::Blur => blur(&source, form, dimensions)?,
         RetouchAlgorithm::Fill => fill(&source, form),

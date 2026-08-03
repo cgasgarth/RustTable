@@ -186,7 +186,7 @@ impl HostImageView<'_, '_> {
         Ok(offset.is_multiple_of(self.bytes_alignment()))
     }
 
-    fn bytes_alignment(&self) -> usize {
+    const fn bytes_alignment(&self) -> usize {
         self.bytes.storage_alignment()
     }
 
@@ -209,7 +209,7 @@ impl HostImageView<'_, '_> {
 }
 
 impl BufferRead<'_> {
-    fn storage_alignment(&self) -> usize {
+    const fn storage_alignment(&self) -> usize {
         match self.storage {
             AlignedStorage::A64(_) => 64,
             AlignedStorage::A128(_) => 128,

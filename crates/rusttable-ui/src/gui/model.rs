@@ -181,7 +181,7 @@ pub struct LibraryPhoto {
 
 impl LibraryPhoto {
     #[must_use]
-    pub fn id(&self) -> PhotoId {
+    pub const fn id(&self) -> PhotoId {
         self.id
     }
 
@@ -296,7 +296,7 @@ pub struct ModulePanelViewModel {
 
 impl ModulePanelViewModel {
     #[must_use]
-    pub fn new(title: PresentationText, controls: Vec<ModuleControlViewModel>) -> Self {
+    pub const fn new(title: PresentationText, controls: Vec<ModuleControlViewModel>) -> Self {
         Self { title, controls }
     }
 
@@ -326,7 +326,7 @@ pub struct DarkroomWorkspaceViewModel {
 
 impl DarkroomWorkspaceViewModel {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         detail: PhotoDetailViewModel,
         left_modules: Vec<ModulePanelViewModel>,
         right_modules: Vec<ModulePanelViewModel>,

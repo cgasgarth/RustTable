@@ -109,9 +109,8 @@ impl ScalePixelsConfig {
     }
 
     #[must_use]
-    #[allow(clippy::float_cmp)]
     pub const fn is_identity(&self) -> bool {
-        self.pixel_aspect_ratio.get() == 1.0
+        self.pixel_aspect_ratio.get().to_bits() == 1.0_f32.to_bits()
     }
 }
 
@@ -141,7 +140,7 @@ pub struct ScalePixelsParametersV1 {
 
 impl ScalePixelsParametersV1 {
     #[must_use]
-    pub fn new(config: ScalePixelsConfig) -> Self {
+    pub const fn new(config: ScalePixelsConfig) -> Self {
         Self { config }
     }
 
@@ -151,7 +150,7 @@ impl ScalePixelsParametersV1 {
     }
 
     #[must_use]
-    pub fn to_bytes(&self) -> [u8; SCALEPIXELS_PARAMETER_BYTES] {
+    pub const fn to_bytes(&self) -> [u8; SCALEPIXELS_PARAMETER_BYTES] {
         self.config.pixel_aspect_ratio().to_bits().to_le_bytes()
     }
 

@@ -32,6 +32,10 @@ impl RgbMatrix {
     }
 
     #[must_use]
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "preserve the source-defined row-major matrix multiply order"
+    )]
     pub fn apply(self, rgb: [f32; 3]) -> [f32; 3] {
         [
             (self.values[0] * f64::from(rgb[0])
@@ -47,6 +51,10 @@ impl RgbMatrix {
     }
 
     /// Returns the inverse after rejecting singular or non-finite matrices.
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "preserve the source-defined determinant and adjugate operation order"
+    )]
     pub fn inverse(self) -> Result<Self, ColorProfileError> {
         if self.values.iter().any(|value| !value.is_finite()) {
             return Err(ColorProfileError::NonFiniteMatrix);
@@ -76,6 +84,10 @@ impl RgbMatrix {
     }
 
     #[must_use]
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "preserve the source-defined row-major transform composition order"
+    )]
     pub fn then(self, next: Self) -> Self {
         let a = self.values;
         let b = next.values;
@@ -156,10 +168,17 @@ impl ColorProfile {
     }
 
     #[must_use]
-    pub fn srgb_to_xyz() -> RgbMatrix {
+    pub const fn srgb_to_xyz() -> RgbMatrix {
         RgbMatrix::new([
-            0.4124564, 0.3575761, 0.1804375, 0.2126729, 0.7151522, 0.0721750, 0.0193339, 0.1191920,
-            0.9503041,
+            0.412_456_4,
+            0.357_576_1,
+            0.180_437_5,
+            0.212_672_9,
+            0.715_152_2,
+            0.072_175_0,
+            0.019_333_9,
+            0.119_192_0,
+            0.950_304_1,
         ])
     }
 }

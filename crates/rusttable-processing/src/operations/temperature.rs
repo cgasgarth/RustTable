@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Temperature arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible temperature/white-balance operation.
 //!
 //! The persisted form is deliberately coefficient-first.  Temperature and
@@ -204,7 +209,7 @@ impl ChannelMultipliers {
         [self.red, self.green, self.blue, self.spare]
     }
 
-    fn for_cfa_color(self, color: CfaColor) -> ProcessingFiniteF32 {
+    const fn for_cfa_color(self, color: CfaColor) -> ProcessingFiniteF32 {
         match color {
             CfaColor::Red => self.red,
             CfaColor::Green => self.green,
@@ -317,7 +322,7 @@ impl TemperatureConfig {
         self.temperature_tint
     }
 
-    pub fn preset_provenance(&self) -> Option<&PresetProvenance> {
+    pub const fn preset_provenance(&self) -> Option<&PresetProvenance> {
         self.preset_provenance.as_ref()
     }
 }
@@ -805,7 +810,7 @@ pub struct TemperatureLegacyParametersV4 {
     pub preset: i32,
 }
 
-pub fn migrate_v2(value: TemperatureLegacyParametersV2) -> TemperatureLegacyParametersV4 {
+pub const fn migrate_v2(value: TemperatureLegacyParametersV2) -> TemperatureLegacyParametersV4 {
     TemperatureLegacyParametersV4 {
         red: value.coefficients[0],
         green: value.coefficients[1],
@@ -815,7 +820,7 @@ pub fn migrate_v2(value: TemperatureLegacyParametersV2) -> TemperatureLegacyPara
     }
 }
 
-pub fn migrate_v3(value: TemperatureLegacyParametersV3) -> TemperatureLegacyParametersV4 {
+pub const fn migrate_v3(value: TemperatureLegacyParametersV3) -> TemperatureLegacyParametersV4 {
     TemperatureLegacyParametersV4 {
         red: value.red,
         green: value.green,
@@ -829,6 +834,6 @@ pub fn migrate_v3(value: TemperatureLegacyParametersV3) -> TemperatureLegacyPara
     }
 }
 
-pub fn migrate_v4(value: TemperatureLegacyParametersV4) -> TemperatureLegacyParametersV4 {
+pub const fn migrate_v4(value: TemperatureLegacyParametersV4) -> TemperatureLegacyParametersV4 {
     value
 }

@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::{fmt, num::NonZeroU32};
 
 use rusttable_image::{ImageDimensions, Orientation, Roi};
@@ -21,6 +19,10 @@ pub struct RoiRect {
 
 impl RoiRect {
     /// Creates a rectangle. Zero-area rectangles are retained for explicit empty requests.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RoiError::Overflow`] when an edge coordinate exceeds `u32`.
     pub const fn new(x: u32, y: u32, width: u32, height: u32) -> Result<Self, RoiError> {
         if x.checked_add(width).is_none() || y.checked_add(height).is_none() {
             return Err(RoiError::Overflow);
@@ -86,7 +88,7 @@ impl RoiRect {
         }
     }
 
-    pub(super) fn within(self, bounds: Self) -> Result<Self, RoiError> {
+    pub(super) const fn within(self, bounds: Self) -> Result<Self, RoiError> {
         if self.right() > bounds.right() || self.bottom() > bounds.bottom() {
             return Err(RoiError::OutOfBounds);
         }
@@ -107,7 +109,7 @@ impl From<Roi> for RoiRect {
 
 impl From<RoiRect> for Roi {
     fn from(value: RoiRect) -> Self {
-        Roi::new(value.x, value.y, value.width, value.height).expect("checked ROI")
+        Self::new(value.x, value.y, value.width, value.height).expect("checked ROI")
     }
 }
 
@@ -167,6 +169,10 @@ pub struct RoiDescriptor {
 
 impl RoiDescriptor {
     /// Creates a checked logical descriptor.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RoiError::OutOfBounds`] when `bounds` exceeds the source dimensions.
     pub fn new(
         dimensions: ImageDimensions,
         bounds: RoiRect,
@@ -181,6 +187,10 @@ impl RoiDescriptor {
     }
 
     /// Creates a source descriptor whose identity is the immutable source digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RoiError::OutOfBounds`] when `bounds` exceeds the source dimensions.
     pub fn source(
         dimensions: ImageDimensions,
         bounds: RoiRect,
@@ -215,6 +225,11 @@ pub struct RationalScale {
 }
 
 impl RationalScale {
+    /// Creates a positive rational scale.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RoiError::InvalidDimensions`] when either component is zero.
     pub fn new(numerator: u32, denominator: u32) -> Result<Self, RoiError> {
         Ok(Self {
             numerator: NonZeroU32::new(numerator).ok_or(RoiError::InvalidDimensions)?,
@@ -345,6 +360,11 @@ pub struct DistortionBinding {
 
 impl DistortionBinding {
     /// Creates an affine binding and computes its checked inverse.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DistortionError`] when the matrix is non-finite, singular, or
+    /// the tolerance is invalid.
     pub fn affine(
         identity: impl Into<String>,
         matrix: [f64; 6],
@@ -362,6 +382,11 @@ impl DistortionBinding {
     }
 
     /// Creates a projective homography binding and computes its checked inverse.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DistortionError`] when the matrix is non-finite, singular, or
+    /// the tolerance is invalid.
     pub fn homography(
         identity: impl Into<String>,
         matrix: [f64; 9],
@@ -379,6 +404,11 @@ impl DistortionBinding {
     }
 
     /// Creates a radial barrel or pincushion binding with a numeric inverse.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DistortionError`] when the coefficients are non-finite, the
+    /// tolerance is invalid, or the inverse cannot converge.
     pub fn radial(
         identity: impl Into<String>,
         center_x: f64,
@@ -542,7 +572,7 @@ impl RoiNode {
         &self.compatibility_name
     }
     #[must_use]
-    pub fn contract(&self) -> &NodeRoiContract {
+    pub const fn contract(&self) -> &NodeRoiContract {
         &self.contract
     }
 }
@@ -559,7 +589,7 @@ pub struct RoiForwardStep {
 
 impl RoiForwardStep {
     #[must_use]
-    pub fn node(&self) -> &RoiNode {
+    pub const fn node(&self) -> &RoiNode {
         &self.node
     }
     #[must_use]
@@ -590,7 +620,7 @@ pub struct RoiBackwardStep {
 
 impl RoiBackwardStep {
     #[must_use]
-    pub fn node(&self) -> &RoiNode {
+    pub const fn node(&self) -> &RoiNode {
         &self.node
     }
     #[must_use]
@@ -672,7 +702,7 @@ impl RoiPlan {
 }
 
 /// Typed planner failure. No partial plan is returned.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoiPlanningError {
     InvalidSource(RoiError),
     Unsupported {

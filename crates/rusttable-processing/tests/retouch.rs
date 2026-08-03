@@ -1,4 +1,7 @@
-#![allow(clippy::cast_precision_loss)]
+#![expect(
+    clippy::cast_precision_loss,
+    reason = "Retouch fixtures intentionally compare native coordinate precision boundaries."
+)]
 
 use rusttable_masks::MaskRaster;
 use rusttable_processing::{

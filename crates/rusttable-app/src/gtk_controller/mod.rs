@@ -75,7 +75,7 @@ pub enum GtkCatalogState {
 
 impl GtkCatalogState {
     #[must_use]
-    pub fn workspace(&self) -> Option<&PhotoWorkspaceViewModel> {
+    pub const fn workspace(&self) -> Option<&PhotoWorkspaceViewModel> {
         match self {
             Self::Ready(catalog) => Some(catalog.workspace()),
             Self::Empty(_) | Self::Failed(_) => None,
@@ -111,12 +111,12 @@ pub struct GtkReadyCatalog {
 
 impl GtkReadyCatalog {
     #[must_use]
-    pub fn location(&self) -> &GtkCatalogLocation {
+    pub const fn location(&self) -> &GtkCatalogLocation {
         &self.location
     }
 
     #[must_use]
-    pub fn workspace(&self) -> &PhotoWorkspaceViewModel {
+    pub const fn workspace(&self) -> &PhotoWorkspaceViewModel {
         &self.workspace
     }
 }
@@ -159,13 +159,13 @@ impl GtkCatalogController {
 
     /// Returns whether the catalog-open operation produced a usable empty or ready state.
     #[must_use]
-    pub fn opened_successfully(&self) -> bool {
+    pub const fn opened_successfully(&self) -> bool {
         !matches!(self.state, GtkCatalogState::Failed(_))
     }
 
     /// Returns the current catalog state for GTK widget projection.
     #[must_use]
-    pub fn state(&self) -> &GtkCatalogState {
+    pub const fn state(&self) -> &GtkCatalogState {
         &self.state
     }
 
@@ -409,7 +409,7 @@ impl GtkCatalogController {
     }
 
     /// Clears the current photo selection and reports whether it changed.
-    pub fn clear_selection(&mut self) -> bool {
+    pub const fn clear_selection(&mut self) -> bool {
         self.selected_photo.take().is_some()
     }
 
@@ -461,7 +461,7 @@ impl GtkCatalogController {
         }
     }
 
-    fn failed(catalog_path: Option<PathBuf>, kind: LibraryFailureKind) -> Self {
+    const fn failed(catalog_path: Option<PathBuf>, kind: LibraryFailureKind) -> Self {
         Self {
             state: GtkCatalogState::Failed(GtkCatalogFailure { catalog_path, kind }),
             selected_photo: None,

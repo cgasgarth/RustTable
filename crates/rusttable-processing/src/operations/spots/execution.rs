@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Spots arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use super::{SPOTS_MAX_ENTRIES, SpotsMode, SpotsParametersV2};
 use crate::{FiniteF32, LinearRgb, RasterDimensions};
 use rusttable_image::{ImageDimensions, Roi};
@@ -90,7 +95,7 @@ impl SpotsForm {
     }
 
     #[must_use]
-    pub fn mask(&self) -> &MaskRaster {
+    pub const fn mask(&self) -> &MaskRaster {
         &self.mask
     }
 }

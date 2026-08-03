@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native AgX arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded AgX CPU leaf ported from `src/iop/agx.c`.
 //!
 //! This module owns the native v7 parameter ABI and its pre-v7 migration,
@@ -1343,7 +1348,7 @@ struct PrimariesParameters {
     unrotation: [f32; 3],
 }
 
-fn get_primaries_params(parameters: AgxParametersV7) -> PrimariesParameters {
+const fn get_primaries_params(parameters: AgxParametersV7) -> PrimariesParameters {
     let mut result = PrimariesParameters {
         base_primaries: parameters.base_primaries,
         inset: [
@@ -1520,7 +1525,7 @@ fn calculate_tone_mapping_parameters(
     Ok(tone_mapping)
 }
 
-fn tone_mapping_floats(parameters: AgxToneMappingParameters) -> [(&'static str, f32); 24] {
+const fn tone_mapping_floats(parameters: AgxToneMappingParameters) -> [(&'static str, f32); 24] {
     [
         ("black_relative_ev", parameters.black_relative_ev),
         ("white_relative_ev", parameters.white_relative_ev),
@@ -2167,7 +2172,7 @@ fn set_default_curve_and_look_params(parameters: &mut AgxParametersV7) {
     parameters.curve_pivot_y_linear_output = 0.18;
 }
 
-fn set_unmodified_primaries(parameters: &mut AgxParametersV7) {
+const fn set_unmodified_primaries(parameters: &mut AgxParametersV7) {
     parameters.disable_primaries_adjustments = 0;
     parameters.completely_reverse_primaries = 0;
     parameters.base_primaries = AgxBasePrimaries::Rec2020;
@@ -2187,7 +2192,7 @@ fn set_unmodified_primaries(parameters: &mut AgxParametersV7) {
     parameters.blue_unrotation = 0.0;
 }
 
-fn set_blenderlike_primaries(parameters: &mut AgxParametersV7) {
+const fn set_blenderlike_primaries(parameters: &mut AgxParametersV7) {
     parameters.disable_primaries_adjustments = 0;
     parameters.completely_reverse_primaries = 0;
     parameters.base_primaries = AgxBasePrimaries::Rec2020;

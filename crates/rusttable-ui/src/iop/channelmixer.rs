@@ -780,7 +780,7 @@ pub struct ChannelMixerGtkLeaf {
 
 impl ChannelMixerGtkLeaf {
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -986,7 +986,7 @@ struct Widgets {
 }
 
 impl Widgets {
-    fn slider(&self, input: ChannelMixerInput) -> &BauhausSlider {
+    const fn slider(&self, input: ChannelMixerInput) -> &BauhausSlider {
         &self.sliders[input.index()]
     }
 }
@@ -1069,7 +1069,11 @@ impl Shared {
 }
 
 #[cfg(test)]
-#[allow(clippy::assertions_on_constants, clippy::float_cmp)]
+#[expect(
+    clippy::assertions_on_constants,
+    clippy::float_cmp,
+    reason = "The test locks exact channel-mixer metadata and IEEE slider values to the source contract."
+)]
 mod tests {
     use super::*;
 

@@ -23,7 +23,7 @@ pub struct ScriptStorage {
 
 impl ScriptStorage {
     #[must_use]
-    pub fn new(schema_version: u32, max_bytes: usize, max_keys: usize) -> Self {
+    pub const fn new(schema_version: u32, max_bytes: usize, max_keys: usize) -> Self {
         Self {
             schema_version,
             version: 0,

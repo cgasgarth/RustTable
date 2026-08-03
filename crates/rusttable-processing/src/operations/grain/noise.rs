@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Grain noise arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
@@ -13,7 +17,7 @@ const AMPLITUDE_SUM: f32 = 2.234;
 
 /// Counter hash shared by the scalar plan and the reflected point kernel.
 #[must_use]
-pub fn grain_hash(seed: u64, x: i64, y: i64, channel: u32, octave: u32) -> u32 {
+pub const fn grain_hash(seed: u64, x: i64, y: i64, channel: u32, octave: u32) -> u32 {
     let mut value = (seed as u32)
         ^ (seed >> 32) as u32
         ^ (x as u32).wrapping_mul(0x9e37_79b9)

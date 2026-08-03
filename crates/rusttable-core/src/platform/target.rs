@@ -13,11 +13,11 @@ pub(super) fn current_window_systems() -> (Vec<WindowSystem>, bool) {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(super) fn current_window_systems() -> (Vec<WindowSystem>, bool) {
+pub(super) const fn current_window_systems() -> (Vec<WindowSystem>, bool) {
     (Vec::new(), false)
 }
 
-pub(super) fn current_target() -> (OperatingSystem, CpuArchitecture, &'static str) {
+pub(super) const fn current_target() -> (OperatingSystem, CpuArchitecture, &'static str) {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
         return (

@@ -466,11 +466,6 @@ fn native_output_length(input: u32, left: u32, right: u32) -> Result<u32, Enlarg
     })
 }
 
-#[allow(
-    clippy::cast_sign_loss,
-    clippy::cast_possible_truncation,
-    reason = "the value is checked finite and nonnegative before narrowing"
-)]
 fn native_side(edge: u32, percent: f32) -> Result<u32, EnlargeCanvasPlanError> {
     // Keep the multiplication, division, and truncation in f32: this is the
     // arithmetic used by `int border_size = width * percent / 100.f`.
@@ -478,7 +473,7 @@ fn native_side(edge: u32, percent: f32) -> Result<u32, EnlargeCanvasPlanError> {
     truncated_nonnegative(value)
 }
 
-#[allow(
+#[expect(
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation,
     reason = "the value is checked finite and nonnegative before narrowing"
@@ -495,8 +490,8 @@ fn rounded_nonnegative(value: f32) -> Result<u32, EnlargeCanvasPlanError> {
     truncated_nonnegative(value)
 }
 
-fn f32_from_u32(value: u32) -> f32 {
-    #[allow(
+const fn f32_from_u32(value: u32) -> f32 {
+    #[expect(
         clippy::cast_precision_loss,
         reason = "native ROI arithmetic is explicitly f32-based"
     )]
@@ -505,8 +500,8 @@ fn f32_from_u32(value: u32) -> f32 {
     }
 }
 
-fn f32_from_i64(value: i64) -> f32 {
-    #[allow(
+const fn f32_from_i64(value: i64) -> f32 {
+    #[expect(
         clippy::cast_precision_loss,
         reason = "native ROI arithmetic is explicitly f32-based"
     )]
@@ -605,7 +600,7 @@ fn aggregate_border_sizes(
     Ok((left, top))
 }
 
-#[allow(
+#[expect(
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation,
     reason = "the value is checked finite and nonnegative before narrowing"

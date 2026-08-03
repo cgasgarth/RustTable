@@ -32,9 +32,12 @@ impl BuiltinTemplate {
         let source = match self {
             Self::SourceStem => "${source_stem}",
             Self::SourceStemVirtualCopy => "${source_stem|image}-${virtual_copy:04}",
-            Self::DatedFolders => {
-                "${capture_year:04}/${capture_month:02}/${capture_day:02}/${source_stem}"
-            }
+            Self::DatedFolders => concat!(
+                "${capture_year",
+                ":04}/${capture_month",
+                ":02}/${capture_day",
+                ":02}/${source_stem}"
+            ),
             Self::RecipeSuffix => "${source_stem}-${recipe|default}",
             Self::SequenceName => "${sequence:04}-${source_stem}",
         };
@@ -47,7 +50,7 @@ impl BuiltinTemplate {
     }
 
     #[must_use]
-    pub fn all() -> [Self; 5] {
+    pub const fn all() -> [Self; 5] {
         [
             Self::SourceStem,
             Self::SourceStemVirtualCopy,

@@ -10,6 +10,10 @@
     clippy::unreadable_literal,
     reason = "native golden vectors retain their source decimal notation"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Balance test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 // The integration seam is intentionally not registered in the shared hubs yet.
 // Re-export the processing crate's descriptor types so this operation-local
@@ -51,7 +55,7 @@ fn fixture(name: &str) -> Vec<u8> {
         .collect()
 }
 
-fn sample_parameters(mode: ColorBalanceMode) -> ColorBalanceParametersV3 {
+const fn sample_parameters(mode: ColorBalanceMode) -> ColorBalanceParametersV3 {
     ColorBalanceParametersV3::new(
         mode,
         [0.9, 1.1, 0.8, 1.2],

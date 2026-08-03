@@ -118,7 +118,7 @@ impl UnknownFields {
         }
     }
 
-    pub(crate) fn value(&self) -> &toml::Value {
+    pub(crate) const fn value(&self) -> &toml::Value {
         &self.value
     }
 }
@@ -194,7 +194,7 @@ impl EnvironmentOverrides {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct LayeredConfiguration {
+pub struct LayeredConfiguration {
     pub persisted: Configuration,
     pub effective: Configuration,
     pub unknown: UnknownFields,
@@ -224,7 +224,7 @@ pub fn resolve_layers(
     Ok((layers.effective, layers.unknown, layers.findings))
 }
 
-pub(crate) fn resolve_layered(
+pub fn resolve_layered(
     user_text: Option<&str>,
     environment: &EnvironmentOverrides,
     startup: &BTreeMap<String, OverrideValue>,
@@ -785,7 +785,7 @@ fn secret_name(name: &str) -> bool {
     .any(|part| name.contains(part))
 }
 
-pub(crate) fn merge_unknown(document: &mut toml::Value, unknown: &UnknownFields) {
+pub fn merge_unknown(document: &mut toml::Value, unknown: &UnknownFields) {
     merge_tables(document, unknown.value());
 }
 
@@ -806,12 +806,12 @@ fn merge_tables(document: &mut toml::Value, unknown: &toml::Value) {
     }
 }
 
-pub(crate) fn document_hash(config: &Configuration, unknown: &UnknownFields) -> String {
+pub fn document_hash(config: &Configuration, unknown: &UnknownFields) -> String {
     let document = canonical_document(config, unknown);
     format!("{:x}", Sha256::digest(document.as_bytes()))
 }
 
-pub(crate) fn canonical_document(config: &Configuration, unknown: &UnknownFields) -> String {
+pub fn canonical_document(config: &Configuration, unknown: &UnknownFields) -> String {
     let mut document = toml::Value::try_from(config).expect("configuration serializes");
     merge_unknown(&mut document, unknown);
     toml::to_string_pretty(&document).expect("configuration serializes deterministically")

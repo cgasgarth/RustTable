@@ -1,6 +1,6 @@
-#![allow(
+#![expect(
     clippy::float_cmp,
-    reason = "source-derived f32 and ABI fixtures require exact comparisons"
+    reason = "Source-derived f32 and ABI fixtures require exact native comparisons."
 )]
 
 use rusttable_processing::descriptor::{AlphaPolicy, dither_descriptor};
@@ -36,7 +36,7 @@ fn rgb(red: f32, green: f32, blue: f32) -> LinearRgb {
     )
 }
 
-fn channel_bits(pixel: LinearRgb) -> [u32; 3] {
+const fn channel_bits(pixel: LinearRgb) -> [u32; 3] {
     [
         pixel.red().get().to_bits(),
         pixel.green().get().to_bits(),

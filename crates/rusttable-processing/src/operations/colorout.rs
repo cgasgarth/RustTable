@@ -1,4 +1,11 @@
-#![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Color-output transform errors are documented by the shared typed color contract."
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "Color-output plans intentionally own transform resources and publication state."
+)]
 
 use super::common::OperationExecutionError;
 use crate::{FiniteF32, LinearRgb, WorkingFrameDescriptor};
@@ -93,11 +100,11 @@ pub struct TerminalOutputFrame {
 
 impl TerminalOutputFrame {
     #[must_use]
-    pub fn from_pixels(pixels: Vec<LinearRgb>, descriptor: TerminalOutputDescriptor) -> Self {
+    pub const fn from_pixels(pixels: Vec<LinearRgb>, descriptor: TerminalOutputDescriptor) -> Self {
         Self::new(pixels, &descriptor)
     }
 
-    fn new(pixels: Vec<LinearRgb>, descriptor: &TerminalOutputDescriptor) -> Self {
+    const fn new(pixels: Vec<LinearRgb>, descriptor: &TerminalOutputDescriptor) -> Self {
         Self {
             pixels,
             descriptor: *descriptor,
@@ -613,7 +620,7 @@ fn build_transform(
     TransformPlan::new(request, steps).map_err(ColorOutPlanError::Plan)
 }
 
-fn profile_encoding(
+const fn profile_encoding(
     profile: &ColorOutProfile,
     linear: bool,
 ) -> Result<ColorEncoding, ColorOutPlanError> {
@@ -659,7 +666,7 @@ fn profile_parts(
     }
 }
 
-fn profile_primaries(profile: &ColorOutProfile) -> Option<Primaries> {
+const fn profile_primaries(profile: &ColorOutProfile) -> Option<Primaries> {
     match profile {
         ColorOutProfile::Builtin(space) => space.primaries(),
         ColorOutProfile::Matrix { primaries, .. } => Some(*primaries),
@@ -688,7 +695,7 @@ fn profile_id(profile: &ColorOutProfile) -> Result<Option<ProfileId>, ColorOutPl
         )),
     }
 }
-fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
+const fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
     (value.0.get(), value.1.get())
 }
 fn apply_transform<F: Fn() -> bool>(

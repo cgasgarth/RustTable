@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native LUT3D test vectors preserve IEEE-754 parity order."
+)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -41,7 +45,10 @@ fn cube_with_values(values: [[f32; 3]; 8]) -> Lut3d {
     Lut3d::parse_cube(&contents).expect("generated cube is valid")
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The test helper mirrors the native weighted-four-corner interpolation call."
+)]
 fn weighted4(
     a: [f32; 3],
     wa: f32,
@@ -292,6 +299,10 @@ fn three_dl_reader_remaps_blue_fast_records_and_normalizes() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "LUT3D interpolation branch coverage keeps every native edge case in one auditable test."
+)]
 fn all_interpolation_branches_and_edges_follow_native_equations() {
     let values = [
         [0.1, 1.1, 2.1],

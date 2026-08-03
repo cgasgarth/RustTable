@@ -36,7 +36,7 @@ impl DarkroomImageInformationViewModel {
     }
 
     #[must_use]
-    pub fn title(&self) -> &PresentationText {
+    pub const fn title(&self) -> &PresentationText {
         &self.title
     }
 

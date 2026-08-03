@@ -28,6 +28,10 @@ const MASK_BYTES: &[u8] = b"soften-mask-bundle-v1";
 const PIPELINE_BYTES: &[u8] = b"soften-pipeline-bundle-v1";
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the end-to-end Soften persistence, history, and render receipt contract together"
+)]
 fn soften_app_boundary_preserves_typed_state_order_identity_and_render_receipts() {
     let workspace = TestWorkspace::new();
     let (photo_id, imported_edit) = import_fixture(&workspace);
@@ -133,7 +137,7 @@ fn soften_app_boundary_preserves_typed_state_order_identity_and_render_receipts(
     assert_eq!(after.receipt().edit_id(), persisted.id());
     assert_eq!(after.receipt().edit_revision(), persisted.revision());
     assert_ne!(after.receipt().identity_hash(), before_identity);
-    assert_ne!(after.clone().into_parts().2, before.clone().into_parts().2);
+    assert_ne!(after.into_parts().2, before.into_parts().2);
 
     let export = load_selected_export_render(
         &workspace.catalog,

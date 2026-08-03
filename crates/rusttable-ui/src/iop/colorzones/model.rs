@@ -4,10 +4,10 @@
 //! Parameters remain in the canonical native v5 layout so callers can persist
 //! each accepted mutation without translating through a second curve model.
 
-#![allow(
+#![expect(
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
-    reason = "the typed mutation errors and construction-validated state invariants are documented at the model boundary"
+    reason = "The typed mutation errors and construction-validated state invariants are documented at the model boundary."
 )]
 
 use std::fmt;
@@ -204,13 +204,13 @@ impl ColorZonesEditorState {
 
     /// Consumes the state and returns canonical v5 parameters.
     #[must_use]
-    pub fn into_parameters(self) -> ColorZonesParametersV5 {
+    pub const fn into_parameters(self) -> ColorZonesParametersV5 {
         self.parameters
     }
 
     /// Returns the persisted channel used as the graph abscissa.
     #[must_use]
-    pub fn selection_channel(&self) -> ColorZonesChannel {
+    pub const fn selection_channel(&self) -> ColorZonesChannel {
         ColorZonesChannel::from_raw(self.parameters.channel)
             .expect("editor construction validates the selection channel")
     }
@@ -254,7 +254,7 @@ impl ColorZonesEditorState {
 
     /// Returns the interpolation mode for one output curve.
     #[must_use]
-    pub fn curve_type(&self, channel: ColorZonesChannel) -> ColorZonesCurveType {
+    pub const fn curve_type(&self, channel: ColorZonesChannel) -> ColorZonesCurveType {
         ColorZonesCurveType::from_raw(self.parameters.curve_type[channel.index()])
             .expect("editor construction validates interpolation tags")
     }
@@ -270,7 +270,7 @@ impl ColorZonesEditorState {
 
     /// Returns the native point-processing mode.
     #[must_use]
-    pub fn mode(&self) -> ColorZonesMode {
+    pub const fn mode(&self) -> ColorZonesMode {
         ColorZonesMode::from_raw(self.parameters.mode)
             .expect("editor construction validates the process mode")
     }
@@ -287,7 +287,7 @@ impl ColorZonesEditorState {
     }
 
     /// Sets strength using the native `-200..=200` editable range.
-    pub fn set_strength(&mut self, strength: f32) -> Result<(), ColorZonesEditorError> {
+    pub const fn set_strength(&mut self, strength: f32) -> Result<(), ColorZonesEditorError> {
         if !strength.is_finite() {
             return Err(ColorZonesEditorError::NonFiniteInput);
         }
@@ -297,7 +297,7 @@ impl ColorZonesEditorState {
 
     /// Returns the persisted spline-boundary implementation version.
     #[must_use]
-    pub fn splines_version(&self) -> ColorZonesSplinesVersion {
+    pub const fn splines_version(&self) -> ColorZonesSplinesVersion {
         ColorZonesSplinesVersion::from_raw(self.parameters.splines_version)
             .expect("editor construction validates the spline version")
     }
@@ -374,6 +374,10 @@ impl ColorZonesEditorState {
     ///
     /// Returns `false` when native separation checks consume the movement as an
     /// unchanged no-op.
+    #[expect(
+        clippy::while_float,
+        reason = "Source spline separation advances with next_up/next_down until the native float boundary is met."
+    )]
     pub fn move_node_on(
         &mut self,
         channel: ColorZonesChannel,
@@ -446,12 +450,13 @@ impl ColorZonesEditorState {
         dx: f32,
         dy: f32,
     ) -> Result<bool, ColorZonesEditorError> {
-        let current = *self.active_nodes(self.output_channel).get(node).ok_or(
-            ColorZonesEditorError::InvalidNodeIndex {
+        let current = *self
+            .active_nodes(self.output_channel)
+            .get(node)
+            .ok_or_else(|| ColorZonesEditorError::InvalidNodeIndex {
                 node,
                 active: self.active_count(self.output_channel),
-            },
-        )?;
+            })?;
         self.move_node(node, current.x + dx, current.y + dy)
     }
 
@@ -544,7 +549,7 @@ impl ColorZonesEditorState {
     ///
     /// Native picker application uses `default_params`, independent of the
     /// current selection channel and spline version.
-    pub fn reset_curve_to_defaults_on(&mut self, channel: ColorZonesChannel) {
+    pub const fn reset_curve_to_defaults_on(&mut self, channel: ColorZonesChannel) {
         let defaults = ColorZonesParametersV5::defaults();
         let index = channel.index();
         self.parameters.curves[index] = defaults.curves[index];
@@ -556,7 +561,7 @@ impl ColorZonesEditorState {
     ///
     /// The transient output channel remains selected, as native GUI channel
     /// state is independent of module parameters.
-    pub fn reset_all(&mut self) {
+    pub const fn reset_all(&mut self) {
         self.parameters = ColorZonesParametersV5::defaults();
     }
 
@@ -659,7 +664,7 @@ fn validate_unit_input(x: f32, y: f32) -> Result<(), ColorZonesEditorError> {
     Ok(())
 }
 
-fn validate_node_index(node: usize, active: usize) -> Result<(), ColorZonesEditorError> {
+const fn validate_node_index(node: usize, active: usize) -> Result<(), ColorZonesEditorError> {
     if node >= active {
         Err(ColorZonesEditorError::InvalidNodeIndex { node, active })
     } else {
@@ -687,7 +692,7 @@ fn x_is_separated_for_move(
         && (node + 1 == count || curve[node + 1].x - x > COLORZONES_MIN_X_DISTANCE)
 }
 
-fn reset_one_curve(
+const fn reset_one_curve(
     parameters: &mut ColorZonesParametersV5,
     channel: ColorZonesChannel,
     touch_edges: bool,

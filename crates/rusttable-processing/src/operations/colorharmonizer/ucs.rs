@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Harmonizer UCS arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable UCS/JCH, CAT-adjacent hue, and RYB lookup math.
 //!
 //! This is a local CPU port of the formulas used by
@@ -84,12 +89,12 @@ impl HarmonyTables {
     }
 
     #[must_use]
-    pub fn forward(&self) -> &[f32; COLORHARMONIZER_RYB_INVERSE_STEPS] {
+    pub const fn forward(&self) -> &[f32; COLORHARMONIZER_RYB_INVERSE_STEPS] {
         &self.ucs_to_ryb
     }
 
     #[must_use]
-    pub fn inverse(&self) -> &[f32; COLORHARMONIZER_RYB_INVERSE_STEPS] {
+    pub const fn inverse(&self) -> &[f32; COLORHARMONIZER_RYB_INVERSE_STEPS] {
         &self.ryb_to_ucs
     }
 }
@@ -381,11 +386,11 @@ fn rgb_to_hcv(rgb: [f32; 3]) -> [f32; 3] {
     [hue, chroma, max]
 }
 
-fn min3(values: [f32; 3]) -> f32 {
+const fn min3(values: [f32; 3]) -> f32 {
     values[0].min(values[1]).min(values[2])
 }
 
-fn max3(values: [f32; 3]) -> f32 {
+const fn max3(values: [f32; 3]) -> f32 {
     values[0].max(values[1]).max(values[2])
 }
 

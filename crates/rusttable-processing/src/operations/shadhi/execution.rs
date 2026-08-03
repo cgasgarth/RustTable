@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Shadhi arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use super::{
     LAB_MAXIMUM, LAB_MINIMUM, ShadhiAlgorithm, ShadhiConfig, UNBOUND_BILATERAL, UNBOUND_GAUSSIAN,
     UNBOUND_HIGHLIGHTS_A, UNBOUND_HIGHLIGHTS_B, UNBOUND_HIGHLIGHTS_L, UNBOUND_SHADOWS_A,
@@ -178,12 +183,12 @@ impl ShadhiPlan {
                     let grid_bytes =
                         BilateralGrid::required_memory_bytes(width, height, sigma, 100.0)
                             .map_err(map_bilateral_error)?;
-                    base_bytes.checked_add(grid_bytes).ok_or(
+                    base_bytes.checked_add(grid_bytes).ok_or_else(|| {
                         OperationExecutionError::MemoryBudgetExceeded {
                             required: usize::MAX,
                             budget: budget.maximum_bytes(),
-                        },
-                    )?
+                        }
+                    })?
                 } else {
                     base_bytes
                 }
@@ -316,7 +321,7 @@ impl ShadhiPlan {
         let backend_budget_bytes = budget
             .maximum_bytes()
             .checked_sub(processing_bytes_live_across_backend)
-            .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: processing_bytes_live_across_backend,
                 budget: budget.maximum_bytes(),
             })?;
@@ -456,7 +461,7 @@ fn shadhi_base_memory_bytes(
         .checked_mul(SHADHI_WORKING_BUFFERS)
         .and_then(|value| value.checked_mul(size_of::<LinearRgb>()))
         .and_then(|value| value.checked_add(pixel_count.saturating_mul(16)))
-        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+        .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: budget.maximum_bytes(),
         })
@@ -466,25 +471,25 @@ fn external_bilateral_peak_memory_bytes(
     pixel_count: usize,
     budget: ReconstructionBudget,
 ) -> Result<usize, OperationExecutionError> {
-    let input_bytes = pixel_count.checked_mul(size_of::<LinearRgb>()).ok_or(
-        OperationExecutionError::MemoryBudgetExceeded {
-            required: usize::MAX,
-            budget: budget.maximum_bytes(),
-        },
-    )?;
-    let lab_bytes = pixel_count
-        .checked_mul(EXTERNAL_BILATERAL_PEAK_LAB_BUFFERS)
-        .and_then(|value| value.checked_mul(size_of::<[f32; 4]>()))
-        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+    let input_bytes = pixel_count
+        .checked_mul(size_of::<LinearRgb>())
+        .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: budget.maximum_bytes(),
         })?;
-    input_bytes
-        .checked_add(lab_bytes)
-        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+    let lab_bytes = pixel_count
+        .checked_mul(EXTERNAL_BILATERAL_PEAK_LAB_BUFFERS)
+        .and_then(|value| value.checked_mul(size_of::<[f32; 4]>()))
+        .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: budget.maximum_bytes(),
-        })
+        })?;
+    input_bytes.checked_add(lab_bytes).ok_or_else(|| {
+        OperationExecutionError::MemoryBudgetExceeded {
+            required: usize::MAX,
+            budget: budget.maximum_bytes(),
+        }
+    })
 }
 
 fn external_bilateral_backend_live_memory_bytes(
@@ -499,7 +504,7 @@ fn external_bilateral_backend_live_memory_bytes(
                 .and_then(|pixels| pixels.checked_mul(size_of::<[f32; 4]>()))
                 .and_then(|lab| input.checked_add(lab))
         })
-        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+        .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: budget.maximum_bytes(),
         })
@@ -541,6 +546,10 @@ fn mix_lab(source: ShadhiPixel, base: ShadhiPixel, config: ShadhiConfig) -> Shad
     ShadhiPixel::from_channels(source)
 }
 
+#[expect(
+    clippy::while_float,
+    reason = "Native Shadhi overlay advances a validated finite f32 amount in unit chunks."
+)]
 fn overlay_highlights(
     value: &mut [f32; 4],
     base: [f32; 4],
@@ -581,6 +590,10 @@ fn overlay_highlights(
     }
 }
 
+#[expect(
+    clippy::while_float,
+    reason = "Native Shadhi overlay advances a validated finite f32 amount in unit chunks."
+)]
 fn overlay_shadows(
     value: &mut [f32; 4],
     base: [f32; 4],
@@ -798,7 +811,7 @@ fn validate_mask(mask: Option<&[f32]>, expected: usize) -> Result<(), OperationE
     Ok(())
 }
 
-fn map_filter_error(error: BoundedGaussianError) -> OperationExecutionError {
+const fn map_filter_error(error: BoundedGaussianError) -> OperationExecutionError {
     match error {
         BoundedGaussianError::Cancelled => OperationExecutionError::Cancelled,
         BoundedGaussianError::InvalidSigma => OperationExecutionError::NonFiniteResult {

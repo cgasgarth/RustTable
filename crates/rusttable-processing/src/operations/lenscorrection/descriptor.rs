@@ -14,7 +14,10 @@ use super::{
 
 /// Registry-ready metadata.  Registration remains owned by the orchestrator.
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the lens-correction descriptor preserves source parameter order and tiling metadata"
+)]
 pub fn lenscorrection_descriptor() -> OperationDescriptor {
     let image = ImagePredicate {
         channels: 4,

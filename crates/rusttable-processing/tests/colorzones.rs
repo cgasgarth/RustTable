@@ -3,6 +3,10 @@
     clippy::float_cmp,
     reason = "source-derived ABI and migration vectors intentionally preserve exact f32 values"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Zones test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt::Write as _;
 
@@ -61,7 +65,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
     encoded
 }
 
-fn zero_curves() -> [[ColorZonesNode; COLORZONES_MAX_NODES]; COLORZONES_CHANNELS] {
+const fn zero_curves() -> [[ColorZonesNode; COLORZONES_MAX_NODES]; COLORZONES_CHANNELS] {
     [[ColorZonesNode::new(0.0, 0.0); COLORZONES_MAX_NODES]; COLORZONES_CHANNELS]
 }
 
@@ -447,6 +451,10 @@ fn raw_codecs_round_trip_every_bit_before_semantic_validation() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Color Zones validation test keeps every active-node and no-clamp invariant together."
+)]
 fn semantic_projection_validates_only_active_nodes_and_never_ui_clamps() {
     let invalid_enums = [
         (
@@ -725,6 +733,10 @@ fn descriptor_parameter_ids_follow_native_v5_declaration_order_exactly() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Color Zones registry test verifies the complete native v5 descriptor and backend binding contract."
+)]
 fn canonical_descriptor_and_backend_registry_bindings_match_native_v5_contract() {
     let descriptor = colorzones_descriptor();
     assert_eq!(

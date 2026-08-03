@@ -264,7 +264,7 @@ pub enum TransferPayload {
 }
 
 impl TransferPayload {
-    fn format(self) -> TransferFormat {
+    const fn format(self) -> TransferFormat {
         match self {
             Self::RgbaF32 => TransferFormat::RgbaF32,
             Self::Uniform { .. } => TransferFormat::UniformBlock,
@@ -671,7 +671,7 @@ fn calculate_layout(
     ))
 }
 
-fn host_resource(request: TransferRequest) -> ResourceId {
+const fn host_resource(request: TransferRequest) -> ResourceId {
     request.gpu.resource
 }
 

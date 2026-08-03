@@ -6,24 +6,24 @@ use clap::{Args, Subcommand};
 use crate::Result;
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum FixturesCommand {
+pub enum FixturesCommand {
     /// Verify every registered fixture byte and qualification rule.
     Verify(FixturesArgs),
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct FixturesArgs {
+pub struct FixturesArgs {
     #[arg(long, default_value = "fixtures/manifest.toml")]
     manifest: PathBuf,
 }
 
-pub(crate) fn run(root: &Path, command: FixturesCommand) -> Result {
+pub fn run(root: &Path, command: FixturesCommand) -> Result {
     match command {
         FixturesCommand::Verify(arguments) => verify(root, &arguments.manifest),
     }
 }
 
-pub(crate) fn verify(root: &Path, manifest: &Path) -> Result {
+pub fn verify(root: &Path, manifest: &Path) -> Result {
     let path = root.join(manifest);
     let source =
         fs::read_to_string(&path).map_err(|error| format!("read {}: {error}", path.display()))?;

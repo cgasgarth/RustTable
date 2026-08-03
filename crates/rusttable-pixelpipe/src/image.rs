@@ -371,7 +371,7 @@ impl RgbaF32Image {
     }
 }
 
-fn validate_component(
+const fn validate_component(
     pixel_index: usize,
     channel: RgbaF32Channel,
     component: f32,

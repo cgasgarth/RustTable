@@ -14,14 +14,14 @@ use crate::storage::refuse_symlink;
 const CRASH_LIMIT: usize = 256 * 1024;
 const RETAINED_REPORTS: usize = 5;
 
-pub(crate) struct CrashState {
+pub struct CrashState {
     pub(crate) directory: PathBuf,
     pub(crate) package_version: &'static str,
     pub(crate) redactor: Redactor,
 }
 
 impl CrashState {
-    pub(crate) fn write(&self, panic: &PanicHookInfo<'_>) {
+    pub fn write(&self, panic: &PanicHookInfo<'_>) {
         let timestamp = unix_millis();
         let pid = std::process::id();
         let path = self.directory.join(format!("crash-{timestamp}-{pid}.json"));
@@ -109,14 +109,14 @@ fn unix_millis() -> u128 {
         .map_or(0, |duration| duration.as_millis())
 }
 
-pub(crate) type PanicHook = Box<dyn Fn(&PanicHookInfo<'_>) + Send + Sync + 'static>;
+pub type PanicHook = Box<dyn Fn(&PanicHookInfo<'_>) + Send + Sync + 'static>;
 
-pub(crate) struct HookState {
+pub struct HookState {
     pub(crate) crash: Arc<CrashState>,
     pub(crate) previous: std::sync::Mutex<Option<PanicHook>>,
 }
 
-pub(crate) fn hook(state: Arc<HookState>) -> PanicHook {
+pub fn hook(state: Arc<HookState>) -> PanicHook {
     Box::new(move |panic| {
         state.crash.write(panic);
         if let Ok(previous) = state.previous.lock()

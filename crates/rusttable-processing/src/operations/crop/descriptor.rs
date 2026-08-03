@@ -8,7 +8,10 @@ use crate::descriptor::{
 use rusttable_color::ColorEncoding;
 
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the crop descriptor keeps source parameter order and geometry contracts together"
+)]
 pub fn crop_descriptor() -> OperationDescriptor {
     let scalar = |id: &str, default: f64| ParameterDescriptor {
         id: id.to_owned(),

@@ -2,6 +2,11 @@
     clippy::float_cmp,
     reason = "source-derived compatibility vectors intentionally assert exact f32 results"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    clippy::too_many_lines,
+    reason = "Native Color Correction test vectors and descriptor coverage preserve source order and one auditable contract."
+)]
 
 use rusttable_color::ColorEncoding;
 use rusttable_core::{

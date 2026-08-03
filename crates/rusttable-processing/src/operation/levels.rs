@@ -5,9 +5,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const PARAMETERS: [&str; 5] = ["mode", "black", "gray", "white", "levels"];
 
-pub(crate) fn compile_levels(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_levels(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &PARAMETERS)?;
     let defaults = LevelsParametersV2::defaults();
     let mode = LevelsMode::from_raw(super::parameter_integer(

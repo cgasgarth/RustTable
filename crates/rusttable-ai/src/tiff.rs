@@ -1,6 +1,6 @@
 use std::fmt;
 
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 
 use crate::{ColorProfile, ImageDimensions};
 
@@ -55,7 +55,7 @@ impl Default for TiffSettings {
 }
 
 impl TiffSettings {
-    pub fn new(
+    pub const fn new(
         bit_depth: TiffBitDepth,
         alpha: bool,
         max_bytes: u64,
@@ -157,7 +157,7 @@ impl fmt::Display for TiffError {
 }
 impl std::error::Error for TiffError {}
 
-pub(crate) fn encode_tiff(
+pub fn encode_tiff(
     dimensions: ImageDimensions,
     pixels: &[[f32; 4]],
     profile: &ColorProfile,
@@ -207,8 +207,8 @@ pub(crate) fn encode_tiff(
     let bits_offset = 8usize + ifd_bytes;
     let profile_offset = bits_offset + 6;
     let mut entries = Vec::with_capacity(usize::from(ifd_count));
-    entries.push((256, 4, 1, u32::from(dimensions.width())));
-    entries.push((257, 4, 1, u32::from(dimensions.height())));
+    entries.push((256, 4, 1, dimensions.width()));
+    entries.push((257, 4, 1, dimensions.height()));
     entries.push((
         258,
         3,
@@ -229,7 +229,7 @@ pub(crate) fn encode_tiff(
         1,
         u32::try_from(channels).map_err(|_| TiffError::UnsupportedOffset)?,
     ));
-    entries.push((278, 4, 1, u32::from(dimensions.height())));
+    entries.push((278, 4, 1, dimensions.height()));
     entries.push((
         279,
         4,
@@ -280,6 +280,10 @@ fn write_entry(output: &mut Vec<u8>, tag: u16, kind: u16, count: u32, value: u32
     output.extend_from_slice(&value.to_le_bytes());
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined bounded TIFF quantization order"
+)]
 fn write_pixel(output: &mut Vec<u8>, pixel: [f32; 4], settings: &TiffSettings) {
     let channels = if settings.alpha { 4 } else { 3 };
     for value in pixel.into_iter().take(channels) {
@@ -404,10 +408,7 @@ pub fn verify_tiff_artifact(bytes: &[u8]) -> Result<TiffProbe, TiffError> {
     if end > bytes.len() {
         return Err(TiffError::InvalidHeader);
     }
-    let icc_sha256 = Sha256::digest(&bytes[start..end])
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
+    let icc_sha256 = crate::package::hex_digest(sha2::Sha256::digest(&bytes[start..end]));
     Ok(TiffProbe {
         dimensions,
         bit_depth,

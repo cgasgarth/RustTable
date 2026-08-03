@@ -1,4 +1,11 @@
-#![allow(clippy::cast_precision_loss, clippy::float_cmp)]
+#![expect(
+    clippy::cast_precision_loss,
+    reason = "Crop fixtures intentionally compare native f32 coordinate conversions."
+)]
+#![expect(
+    clippy::float_cmp,
+    reason = "Crop compatibility tests assert exact native parameter values."
+)]
 
 use rusttable_processing::operations::crop;
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};

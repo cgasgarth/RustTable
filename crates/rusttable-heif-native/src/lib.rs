@@ -1,7 +1,16 @@
 #![forbid(unsafe_code)]
-#![allow(clippy::chunks_exact_to_as_chunks)]
-#![allow(clippy::missing_errors_doc)]
-#![allow(clippy::too_many_lines)]
+#![expect(
+    clippy::chunks_exact_to_as_chunks,
+    reason = "The libheif FFI adapter must preserve the decoder's fixed channel grouping."
+)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The HEIF encoder boundary documents failures in its shared typed error contract."
+)]
+#![expect(
+    clippy::too_many_lines,
+    reason = "The HEIF encoder boundary keeps source-format setup and publication validation together."
+)]
 #![doc = "Safe `RustTable` boundary for the pinned libheif HEVC encoder."]
 
 use std::fmt;
@@ -297,7 +306,7 @@ fn write_plane(
         Channel::Alpha => planes.a.as_mut(),
         _ => None,
     }
-    .ok_or(Error::Codec("missing image plane".to_owned()))?;
+    .ok_or_else(|| Error::Codec("missing image plane".to_owned()))?;
     let bytes_per_sample = if depth <= 8 { 1 } else { 2 };
     let row_bytes = usize::try_from(width)
         .map_err(|_| Error::InvalidInput("plane width"))?
@@ -313,7 +322,7 @@ fn write_plane(
         let target = plane
             .data
             .get_mut(start..start + row_bytes)
-            .ok_or(Error::Codec("plane allocation is short".to_owned()))?;
+            .ok_or_else(|| Error::Codec("plane allocation is short".to_owned()))?;
         if bytes_per_sample == 1 {
             for (target, value) in target.iter_mut().zip(source) {
                 *target = u8::try_from(*value).map_err(|_| Error::InvalidInput("8-bit sample"))?;
@@ -328,7 +337,8 @@ fn write_plane(
 }
 
 fn set_nclx(image: &mut Image, options: Options) -> Result<(), Error> {
-    let mut profile = ColorProfileNCLX::new().ok_or(Error::Codec("nclx allocation".to_owned()))?;
+    let mut profile =
+        ColorProfileNCLX::new().ok_or_else(|| Error::Codec("nclx allocation".to_owned()))?;
     profile.set_color_primaries(match options.matrix {
         Matrix::Bt2020 => ColorPrimaries::ITU_R_BT_2020_2_and_2100_0,
         Matrix::Bt601 => ColorPrimaries::ITU_R_BT_601_6,

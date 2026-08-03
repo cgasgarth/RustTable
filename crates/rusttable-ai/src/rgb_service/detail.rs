@@ -101,7 +101,7 @@ pub struct DetailReceipt {
     pub residual_hash: [u8; 32],
 }
 
-pub(crate) fn recover_detail(
+pub fn recover_detail(
     original: &[[f32; 4]],
     output: &mut [[f32; 4]],
     width: u32,
@@ -159,10 +159,18 @@ pub(crate) fn recover_detail(
     ))
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined luminance coefficient order"
+)]
 fn luma(pixel: &[f32; 4]) -> f32 {
     0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined compensated variance arithmetic order"
+)]
 fn mean_variance(values: &[f32]) -> (f64, f64) {
     if values.is_empty() {
         return (0.0, 0.0);
@@ -255,7 +263,7 @@ fn blur(input: &[f32], width: usize, height: usize, step: usize) -> Vec<f32> {
     output
 }
 
-pub(crate) fn reflect(index: i64, length: usize) -> usize {
+pub fn reflect(index: i64, length: usize) -> usize {
     if length <= 1 {
         return 0;
     }

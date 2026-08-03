@@ -44,7 +44,6 @@ pub struct BloomRequest<'a> {
 
 impl<'a> BloomRequest<'a> {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub const fn new(
         pixels: &'a [[f32; 4]],
         width: usize,
@@ -205,6 +204,10 @@ struct ValidatedRequest {
 }
 
 impl ValidatedRequest {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Bloom validation keeps the complete shape, parameter, allocation, device-limit, and dispatch contract together."
+    )]
     fn new(request: BloomRequest<'_>, limits: &wgpu::Limits) -> Result<Self, BloomError> {
         let expected = request
             .width
@@ -364,7 +367,10 @@ fn transient_bytes(pixel_bytes: u64, lightness_bytes: u64) -> Result<u64, BloomE
 
 impl GpuRuntime {
     /// Runs threshold, eight horizontal/vertical box pairs, and recombination.
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the GPU dispatch sequence preserves native threshold, blur, and recombination ordering"
+    )]
     pub fn execute_bloom(&self, request: BloomRequest<'_>) -> Result<BloomResult, BloomError> {
         if request.is_cancelled() {
             return Err(BloomError::Cancelled);
@@ -598,7 +604,7 @@ impl GpuRuntime {
     }
 }
 
-fn storage_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupLayoutEntry {
+const fn storage_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -611,7 +617,7 @@ fn storage_binding(binding: u32, read_only: bool, size: u64) -> wgpu::BindGroupL
     }
 }
 
-fn uniform_binding(binding: u32) -> wgpu::BindGroupLayoutEntry {
+const fn uniform_binding(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,
@@ -694,7 +700,7 @@ fn dispatch(
     pass.dispatch_workgroups(workgroups[0], workgroups[1], workgroups[2]);
 }
 
-fn bucket_next(state: &mut usize) -> usize {
+const fn bucket_next(state: &mut usize) -> usize {
     *state = if *state + 1 == BLOOM_TEMPORARY_BUCKETS as usize {
         0
     } else {
@@ -792,7 +798,10 @@ fn pixel_from_bytes(bytes: &[u8; 16]) -> [f32; 4] {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::cast_possible_truncation)]
+    #![expect(
+        clippy::suboptimal_flops,
+        reason = "Reference tests preserve native arithmetic operation order."
+    )]
 
     use super::*;
 

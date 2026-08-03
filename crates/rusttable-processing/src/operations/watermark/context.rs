@@ -1,4 +1,7 @@
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Watermark context errors are documented by the typed expansion contract."
+)]
 
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -63,7 +66,7 @@ impl WatermarkContext {
     }
 
     #[must_use]
-    pub fn with_sequence(mut self, sequence: u64, version: u64) -> Self {
+    pub const fn with_sequence(mut self, sequence: u64, version: u64) -> Self {
         self.sequence = sequence;
         self.version = version;
         self

@@ -39,7 +39,7 @@ fn config(size: f32, saturation: f32, brightness: f32, amount: f32) -> SoftenCon
     .expect("valid soften parameters")
 }
 
-fn pixel(red: f32, green: f32, blue: f32, fourth: f32) -> SoftenPixel {
+const fn pixel(red: f32, green: f32, blue: f32, fourth: f32) -> SoftenPixel {
     SoftenPixel::new(red, green, blue, fourth)
 }
 

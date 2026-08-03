@@ -4,7 +4,7 @@
 //! status, and receive typed intent. No profile bytes, parsing, resolution, or transforms live
 //! here.
 
-pub(crate) mod diagnostics;
+pub mod diagnostics;
 
 use gtk4::accessible::Property;
 use gtk4::prelude::*;
@@ -430,7 +430,7 @@ impl ProfileControlsState {
         self.generation
     }
     #[must_use]
-    pub fn role(&self, role: ProfileRole) -> &ProfileRoleState {
+    pub const fn role(&self, role: ProfileRole) -> &ProfileRoleState {
         &self.roles[role.index()]
     }
     #[must_use]
@@ -454,7 +454,7 @@ impl ProfileControlsState {
         &self.warnings
     }
     #[must_use]
-    pub fn accepts_message(&self, message: &ProfileControlMessage) -> bool {
+    pub const fn accepts_message(&self, message: &ProfileControlMessage) -> bool {
         message.generation() == self.generation
     }
 
@@ -498,7 +498,7 @@ impl Default for ProfileControlsState {
         )
     }
 }
-fn status_warning(status: ProfileRoleStatus) -> Option<ProfileWarningKind> {
+const fn status_warning(status: ProfileRoleStatus) -> Option<ProfileWarningKind> {
     match status {
         ProfileRoleStatus::Ready => None,
         ProfileRoleStatus::Unavailable(reason) => reason.warning_kind(),
@@ -562,7 +562,7 @@ fn display_role_state(snapshot: &DisplayProfileSnapshot) -> ProfileRoleState {
     }
     state
 }
-fn profile_label(profile: ColorEncoding) -> &'static str {
+const fn profile_label(profile: ColorEncoding) -> &'static str {
     match profile {
         ColorEncoding::Unspecified => "unspecified",
         ColorEncoding::SrgbD65 => "sRGB",
@@ -737,7 +737,7 @@ impl ProfileControls {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Expander {
+    pub const fn widget(&self) -> &gtk4::Expander {
         &self.root
     }
     #[must_use]
@@ -983,7 +983,7 @@ fn rendering_intent(index: usize) -> Option<RenderingIntent> {
     .get(index)
     .copied()
 }
-fn intent_index(intent: RenderingIntent) -> u32 {
+const fn intent_index(intent: RenderingIntent) -> u32 {
     match intent {
         RenderingIntent::Perceptual => 0,
         RenderingIntent::Relative => 1,

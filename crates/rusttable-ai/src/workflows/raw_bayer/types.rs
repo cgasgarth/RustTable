@@ -671,7 +671,7 @@ pub struct RawBayerReceipt {
     pub grouped: bool,
 }
 
-pub(crate) fn validate_bayer(pattern: CfaPattern) -> Result<(), RawFrameError> {
+pub fn validate_bayer(pattern: CfaPattern) -> Result<(), RawFrameError> {
     let CfaPattern::Bayer(pattern) = pattern else {
         return Err(RawFrameError::UnsupportedCfa);
     };
@@ -694,7 +694,7 @@ pub(crate) fn validate_bayer(pattern: CfaPattern) -> Result<(), RawFrameError> {
     Ok(())
 }
 
-pub(crate) fn plane_offsets(pattern: CfaPattern, phase: CfaPhase) -> [(u32, u32); 4] {
+pub fn plane_offsets(pattern: CfaPattern, phase: CfaPhase) -> [(u32, u32); 4] {
     let mut offsets = [(0, 0); 4];
     let mut green = 1;
     for y in 0..2 {
@@ -714,7 +714,7 @@ pub(crate) fn plane_offsets(pattern: CfaPattern, phase: CfaPhase) -> [(u32, u32)
     offsets
 }
 
-pub(crate) fn plane_for(pattern: CfaPattern, phase: CfaPhase, x: u32, y: u32) -> usize {
+pub fn plane_for(pattern: CfaPattern, phase: CfaPhase, x: u32, y: u32) -> usize {
     let offsets = plane_offsets(pattern, phase);
     let dx = x % 2;
     let dy = y % 2;

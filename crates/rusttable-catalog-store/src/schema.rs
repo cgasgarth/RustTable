@@ -22,80 +22,81 @@ mod validation;
 #[path = "schema/virtual_copies.rs"]
 mod virtual_copy_schema;
 
-pub(crate) use duplicates::*;
+pub use duplicates::*;
 use history_migration::{blob_key, open_history_tables};
-pub(crate) use metadata_schema::*;
-pub(crate) use tag_schema::*;
-pub(crate) use virtual_copy_schema::*;
+pub use metadata_schema::*;
+pub use tag_schema::*;
+pub use virtual_copy_schema::*;
 
 pub const CURRENT_SCHEMA_VERSION: u8 = 16;
 
-pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
-    TableDefinition::new("rusttable_schema");
-pub(crate) const RECORDS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_schema");
+pub const RECORDS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_import_records");
-pub(crate) const PHOTO_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const PHOTO_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_photo_index");
-pub(crate) const ASSET_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const ASSET_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_asset_index");
-pub(crate) const PHOTO_ORGANIZATION_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const PHOTO_ORGANIZATION_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_photo_organization");
-pub(crate) const ORGANIZATION_REVISION_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const ORGANIZATION_REVISION_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_organization_revision");
-pub(crate) const PHOTO_GROUPS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const PHOTO_GROUPS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_photo_groups");
-pub(crate) const PHOTO_GROUP_MEMBER_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const PHOTO_GROUP_MEMBER_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_photo_group_member_index");
-pub(crate) const EDITS_TABLE: TableDefinition<&[u8], &[u8]> =
-    TableDefinition::new("rusttable_edits");
-pub(crate) const IMPORT_DETAILS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const EDITS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_edits");
+pub const IMPORT_DETAILS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_import_details");
-pub(crate) const REFERENCE_PATH_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const REFERENCE_PATH_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_reference_path_index");
-pub(crate) const SOURCE_RECONCILIATION_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const SOURCE_RECONCILIATION_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_source_reconciliation");
-pub(crate) const RECIPES_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const RECIPES_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_export_recipes");
-pub(crate) const RECIPE_HEADS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const RECIPE_HEADS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_export_recipe_heads");
-pub(crate) const RECIPE_REFERENCES_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const RECIPE_REFERENCES_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_export_recipe_references");
-pub(crate) const COLLECTION_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const COLLECTION_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_collection_state");
-pub(crate) const COLLECTIONS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const COLLECTIONS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_saved_collections");
-pub(crate) const COLLECTION_NAME_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const COLLECTION_NAME_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_collection_name_index");
-pub(crate) const RECENT_QUERY_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const RECENT_QUERY_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_recent_queries");
-pub(crate) const RECENT_ORDER_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const RECENT_ORDER_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_recent_order_index");
-pub(crate) const ACTIVE_VIEW_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const ACTIVE_VIEW_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_active_library_view");
-pub(crate) const COLLECTION_INTEGRITY_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const COLLECTION_INTEGRITY_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_collection_integrity");
-pub(crate) const HISTORY_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const HISTORY_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_state");
-pub(crate) const HISTORY_REVISIONS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const HISTORY_REVISIONS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_revisions");
-pub(crate) const HISTORY_BLOBS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const HISTORY_BLOBS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blobs");
-pub(crate) const HISTORY_BLOB_REFS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const HISTORY_BLOB_REFS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blob_refs");
-pub(crate) const HISTORY_SNAPSHOTS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const HISTORY_SNAPSHOTS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_snapshots");
-pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
-pub(crate) const ORGANIZATION_REVISION_KEY: &[u8] = b"organization-revision";
+pub const VERSION_KEY: &[u8] = b"schema-version";
+pub const ORGANIZATION_REVISION_KEY: &[u8] = b"organization-revision";
 const DATABASE_OPEN_RETRY_TIMEOUT: Duration = Duration::from_secs(1);
 const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(2);
 
-pub(crate) fn open(path: &Path) -> Result<Arc<Database>, RepositoryError> {
+pub fn open(path: &Path) -> Result<Arc<Database>, RepositoryError> {
     let existed = path.exists();
     retry_database_open(existed, || {
-        let mut databases = database_registry()
-            .lock()
-            .map_err(|_| OpenDatabaseError::Repository(RepositoryError::Unavailable))?;
-        if let Some(database) = databases.get(path).and_then(Weak::upgrade) {
+        let existing = {
+            let databases = database_registry()
+                .lock()
+                .map_err(|_| OpenDatabaseError::Repository(RepositoryError::Unavailable))?;
+            databases.get(path).and_then(Weak::upgrade)
+        };
+        if let Some(database) = existing {
             return Ok(database);
         }
         let database = Arc::new(Database::create(path).map_err(OpenDatabaseError::Database)?);
@@ -104,7 +105,11 @@ pub(crate) fn open(path: &Path) -> Result<Arc<Database>, RepositoryError> {
         } else {
             initialize(&database).map_err(OpenDatabaseError::Repository)?;
         }
+        let mut databases = database_registry()
+            .lock()
+            .map_err(|_| OpenDatabaseError::Repository(RepositoryError::Unavailable))?;
         databases.insert(PathBuf::from(path), Arc::downgrade(&database));
+        drop(databases);
         Ok(database)
     })
 }
@@ -202,6 +207,10 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
         .map_err(|_| RepositoryError::Unavailable)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "schema validation preserves the source-version migration dispatch in one ordered transaction"
+)]
 fn validate(database: &Database) -> Result<(), RepositoryError> {
     let transaction = database
         .begin_read()

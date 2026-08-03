@@ -2,6 +2,10 @@
     clippy::float_cmp,
     reason = "compatibility vectors intentionally assert exact f32 results"
 )]
+#![expect(
+    clippy::too_many_lines,
+    reason = "Color Contrast descriptor and compilation coverage keeps the native Lab contract auditable together."
+)]
 
 use rusttable_color::{
     Adaptation, AdaptationMethod, AlphaTransform, BlackPointCompensation, BuiltinSpace,

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Luminance matrix multiplication preserves the documented native f32 operation order; FMA would change parity bits."
+)]
+
 use super::{ColorMathError, finite3};
 use crate::BuiltinSpace;
 

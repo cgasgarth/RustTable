@@ -121,7 +121,7 @@ impl RawDimensions {
     /// # Errors
     ///
     /// Returns [`RawFrameValidationError::ZeroDimensions`] for a zero axis.
-    pub fn new(width: u32, height: u32) -> Result<Self, RawFrameValidationError> {
+    pub const fn new(width: u32, height: u32) -> Result<Self, RawFrameValidationError> {
         if width == 0 || height == 0 {
             return Err(RawFrameValidationError::ZeroDimensions);
         }

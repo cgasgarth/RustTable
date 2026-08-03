@@ -42,12 +42,12 @@ impl TileRect {
     }
 
     #[must_use]
-    pub fn end_x(self) -> Option<u32> {
+    pub const fn end_x(self) -> Option<u32> {
         self.x.checked_add(self.width)
     }
 
     #[must_use]
-    pub fn end_y(self) -> Option<u32> {
+    pub const fn end_y(self) -> Option<u32> {
         self.y.checked_add(self.height)
     }
 
@@ -62,7 +62,7 @@ impl TileRect {
     }
 
     #[must_use]
-    pub fn contains(self, other: Self) -> bool {
+    pub const fn contains(self, other: Self) -> bool {
         let Some(self_end_x) = self.end_x() else {
             return false;
         };
@@ -153,7 +153,7 @@ impl EdgeOverlap {
     }
 
     #[must_use]
-    pub fn saturating_add(self, other: Self) -> Self {
+    pub const fn saturating_add(self, other: Self) -> Self {
         Self::new(
             self.left.saturating_add(other.left),
             self.top.saturating_add(other.top),

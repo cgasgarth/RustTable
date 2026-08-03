@@ -68,6 +68,10 @@ pub fn resolve_raw_value(
     offset: f64,
     expression: &str,
 ) -> Option<f64> {
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The source calculator evaluates the displayed slider value in multiply/add order."
+    )]
     let displayed_value = raw_value * factor + offset;
     let resolved_displayed_value = solve(displayed_value, Some(expression));
     if !resolved_displayed_value.is_finite() {

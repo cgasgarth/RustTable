@@ -110,7 +110,10 @@ impl GpuRuntime {
     ///
     /// The request carries the immutable response LUT and full-image origin,
     /// so this is the same coordinate and response contract as `GrainPlan`.
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the grain GPU path keeps LUT upload, parameter packing, dispatch, and readback ordered"
+    )]
     pub fn execute_grain_point(
         &self,
         request: GrainPointRequest<'_>,
@@ -263,7 +266,11 @@ impl GpuRuntime {
     }
 }
 
-fn storage_binding(binding: u32, read_only: bool, minimum: u64) -> wgpu::BindGroupLayoutEntry {
+const fn storage_binding(
+    binding: u32,
+    read_only: bool,
+    minimum: u64,
+) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::COMPUTE,

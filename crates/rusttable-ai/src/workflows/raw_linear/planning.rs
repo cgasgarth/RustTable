@@ -12,7 +12,7 @@ use super::types::{
     RawLinearTile, RawOperationKind, RawOperationSpec, edit_identity,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RawLinearPlanError {
     UnsupportedSource,
     XTransPatternRequired,
@@ -35,13 +35,13 @@ pub enum RawLinearPlanError {
     ProviderUnqualified,
 }
 
-pub(crate) struct PreparedSource {
+pub struct PreparedSource {
     pub dimensions: ImageDimensions,
     pub pixels: Vec<[f32; 3]>,
     pub color_plan: TransformPlan,
 }
 
-pub(crate) fn compile(
+pub fn compile(
     request: &RawLinearDenoiseRequest,
     descriptor: &RawLinearModelDescriptor,
 ) -> Result<(RawLinearPlan, PreparedSource), RawLinearPlanError> {
@@ -199,7 +199,7 @@ fn select_operations(
     Ok((included, excluded))
 }
 
-fn default_operation(kind: RawOperationKind) -> RawOperationSpec {
+const fn default_operation(kind: RawOperationKind) -> RawOperationSpec {
     let id = match kind {
         RawOperationKind::RawPrepare => 0x5241_5750_5245_5041,
         RawOperationKind::Demosaic => 0x4445_4d4f_5341_4943,

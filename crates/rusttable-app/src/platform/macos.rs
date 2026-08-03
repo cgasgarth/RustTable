@@ -77,7 +77,7 @@ pub enum MacApplicationCommand {
 
 impl MacApplicationCommand {
     /// Routes the native quit command through the lifecycle policy.
-    pub fn route(self, bridge: &mut MacApplicationBridge) -> MacTerminationDecision {
+    pub const fn route(self, bridge: &mut MacApplicationBridge) -> MacTerminationDecision {
         match self {
             Self::Quit => bridge.request_termination(false, true),
             Self::About
@@ -124,7 +124,7 @@ pub struct MacOpenRequest {
 }
 
 impl MacOpenRequest {
-    fn new(generation: u64, targets: Vec<MacOpenTarget>) -> Self {
+    const fn new(generation: u64, targets: Vec<MacOpenTarget>) -> Self {
         Self {
             generation,
             targets,
@@ -194,7 +194,7 @@ impl MacOpenDelivery {
 
     /// Returns the request for immediate dispatch, if the application is ready.
     #[must_use]
-    pub fn request(&self) -> Option<&MacOpenRequest> {
+    pub const fn request(&self) -> Option<&MacOpenRequest> {
         self.request.as_ref()
     }
 
@@ -251,14 +251,14 @@ impl MacApplicationBridge {
     }
 
     /// Marks the bridge as shutting down. Later native callbacks are ignored safely.
-    pub fn mark_stopping(&mut self) {
+    pub const fn mark_stopping(&mut self) {
         if matches!(self.state, BridgeState::Starting | BridgeState::Ready) {
             self.state = BridgeState::Stopping;
         }
     }
 
     /// Marks the bridge stopped after the GTK application has left its main loop.
-    pub fn mark_stopped(&mut self) {
+    pub const fn mark_stopped(&mut self) {
         self.state = BridgeState::Stopped;
     }
 
@@ -342,7 +342,7 @@ impl MacApplicationBridge {
 
     /// Selects the Dock/activation window action without creating duplicate main windows.
     #[must_use]
-    pub fn window_action(
+    pub const fn window_action(
         &self,
         event: MacApplicationEvent,
         visible_windows: usize,
@@ -364,7 +364,7 @@ impl MacApplicationBridge {
     }
 
     /// Applies the coordinated termination policy before GTK is allowed to quit.
-    pub fn request_termination(
+    pub const fn request_termination(
         &mut self,
         durable_jobs: bool,
         user_confirmed: bool,
@@ -536,7 +536,7 @@ mod tests {
         let catalog = files.file("library.redb");
         let mut bridge = MacApplicationBridge::default();
 
-        let queued = bridge.receive_paths([image.clone(), image.clone(), catalog.clone()]);
+        let queued = bridge.receive_paths([image.clone(), image, catalog]);
         assert!(queued.queued());
         assert_eq!(queued.request(), None);
         assert_eq!(queued.rejected(), &[MacOpenRejection::Duplicate]);

@@ -113,7 +113,7 @@ pub fn validate_relative_components(
     Ok(())
 }
 
-fn is_illegal(character: char) -> bool {
+const fn is_illegal(character: char) -> bool {
     matches!(
         character,
         '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
@@ -161,7 +161,7 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> &str {
     &value[..end]
 }
 
-pub(crate) fn slugify(value: &str) -> String {
+pub fn slugify(value: &str) -> String {
     let mut output = String::new();
     let mut separator = false;
     for (character, _) in value.nfc() {

@@ -2,8 +2,15 @@
 //!
 //! The recovery-strength fallback maps `src/libs/neural_restore.c:4244-4246`.
 
-#![allow(clippy::cast_precision_loss, clippy::items_after_statements)]
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::cast_precision_loss,
+    clippy::items_after_statements,
+    reason = "The RGB-denoise model preserves source fallback ordering and native numeric projection."
+)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The RGB-denoise model keeps qualification and planning failures at the typed AI boundary."
+)]
 
 use std::fmt;
 
@@ -49,7 +56,6 @@ pub struct RgbDenoiseModelOption {
 }
 
 impl RgbDenoiseModelOption {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         hash: ModelHash,
         label: impl Into<String>,
@@ -136,7 +142,7 @@ pub struct RgbDenoiseSnapshot {
 
 impl RgbDenoiseSnapshot {
     #[must_use]
-    pub fn unavailable(selection: PhotoSelection) -> Self {
+    pub const fn unavailable(selection: PhotoSelection) -> Self {
         Self {
             generation: 0,
             selection,
@@ -149,7 +155,7 @@ impl RgbDenoiseSnapshot {
     }
 
     #[must_use]
-    pub fn available(
+    pub const fn available(
         selection: PhotoSelection,
         dimensions: (u32, u32),
         models: Vec<RgbDenoiseModelOption>,
@@ -173,7 +179,7 @@ impl RgbDenoiseSnapshot {
         self.generation
     }
     #[must_use]
-    pub fn with_generation(mut self, generation: u64) -> Self {
+    pub const fn with_generation(mut self, generation: u64) -> Self {
         self.generation = generation;
         self
     }
@@ -297,7 +303,10 @@ pub struct RgbDenoisePlan {
 }
 
 impl RgbDenoisePlan {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The RGB-denoise plan keeps model, profile, provider, strength, and policy inputs explicit."
+    )]
     pub fn build(
         generation: u64,
         model: ModelHash,
@@ -674,7 +683,7 @@ impl Default for RgbDenoiseViewModel {
 
 impl RgbDenoiseViewModel {
     #[must_use]
-    pub fn unavailable() -> Self {
+    pub const fn unavailable() -> Self {
         Self {
             snapshot: RgbDenoiseSnapshot::unavailable(PhotoSelection::none()),
             model: None,

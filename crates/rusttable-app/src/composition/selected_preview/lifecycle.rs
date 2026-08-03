@@ -3,7 +3,7 @@ use rusttable_pixelpipe::{CancellationReason, CancellationScope, PipelineGenerat
 
 /// Monotonic identity for one selected-photo preview request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct PreviewSelectionToken {
+pub struct PreviewSelectionToken {
     generation: u64,
     photo_id: PhotoId,
     edit_id: EditId,
@@ -12,14 +12,14 @@ pub(crate) struct PreviewSelectionToken {
 
 /// Tracks which asynchronous preview result is still allowed to update the UI.
 #[derive(Debug, Default)]
-pub(crate) struct PreviewLifecycle {
+pub struct PreviewLifecycle {
     next_generation: u64,
     active: Option<PreviewSelectionToken>,
     active_cancellation: Option<CancellationScope>,
 }
 
 impl PreviewLifecycle {
-    pub(crate) fn begin(
+    pub fn begin(
         &mut self,
         photo_id: PhotoId,
         edit_id: EditId,
@@ -43,7 +43,7 @@ impl PreviewLifecycle {
         token
     }
 
-    pub(crate) fn invalidate(&mut self, reason: CancellationReason) {
+    pub fn invalidate(&mut self, reason: CancellationReason) {
         self.active = None;
         if let Some(cancellation) = self.active_cancellation.take() {
             cancellation.cancel(reason);
@@ -51,23 +51,17 @@ impl PreviewLifecycle {
     }
 
     #[must_use]
-    pub(crate) fn is_current(&self, token: PreviewSelectionToken) -> bool {
-        match self.active {
-            Some(active) => {
-                active.generation == token.generation
-                    && active.photo_id == token.photo_id
-                    && active.edit_id == token.edit_id
-                    && active.edit_revision == token.edit_revision
-            }
-            None => false,
-        }
+    pub fn is_current(&self, token: PreviewSelectionToken) -> bool {
+        self.active.is_some_and(|active| {
+            active.generation == token.generation
+                && active.photo_id == token.photo_id
+                && active.edit_id == token.edit_id
+                && active.edit_revision == token.edit_revision
+        })
     }
 
     #[must_use]
-    pub(crate) fn cancellation_scope(
-        &self,
-        token: PreviewSelectionToken,
-    ) -> Option<CancellationScope> {
+    pub fn cancellation_scope(&self, token: PreviewSelectionToken) -> Option<CancellationScope> {
         if self.is_current(token) {
             self.active_cancellation.clone()
         } else {
@@ -78,19 +72,19 @@ impl PreviewLifecycle {
 
 impl PreviewSelectionToken {
     #[must_use]
-    pub(crate) const fn generation(self) -> u64 {
+    pub const fn generation(self) -> u64 {
         self.generation
     }
 
-    pub(crate) const fn photo_id(self) -> PhotoId {
+    pub const fn photo_id(self) -> PhotoId {
         self.photo_id
     }
 
-    pub(crate) const fn edit_id(self) -> EditId {
+    pub const fn edit_id(self) -> EditId {
         self.edit_id
     }
 
-    pub(crate) const fn edit_revision(self) -> Revision {
+    pub const fn edit_revision(self) -> Revision {
         self.edit_revision
     }
 }

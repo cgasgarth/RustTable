@@ -5,7 +5,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const VIBRANCE_PARAMETERS: [&str; 1] = ["amount"];
 
-pub(crate) fn compile_vibrance(
+pub fn compile_vibrance(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &VIBRANCE_PARAMETERS)?;

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Soften arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! CPU port of Darktable's RGB Orton soft-focus operation from
 //! `src/iop/soften.c`, using the retained `src/common/box_filters.h/.cc` and
 //! `src/common/colorspaces.h` as behavioral oracles.
@@ -274,7 +279,7 @@ impl SoftenPixel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SoftenPlan {
     config: SoftenConfig,
     dimensions: RasterDimensions,
@@ -339,7 +344,7 @@ impl SoftenPlan {
             .and_then(|next| radius.checked_mul(next))
             .and_then(|value| value.checked_mul(BOX_ITERATIONS))
             .and_then(|value| value.checked_add(2))
-            .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: ReconstructionBudget::default().maximum_bytes(),
             })?;
@@ -521,18 +526,18 @@ impl SoftenPlan {
     {
         let width = usize::try_from(dimensions.width()).expect("validated width fits usize");
         let height = usize::try_from(dimensions.height()).expect("validated height fits usize");
-        let float_count = input_len.checked_mul(SOFTEN_CHANNELS).ok_or(
+        let float_count = input_len.checked_mul(SOFTEN_CHANNELS).ok_or_else(|| {
             OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: ReconstructionBudget::default().maximum_bytes(),
-            },
-        )?;
-        let required_bytes = float_count.checked_mul(std::mem::size_of::<f32>()).ok_or(
-            OperationExecutionError::MemoryBudgetExceeded {
+            }
+        })?;
+        let required_bytes = float_count
+            .checked_mul(std::mem::size_of::<f32>())
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: ReconstructionBudget::default().maximum_bytes(),
-            },
-        )?;
+            })?;
         let mut blurred = Vec::new();
         blurred.try_reserve_exact(float_count).map_err(|_| {
             OperationExecutionError::AllocationFailed {
@@ -702,10 +707,9 @@ fn adjust_rgb(
 }
 
 /// Direct source port of `colorspaces.h::rgb2hsl`.
-#[allow(
+#[expect(
     clippy::excessive_precision,
     clippy::float_cmp,
-    clippy::manual_midpoint,
     reason = "the retained C source fixes these f32 operations and exact comparisons"
 )]
 fn rgb_to_hsl(rgb: [f32; 3]) -> (f32, f32, f32) {

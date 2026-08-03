@@ -43,6 +43,10 @@ fn graph(operations: Vec<Operation>) -> CompiledOperationGraph {
     CompiledOperationGraph::compile(&edit).expect("registered graph")
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived bilateral fixture arithmetic order"
+)]
 fn image() -> RgbaF32Image {
     let dimensions = RasterDimensions::new(8, 8).expect("dimensions");
     let pixels = (0_u16..64)

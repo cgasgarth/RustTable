@@ -584,10 +584,10 @@ impl RgbAiPlan {
         self.tiles_receipt
     }
 
-    pub(crate) fn output_transform(&self) -> &TransformPlan {
+    pub(crate) const fn output_transform(&self) -> &TransformPlan {
         &self.output_transform
     }
-    pub(crate) fn input_transform(&self) -> &TransformPlan {
+    pub(crate) const fn input_transform(&self) -> &TransformPlan {
         &self.input_transform
     }
     pub(crate) fn plan_hash(&self) -> Result<[u8; 32], RgbAiPlanError> {
@@ -765,6 +765,10 @@ fn build_tiles(
     Ok(tiles)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined luminance threshold accumulation order"
+)]
 fn shadow_decision(
     converted: &[[f32; 3]],
     dimensions: ImageDimensions,
@@ -877,6 +881,10 @@ impl fmt::Display for ExtendedSrgbError {
 
 impl std::error::Error for ExtendedSrgbError {}
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "preserve the source-defined extended sRGB transfer equation order"
+)]
 pub fn extended_srgb_encode(value: f32) -> Result<f32, ExtendedSrgbError> {
     if !value.is_finite() {
         return Err(ExtendedSrgbError::NonFinite);
@@ -913,7 +921,7 @@ pub fn extended_srgb_decode(value: f32) -> Result<f32, ExtendedSrgbError> {
         .ok_or(ExtendedSrgbError::Overflow)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RgbAiPlanError {
     Manifest(RgbAiManifestError),
     Policy(PolicyError),

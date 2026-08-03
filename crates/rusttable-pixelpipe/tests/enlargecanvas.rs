@@ -107,6 +107,10 @@ fn graph(operations: Vec<Operation>) -> CompiledOperationGraph {
     CompiledOperationGraph::compile(&edit).expect("registered graph")
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived Enlarge Canvas fixture arithmetic order"
+)]
 fn input(width: u32, height: u32) -> RgbaF32Image {
     let dimensions = RasterDimensions::new(width, height).expect("nonzero dimensions");
     let pixels = (0..dimensions.pixel_count())
@@ -135,7 +139,7 @@ fn snapshot_for(color: CanvasColor) -> CpuPixelpipeSnapshot {
     )
 }
 
-fn expected_fill(color: CanvasColor) -> [f32; 3] {
+const fn expected_fill(color: CanvasColor) -> [f32; 3] {
     match color {
         CanvasColor::Green => [0.0, 1.0, 0.0],
         CanvasColor::Red => [1.0, 0.0, 0.0],
@@ -192,6 +196,10 @@ fn all_five_native_colors_fill_opaque_canvas_and_preserve_source_rgba() {
 }
 
 #[test]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Enlarge Canvas mask blend arithmetic order"
+)]
 fn enlarged_mask_uses_source_placement_and_zero_coverage_on_canvas() {
     let masked_operation_id = 21_u128;
     let source = input(2, 1);
@@ -238,6 +246,10 @@ fn enlarged_mask_uses_source_placement_and_zero_coverage_on_canvas() {
 }
 
 #[test]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Enlarge Canvas frame-mask blend arithmetic order"
+)]
 fn frame_evaluator_preserves_right_bottom_placement_for_a_following_masked_operation() {
     let masked_operation_id = OperationId::new(31).expect("operation ID");
     let dimensions = RasterDimensions::new(2, 1).expect("dimensions");

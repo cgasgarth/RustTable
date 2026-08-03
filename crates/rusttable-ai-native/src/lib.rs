@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The AI runtime boundary documents failures in its shared typed service error."
+)]
 #![doc = "Typed ONNX Runtime boundary for `RustTable` AI services."]
 
 use std::fmt;
@@ -77,7 +80,7 @@ pub struct GraphMetadata {
 
 impl GraphMetadata {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         ir_version: u32,
         opset: u32,
         operators: Vec<String>,

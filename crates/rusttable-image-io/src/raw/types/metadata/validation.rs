@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "RAW metadata matrix elimination preserves the reviewed native arithmetic order."
+)]
+
 use super::super::{
     RawCfa, RawColorMatrix, RawDimensions, RawIlluminant, RawLevelPattern, RawOrientation,
     RawPlaneLayout, RawRect,
@@ -9,7 +14,10 @@ use super::{
     RawNoiseProfile, choose_optional, hash_value, section_status,
 };
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "calibration normalization keeps matrix ranking, precedence, conflicts, and section status in source-defined order"
+)]
 pub(super) fn normalize_calibration(
     frame_matrices: &[RawColorMatrix],
     frame_white_balance: &[Option<f32>],
@@ -300,7 +308,10 @@ fn matrix_rank_condition(matrix: &RawCalibrationMatrix) -> (u8, f64) {
     (u8::try_from(rank).unwrap_or(3), maximum / minimum)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "geometry validation receives each independent evidence stream so every finding retains its source"
+)]
 pub(super) fn validate_geometry(
     dimensions: RawDimensions,
     active: RawRect,
@@ -431,6 +442,10 @@ pub(super) fn normalize_cfa_phase(
     *phase_y = 0;
 }
 
+#[expect(
+    clippy::suspicious_operation_groupings,
+    reason = "Rectangle containment compares the inner extent against the outer extent."
+)]
 pub(super) fn rect_contains(outer: RawRect, inner: RawRect) -> bool {
     inner.x >= outer.x
         && inner.y >= outer.y

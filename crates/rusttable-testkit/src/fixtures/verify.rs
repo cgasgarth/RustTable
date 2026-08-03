@@ -34,7 +34,7 @@ impl FixtureRepository {
     }
 
     #[must_use]
-    pub fn manifest(&self) -> &FixtureManifest {
+    pub const fn manifest(&self) -> &FixtureManifest {
         &self.manifest
     }
 
@@ -255,7 +255,7 @@ fn collect_governed_files(
         let path = entry.path();
         let name = entry.file_name();
         if name.to_string_lossy().starts_with('.') {
-            return Err(VerificationError::HiddenFile { path: path.clone() });
+            return Err(VerificationError::HiddenFile { path });
         }
         let file_type = entry.file_type().map_err(|error| VerificationError::Io {
             path: path.clone(),

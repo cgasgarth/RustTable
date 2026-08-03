@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::any::Any;
 use std::sync::Arc;
 
@@ -72,6 +70,11 @@ impl ValueDescriptor {
         self.cacheable
     }
 
+    /// Returns the resident and auxiliary bytes without overflowing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CacheError::CostOverflow`] if the accounting sum exceeds `u64`.
     pub fn total_bytes(self) -> Result<u64, CacheError> {
         self.resident_bytes
             .checked_add(self.auxiliary_bytes)
@@ -82,6 +85,12 @@ impl ValueDescriptor {
 /// Validation and accounting contract for values that may be published.
 pub trait CacheValue: Any + Send + Sync + 'static {
     fn descriptor(&self) -> ValueDescriptor;
+
+    /// Validates the value before cache publication.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded diagnostic when the value cannot be safely cached.
     fn validate(&self) -> Result<(), String>;
 }
 
@@ -95,6 +104,11 @@ impl CacheValue for RgbaF32Image {
         ValueDescriptor::new(ValueKind::Image, bytes, 0, CreationCost::Expensive, true)
     }
 
+    /// Validates that every packed component is finite.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any image component is non-finite.
     fn validate(&self) -> Result<(), String> {
         if self.pixels().iter().all(|pixel| {
             pixel.red().is_finite()

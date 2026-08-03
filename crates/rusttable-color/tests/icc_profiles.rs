@@ -140,7 +140,7 @@ fn malformed_offsets_overlaps_and_profile_ids_are_rejected_explicitly() {
         Err(IccParseError::InvalidTagRange(sig(*b"rXYZ")))
     );
 
-    let mut overlap = valid.clone();
+    let mut overlap = valid;
     let first_offset = get_u32(&overlap, 136);
     put_u32(&mut overlap, 148, first_offset + 4);
     assert!(matches!(
@@ -345,7 +345,12 @@ struct ProfileBuilder {
 }
 
 impl ProfileBuilder {
-    fn new(version: u8, class: [u8; 4], data_space: [u8; 4], connection_space: [u8; 4]) -> Self {
+    const fn new(
+        version: u8,
+        class: [u8; 4],
+        data_space: [u8; 4],
+        connection_space: [u8; 4],
+    ) -> Self {
         Self {
             version,
             class,
@@ -435,7 +440,11 @@ fn gamma_curve(gamma: f32) -> Vec<u8> {
     let mut data = vec![0; 14];
     data[..4].copy_from_slice(b"curv");
     put_u32(&mut data, 8, 1);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "ICC fixture generation intentionally encodes bounded positive gamma into the u16 table format."
+    )]
     put_u16(&mut data, 12, (gamma * 256.0).round() as u16);
     data
 }
@@ -597,11 +606,11 @@ fn profile_md5(bytes: &[u8]) -> [u8; 16] {
     context.finalize().0
 }
 
-fn sig(value: [u8; 4]) -> IccSignature {
+const fn sig(value: [u8; 4]) -> IccSignature {
     IccSignature::from_bytes(value)
 }
 
-fn align4(value: usize) -> usize {
+const fn align4(value: usize) -> usize {
     (value + 3) & !3
 }
 
@@ -617,7 +626,10 @@ fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
     bytes[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "ICC fixture generation intentionally narrows bounded fixed-point values to the serialized i32 format."
+)]
 fn put_fixed(bytes: &mut [u8], offset: usize, value: f32) {
     let fixed = (f64::from(value) * 65_536.0).round() as i32;
     bytes[offset..offset + 4].copy_from_slice(&fixed.to_be_bytes());

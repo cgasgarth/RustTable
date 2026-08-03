@@ -8,8 +8,11 @@ use super::model::{
     ParameterReflection, ShaderError, ShaderReflection, SourceSpanAlias,
 };
 
-#[allow(clippy::too_many_lines)]
-pub(crate) fn validate_and_reflect(
+#[expect(
+    clippy::too_many_lines,
+    reason = "WGSL validation, layout reflection, and source-span mapping form one ABI contract"
+)]
+pub fn validate_and_reflect(
     alias: &str,
     source: &str,
     line_aliases: &[SourceSpanAlias],

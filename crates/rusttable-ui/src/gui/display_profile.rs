@@ -73,7 +73,7 @@ impl DisplayProfileBanner {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Label {
+    pub const fn widget(&self) -> &gtk4::Label {
         &self.label
     }
 
@@ -113,7 +113,7 @@ impl Default for DisplayProfileBanner {
     }
 }
 
-fn provider_name(provider: DisplayProvider) -> &'static str {
+const fn provider_name(provider: DisplayProvider) -> &'static str {
     match provider {
         DisplayProvider::Colord => "colord",
         DisplayProvider::X11 => "x11",

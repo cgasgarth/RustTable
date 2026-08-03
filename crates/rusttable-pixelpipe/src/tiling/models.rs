@@ -107,7 +107,7 @@ impl MemoryEstimate {
         &self.components
     }
     #[must_use]
-    pub fn dominant(&self) -> Option<&DominantResource> {
+    pub const fn dominant(&self) -> Option<&DominantResource> {
         self.dominant.as_ref()
     }
 }

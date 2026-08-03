@@ -95,7 +95,10 @@ pub struct ColorHarmonizerParametersV1 {
 
 impl ColorHarmonizerParametersV1 {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The constructor preserves the native v1 field order."
+    )]
     pub const fn new(
         rule: ColorHarmonizerRule,
         anchor_hue: f32,
@@ -187,7 +190,7 @@ impl ColorHarmonizerParametersV1 {
     }
 }
 
-fn read_array(bytes: &[u8], start: usize) -> [u8; 4] {
+const fn read_array(bytes: &[u8], start: usize) -> [u8; 4] {
     [
         bytes[start],
         bytes[start + 1],
@@ -231,7 +234,7 @@ impl ColorHarmonizerHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ColorHarmonizerParametersV1, ColorHarmonizerCodecError> {
+    pub const fn current(&self) -> Result<ColorHarmonizerParametersV1, ColorHarmonizerCodecError> {
         match self {
             Self::V1(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => {

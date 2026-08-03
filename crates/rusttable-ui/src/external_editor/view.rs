@@ -1,7 +1,5 @@
 //! GTK4 projection for the typed external-editor state.
 
-#![allow(clippy::missing_panics_doc)]
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -68,7 +66,10 @@ pub struct ExternalEditorPanel {
 
 impl ExternalEditorPanel {
     #[must_use]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The external-editor panel keeps its source-ordered GTK hierarchy and controls together."
+    )]
     pub fn new() -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
         root.set_widget_name("external-editors");
@@ -243,7 +244,7 @@ impl ExternalEditorPanel {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 

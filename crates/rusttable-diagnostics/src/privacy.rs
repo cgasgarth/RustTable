@@ -36,7 +36,7 @@ impl PrivacyClass {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum FieldValue {
+pub enum FieldValue {
     Text(String),
     Integer(i64),
     Unsigned(u64),
@@ -47,8 +47,8 @@ pub(crate) enum FieldValue {
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct DiagnosticField {
-    pub(crate) key: String,
-    pub(crate) privacy: PrivacyClass,
+    pub key: String,
+    pub privacy: PrivacyClass,
     value: FieldValue,
 }
 
@@ -283,7 +283,7 @@ impl DiagnosticField {
         Ok((key.to_owned(), privacy))
     }
 
-    pub(crate) fn value(&self) -> &FieldValue {
+    pub(crate) const fn value(&self) -> &FieldValue {
         &self.value
     }
 }
@@ -336,7 +336,7 @@ impl Redactor {
     }
 }
 
-pub(crate) enum VisibleValue<'a> {
+pub enum VisibleValue<'a> {
     Text(&'a str),
     Integer(i64),
     Unsigned(u64),
@@ -345,7 +345,7 @@ pub(crate) enum VisibleValue<'a> {
     PrivateAlias(Alias),
 }
 
-pub(crate) fn visible_value<'a>(
+pub fn visible_value<'a>(
     field: &'a DiagnosticField,
     redactor: &Redactor,
 ) -> Option<VisibleValue<'a>> {

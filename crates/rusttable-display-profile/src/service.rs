@@ -124,7 +124,7 @@ impl DisplayProfileSnapshot {
     }
 
     #[must_use]
-    pub fn hdr_capability(&self) -> HdrCapability {
+    pub const fn hdr_capability(&self) -> HdrCapability {
         let hdr = self.descriptor.hdr();
         HdrCapability {
             supported: hdr.supported,
@@ -589,7 +589,7 @@ fn checked_label(label: String) -> Result<String, ServiceError> {
     }
 }
 
-fn stale_reason(error: crate::IccProfileError) -> StaleReason {
+const fn stale_reason(error: crate::IccProfileError) -> StaleReason {
     match error {
         crate::IccProfileError::Oversized => StaleReason::ProfileOversized,
         crate::IccProfileError::UnsupportedDeviceLink
@@ -598,7 +598,7 @@ fn stale_reason(error: crate::IccProfileError) -> StaleReason {
     }
 }
 
-fn stale_reason_from_probe(reason: &ProfileProbeFailure) -> StaleReason {
+const fn stale_reason_from_probe(reason: &ProfileProbeFailure) -> StaleReason {
     match reason {
         ProfileProbeFailure::ChangedDuringRead => StaleReason::ProfileChangedDuringRead,
         ProfileProbeFailure::Unsupported => StaleReason::ProfileUnsupported,

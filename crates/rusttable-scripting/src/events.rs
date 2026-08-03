@@ -64,7 +64,7 @@ pub struct EventBus {
 
 impl EventBus {
     #[must_use]
-    pub fn new(max_queue: usize) -> Self {
+    pub const fn new(max_queue: usize) -> Self {
         Self {
             queue: VecDeque::new(),
             next_sequence: 0,
@@ -75,7 +75,7 @@ impl EventBus {
     }
 
     #[must_use]
-    pub fn subscribe(&self, filter: EventFilter) -> EventSubscription {
+    pub const fn subscribe(&self, filter: EventFilter) -> EventSubscription {
         EventSubscription {
             cursor: self.next_sequence,
             filter,

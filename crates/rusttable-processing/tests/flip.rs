@@ -11,7 +11,10 @@ fn dimensions(width: u32, height: u32) -> RasterDimensions {
     RasterDimensions::new(width, height).expect("dimensions")
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "the test fixture intentionally maps source pixel ordinals into the native f32 domain"
+)]
 fn pixels(width: u32, height: u32) -> Vec<LinearRgb> {
     (0..height)
         .flat_map(|y| {

@@ -16,7 +16,10 @@ fn config(rx: u32, ry: u32, angle: f32) -> RotatePixelsConfig {
     RotatePixelsConfig::new(RotatePixelsParametersV1::new(rx, ry, angle)).expect("config")
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "the test fixture intentionally maps source pixel ordinals into the native f32 domain"
+)]
 fn pixels(width: u32, height: u32) -> Vec<LinearRgb> {
     (0..height)
         .flat_map(|y| {
@@ -32,7 +35,10 @@ fn pixels(width: u32, height: u32) -> Vec<LinearRgb> {
         .collect()
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "the test fixture intentionally maps source pixel ordinals into the native f32 domain"
+)]
 fn mask_values() -> Vec<f32> {
     (0..256).map(|value| value as f32 / 255.0).collect()
 }

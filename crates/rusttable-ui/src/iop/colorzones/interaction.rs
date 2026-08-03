@@ -6,9 +6,9 @@
 //! live picker colors into `LCh`. Callers supply normalized curve samples and
 //! picker coordinates, then translate the returned outcomes at those boundaries.
 
-#![allow(
+#![expect(
     clippy::missing_errors_doc,
-    reason = "interaction failures are represented by the documented typed error"
+    reason = "Interaction failures are represented by the documented typed error."
 )]
 
 use std::fmt;
@@ -159,7 +159,7 @@ pub struct ColorZonesBandOutcome {
 }
 
 /// Invalid input to the pure interaction controller.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorZonesInteractionError {
     Editor(ColorZonesEditorError),
     NonFiniteInput,
@@ -256,7 +256,7 @@ impl ColorZonesInteraction {
 
     /// Consumes the controller and returns its canonical editor state.
     #[must_use]
-    pub fn into_editor(self) -> ColorZonesEditorState {
+    pub const fn into_editor(self) -> ColorZonesEditorState {
         self.editor
     }
 
@@ -648,7 +648,7 @@ impl ColorZonesInteraction {
         }
         let linear_x = self.view_to_curve(self.mouse_x, self.offset_x);
         let linear_y = self.view_to_curve(self.mouse_y, self.offset_y);
-        self.zoom_factor = (self.zoom_factor * (1.0 - 0.1 * delta_y)).max(1.0);
+        self.zoom_factor = (self.zoom_factor * 0.1f32.mul_add(-delta_y, 1.0)).max(1.0);
         self.offset_x = linear_x - self.mouse_x / self.zoom_factor;
         self.offset_y = linear_y - self.mouse_y / self.zoom_factor;
         self.clamp_offsets();
@@ -707,7 +707,7 @@ impl ColorZonesInteraction {
         let nodes = [
             (picker.minimum - COLORZONES_PICKER_FEATHER, 0.5),
             (picker.minimum, 0.5 + increment),
-            (picker.mean, 0.5 + 2.0 * increment),
+            (picker.mean, 2.0f32.mul_add(increment, 0.5)),
             (picker.maximum, 0.5 + increment),
             (picker.maximum + COLORZONES_PICKER_FEATHER, 0.5),
         ];
@@ -822,7 +822,7 @@ impl ColorZonesInteraction {
         let bands = self.editor.active_count(self.editor.output_channel());
         let bands_u16 = u16::try_from(bands).expect("native Color Zones node count fits u16");
         let minimum = 0.2 / f32::from(bands_u16);
-        self.mouse_radius = (self.mouse_radius * (1.0 + 0.1 * delta_y)).clamp(minimum, 1.0);
+        self.mouse_radius = (self.mouse_radius * 0.1f32.mul_add(delta_y, 1.0)).clamp(minimum, 1.0);
     }
 
     fn clamp_offsets(&mut self) {
@@ -853,7 +853,7 @@ impl ColorZonesInteraction {
     }
 }
 
-fn validate_finite_pair(x: f32, y: f32) -> Result<(), ColorZonesInteractionError> {
+const fn validate_finite_pair(x: f32, y: f32) -> Result<(), ColorZonesInteractionError> {
     if x.is_finite() && y.is_finite() {
         Ok(())
     } else {
@@ -861,7 +861,9 @@ fn validate_finite_pair(x: f32, y: f32) -> Result<(), ColorZonesInteractionError
     }
 }
 
-fn validate_speed_multiplier(speed_multiplier: f32) -> Result<(), ColorZonesInteractionError> {
+const fn validate_speed_multiplier(
+    speed_multiplier: f32,
+) -> Result<(), ColorZonesInteractionError> {
     if speed_multiplier.is_finite() {
         Ok(())
     } else {
@@ -882,6 +884,10 @@ fn band_x(band: usize) -> Result<f32, ColorZonesInteractionError> {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "These bit-level expectations preserve the source floating-point movement order."
+)]
 mod tests {
     use super::{
         COLORZONES_BAND_NAMES, COLORZONES_DEFAULT_STEP, COLORZONES_PICKER_FEATHER,

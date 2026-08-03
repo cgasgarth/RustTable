@@ -15,7 +15,7 @@ use rusttable_ui::{
     ThumbnailIndicators,
 };
 
-fn id(value: u128) -> PhotoId {
+const fn id(value: u128) -> PhotoId {
     PhotoId::new(value).expect("test photo IDs are non-zero")
 }
 

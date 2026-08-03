@@ -13,7 +13,7 @@ struct StoredOrganization {
     labels: u8,
 }
 
-pub(crate) fn encode(state: &PhotoOrganizationState) -> Result<Vec<u8>, ()> {
+pub fn encode(state: &PhotoOrganizationState) -> Result<Vec<u8>, ()> {
     let labels = state
         .color_labels
         .iter()
@@ -28,7 +28,7 @@ pub(crate) fn encode(state: &PhotoOrganizationState) -> Result<Vec<u8>, ()> {
     .map_err(|_| ())
 }
 
-pub(crate) fn decode(photo_id: PhotoId, bytes: &[u8]) -> Result<PhotoOrganizationState, ()> {
+pub fn decode(photo_id: PhotoId, bytes: &[u8]) -> Result<PhotoOrganizationState, ()> {
     let stored: StoredOrganization = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != ORGANIZATION_FORMAT_VERSION {
         return Err(());

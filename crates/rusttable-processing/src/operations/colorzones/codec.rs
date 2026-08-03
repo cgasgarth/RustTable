@@ -524,7 +524,7 @@ impl fmt::Display for ColorZonesCodecError {
 
 impl std::error::Error for ColorZonesCodecError {}
 
-fn check_length(bytes: &[u8], expected: usize) -> Result<(), ColorZonesCodecError> {
+const fn check_length(bytes: &[u8], expected: usize) -> Result<(), ColorZonesCodecError> {
     if bytes.len() == expected {
         Ok(())
     } else {

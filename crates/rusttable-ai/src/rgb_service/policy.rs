@@ -99,7 +99,10 @@ pub struct MemoryReceipt {
 }
 
 impl MemoryReceipt {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preserve the explicit AI memory-accounting fields in the receipt"
+    )]
     pub fn checked(
         source_bytes: u64,
         mask_bytes: u64,
@@ -155,7 +158,7 @@ impl MemoryReceipt {
     }
 }
 
-pub(crate) fn selected_provider(policy: ProviderPolicy, providers: &[Provider]) -> Provider {
+pub fn selected_provider(policy: ProviderPolicy, providers: &[Provider]) -> Provider {
     match policy {
         ProviderPolicy::Cpu => Provider::Cpu,
         ProviderPolicy::Explicit(provider) => provider,

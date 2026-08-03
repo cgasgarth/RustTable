@@ -155,7 +155,7 @@ pub struct EncoderSettings {
 
 impl EncoderSettings {
     #[must_use]
-    pub fn new(format: rusttable_image::OutputFormat) -> Self {
+    pub const fn new(format: rusttable_image::OutputFormat) -> Self {
         Self {
             format,
             parameters: BTreeMap::new(),
@@ -174,7 +174,7 @@ impl EncoderSettings {
     }
 
     #[must_use]
-    pub fn parameters(&self) -> &BTreeMap<String, String> {
+    pub const fn parameters(&self) -> &BTreeMap<String, String> {
         &self.parameters
     }
 }
@@ -214,7 +214,7 @@ impl DestinationSettings {
     }
 
     #[must_use]
-    pub fn parameters(&self) -> &BTreeMap<String, String> {
+    pub const fn parameters(&self) -> &BTreeMap<String, String> {
         &self.parameters
     }
 }
@@ -267,13 +267,13 @@ impl DependencySnapshot {
     }
 
     #[must_use]
-    pub fn with_style_hash(mut self, hash: ContentHash) -> Self {
+    pub const fn with_style_hash(mut self, hash: ContentHash) -> Self {
         self.style_hash = Some(hash);
         self
     }
 
     #[must_use]
-    pub fn with_profile(mut self, profile: ProfileId) -> Self {
+    pub const fn with_profile(mut self, profile: ProfileId) -> Self {
         self.profile = Some(profile);
         self
     }
@@ -497,17 +497,17 @@ impl ExportRequest {
     }
 
     #[must_use]
-    pub fn encoder_settings(&self) -> &EncoderSettings {
+    pub const fn encoder_settings(&self) -> &EncoderSettings {
         &self.encoder_settings
     }
 
     #[must_use]
-    pub fn destination(&self) -> &DestinationSettings {
+    pub const fn destination(&self) -> &DestinationSettings {
         &self.destination
     }
 
     #[must_use]
-    pub fn dependencies(&self) -> Option<&DependencySnapshot> {
+    pub const fn dependencies(&self) -> Option<&DependencySnapshot> {
         self.dependencies.as_ref()
     }
 
@@ -522,37 +522,37 @@ impl ExportRequest {
     }
 
     #[must_use]
-    pub fn with_size(mut self, size: RenderSizeRequest) -> Self {
+    pub const fn with_size(mut self, size: RenderSizeRequest) -> Self {
         self.size = size;
         self
     }
 
     #[must_use]
-    pub fn with_pixel_encoding(mut self, encoding: PixelEncoding) -> Self {
+    pub const fn with_pixel_encoding(mut self, encoding: PixelEncoding) -> Self {
         self.pixel_encoding = encoding;
         self
     }
 
     #[must_use]
-    pub fn with_output_profile(mut self, profile: OutputProfile) -> Self {
+    pub const fn with_output_profile(mut self, profile: OutputProfile) -> Self {
         self.output_profile = profile;
         self
     }
 
     #[must_use]
-    pub fn with_style_hash(mut self, hash: ContentHash) -> Self {
+    pub const fn with_style_hash(mut self, hash: ContentHash) -> Self {
         self.style_hash = Some(hash);
         self
     }
 
     #[must_use]
-    pub fn with_quality(mut self, quality: PipelineQuality) -> Self {
+    pub const fn with_quality(mut self, quality: PipelineQuality) -> Self {
         self.quality = quality;
         self
     }
 
     #[must_use]
-    pub fn with_interpolation(mut self, interpolation: Interpolation) -> Self {
+    pub const fn with_interpolation(mut self, interpolation: Interpolation) -> Self {
         self.interpolation = interpolation;
         self
     }
@@ -573,13 +573,13 @@ impl ExportRequest {
     }
 
     #[must_use]
-    pub fn with_alpha_policy(mut self, alpha: AlphaPolicy) -> Self {
+    pub const fn with_alpha_policy(mut self, alpha: AlphaPolicy) -> Self {
         self.alpha = alpha;
         self
     }
 
     #[must_use]
-    pub fn with_dither_policy(mut self, dither: DitherPolicy) -> Self {
+    pub const fn with_dither_policy(mut self, dither: DitherPolicy) -> Self {
         self.dither = dither;
         self
     }
@@ -591,13 +591,13 @@ impl ExportRequest {
     }
 
     #[must_use]
-    pub fn with_priority(mut self, priority: ExportPriority) -> Self {
+    pub const fn with_priority(mut self, priority: ExportPriority) -> Self {
         self.priority = priority;
         self
     }
 
     #[must_use]
-    pub fn with_metadata_policy(mut self, metadata: MetadataPolicy) -> Self {
+    pub const fn with_metadata_policy(mut self, metadata: MetadataPolicy) -> Self {
         self.metadata = metadata;
         self
     }
@@ -950,7 +950,7 @@ impl ExportArtifact {
     }
 }
 
-pub(crate) fn opaque_identifier(value: &str) -> bool {
+pub fn opaque_identifier(value: &str) -> bool {
     !value.trim().is_empty()
         && !value.starts_with('.')
         && !value.contains('/')

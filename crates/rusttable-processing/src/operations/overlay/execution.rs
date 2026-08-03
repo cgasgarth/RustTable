@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Overlay arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use super::{
     OverlayAlpha, OverlayAnchor, OverlayAsset, OverlayChannel, OverlayConfig, OverlayEdge,
     OverlayInterpolation, OverlayProfilePolicy,
@@ -244,7 +249,7 @@ fn placement(
         ),
     ))
 }
-fn source_rgb(p: [f32; 4], c: OverlayChannel) -> [f32; 3] {
+const fn source_rgb(p: [f32; 4], c: OverlayChannel) -> [f32; 3] {
     match c {
         OverlayChannel::Rgb => [p[0], p[1], p[2]],
         OverlayChannel::Red => [p[0]; 3],
@@ -412,7 +417,7 @@ fn checked_coordinate(value: f64) -> Result<i64, OverlayExecutionError> {
     clippy::cast_precision_loss,
     reason = "sampling coordinates are bounded to the exact f64 integer range"
 )]
-fn f64_from_i64(value: i64) -> f64 {
+const fn f64_from_i64(value: i64) -> f64 {
     value as f64
 }
 #[expect(

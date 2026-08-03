@@ -159,7 +159,7 @@ fn rejects_missing_and_duplicate_instances() {
         edit.photo_id(),
         edit.base_photo_revision(),
         edit.revision(),
-        edit.operations().skip(1).cloned().collect::<Vec<_>>(),
+        edit.operations().skip(1).cloned(),
     )
     .unwrap();
     assert_eq!(
@@ -174,16 +174,13 @@ fn rejects_missing_and_duplicate_instances() {
         edit.photo_id(),
         edit.base_photo_revision(),
         edit.revision(),
-        edit.operations()
-            .cloned()
-            .chain(std::iter::once(operation(
-                40,
-                "rusttable.exposure",
-                true,
-                1.0,
-                [("stops", scalar(1.0))],
-            )))
-            .collect::<Vec<_>>(),
+        edit.operations().cloned().chain(std::iter::once(operation(
+            40,
+            "rusttable.exposure",
+            true,
+            1.0,
+            [("stops", scalar(1.0))],
+        ))),
     )
     .unwrap();
     assert_eq!(
@@ -421,16 +418,13 @@ fn replace_at(edit: &Edit, index: usize, replacement: &Operation) -> Edit {
         edit.photo_id(),
         edit.base_photo_revision(),
         edit.revision(),
-        edit.operations()
-            .enumerate()
-            .map(|(current, operation)| {
-                if current == index {
-                    replacement.clone()
-                } else {
-                    operation.clone()
-                }
-            })
-            .collect::<Vec<_>>(),
+        edit.operations().enumerate().map(|(current, operation)| {
+            if current == index {
+                replacement.clone()
+            } else {
+                operation.clone()
+            }
+        }),
     )
     .expect("valid replacement edit")
 }

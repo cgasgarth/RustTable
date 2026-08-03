@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
-
 use rusttable_color::{BlackPointCompensation, ColorEncoding};
 use rusttable_core::RenderSizeRequest;
 use serde_json::Value;
@@ -11,7 +9,11 @@ use crate::{
     RecipeError, RecipeId, RecipeRevision, RecipeTemplate,
 };
 
-pub(crate) fn parse_recipe(value: &Value) -> Result<ExportRecipe, RecipeError> {
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-derived recipe field decoding sequence together"
+)]
+pub fn parse_recipe(value: &Value) -> Result<ExportRecipe, RecipeError> {
     let id = RecipeId::new(string(value, "id")?)?;
     let revision = RecipeRevision::new(
         value
@@ -126,7 +128,7 @@ pub(crate) fn parse_recipe(value: &Value) -> Result<ExportRecipe, RecipeError> {
     })
 }
 
-pub(crate) fn string(value: &Value, field: &'static str) -> Result<String, RecipeError> {
+pub fn string(value: &Value, field: &'static str) -> Result<String, RecipeError> {
     value
         .get(field)
         .and_then(Value::as_str)

@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The AVIF encoder boundary documents failures in its shared typed error contract."
+)]
 #![doc = "Safe `RustTable` boundary for the pinned Rust AV1/AVIF encoder."]
 
 use std::fmt;
@@ -175,7 +178,7 @@ fn validate(
     Ok(())
 }
 
-fn matrix(value: Matrix) -> MatrixCoefficients {
+const fn matrix(value: Matrix) -> MatrixCoefficients {
     match value {
         Matrix::Bt601 => MatrixCoefficients::BT601,
         Matrix::Bt709 => MatrixCoefficients::BT709,
@@ -184,7 +187,7 @@ fn matrix(value: Matrix) -> MatrixCoefficients {
     }
 }
 
-fn range(options: Options) -> PixelRange {
+const fn range(options: Options) -> PixelRange {
     if options.full_range {
         PixelRange::Full
     } else {

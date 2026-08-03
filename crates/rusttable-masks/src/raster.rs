@@ -54,7 +54,7 @@ impl MaskRaster {
         &self.values
     }
     #[must_use]
-    pub fn memory_bytes(&self) -> usize {
+    pub const fn memory_bytes(&self) -> usize {
         self.values.len() * MASK_BYTES_PER_VALUE
     }
     #[must_use]
@@ -262,11 +262,11 @@ impl RasterMaskPublication {
         Ok(Self { descriptor, raster })
     }
     #[must_use]
-    pub fn descriptor(&self) -> &RasterMaskDescriptor {
+    pub const fn descriptor(&self) -> &RasterMaskDescriptor {
         &self.descriptor
     }
     #[must_use]
-    pub fn raster(&self) -> &MaskRaster {
+    pub const fn raster(&self) -> &MaskRaster {
         &self.raster
     }
 }
@@ -289,7 +289,7 @@ pub struct RasterMaskStore {
 
 impl RasterMaskStore {
     #[must_use]
-    pub fn new(budget: usize) -> Self {
+    pub const fn new(budget: usize) -> Self {
         Self {
             budget,
             resident: 0,
@@ -407,11 +407,11 @@ pub struct MaskLease {
 
 impl MaskLease {
     #[must_use]
-    pub fn descriptor(&self) -> &RasterMaskDescriptor {
+    pub const fn descriptor(&self) -> &RasterMaskDescriptor {
         &self.descriptor
     }
     #[must_use]
-    pub fn raster(&self) -> &MaskRaster {
+    pub const fn raster(&self) -> &MaskRaster {
         &self.raster
     }
 }

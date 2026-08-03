@@ -39,6 +39,10 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Bloom GTK boundary fixture keeps source hierarchy, slider order, and settled-action checks together."
+)]
 fn production_rail_mounts_source_order_and_routes_one_settled_action() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.bloom-boundary"),

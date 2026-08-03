@@ -5,6 +5,10 @@
     clippy::cast_precision_loss,
     clippy::float_cmp
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Sharpen test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 use rusttable_processing::RasterDimensions;
 use rusttable_processing::operations::sharpen::source_map::{
@@ -334,7 +338,7 @@ fn threshold_and_amount_follow_native_usm_equation() {
     let height = 11;
     let input = vec![SharpenPixel::new(0.0, 1.0, 2.0, 0.75); (width * height) as usize];
     let center = (height / 2 * width + width / 2) as usize;
-    let mut impulse = input.clone();
+    let mut impulse = input;
     impulse[center] = SharpenPixel::new(50.0, 1.0, 2.0, 0.75);
 
     let no_amount = plan(width, height, 1.0, 0.0, 0.0)
@@ -442,7 +446,7 @@ fn malformed_frames_scales_and_nonfinite_pixels_fail_closed() {
         Err(OperationExecutionError::DimensionsMismatch { .. })
     ));
 
-    let mut nonfinite = valid.clone();
+    let mut nonfinite = valid;
     nonfinite[4] = SharpenPixel::new(f32::NAN, 0.0, 0.0, 1.0);
     assert!(matches!(
         operation.execute(&nonfinite),

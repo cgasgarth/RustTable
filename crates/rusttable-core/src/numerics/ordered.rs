@@ -116,7 +116,7 @@ fn ordered_pair(
     }
 }
 
-fn normalized(value: f32, policy: NonFinitePolicy) -> Result<f32, NumericalError> {
+const fn normalized(value: f32, policy: NonFinitePolicy) -> Result<f32, NumericalError> {
     match policy {
         NonFinitePolicy::Reject if !value.is_finite() => Err(NumericalError::NonFinite),
         NonFinitePolicy::CanonicalizeNaN if value.is_nan() => Ok(f32::from_bits(0x7fc0_0000)),

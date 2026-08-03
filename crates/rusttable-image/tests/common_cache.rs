@@ -263,7 +263,8 @@ impl CacheCallbacks<u64, u64> for BlockingCallbacks {
     fn allocate(&self, key: &u64) -> Result<CacheAllocation<u64>, Self::Error> {
         let allocation = self.allocations.fetch_add(1, Ordering::SeqCst);
         if allocation == 0 {
-            if let Some(started) = self.started.lock().expect("started lock").take() {
+            let started = self.started.lock().expect("started lock").take();
+            if let Some(started) = started {
                 started.send(()).expect("signal allocator start");
             }
             self.proceed

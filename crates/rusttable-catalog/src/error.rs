@@ -77,7 +77,10 @@ pub enum CatalogError {
 }
 
 impl fmt::Display for CatalogError {
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the source-derived catalog error wording exhaustive and adjacent"
+    )]
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CatalogRevisionConflict { expected, actual } => {

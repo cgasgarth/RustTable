@@ -1,6 +1,9 @@
 //! Display-safe mask-manager state and its application-service port.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The mask-manager model exposes typed mutation and service failures at the UI boundary."
+)]
 
 use std::fmt;
 
@@ -137,7 +140,7 @@ impl MaskManagerSnapshot {
     }
 
     #[must_use]
-    pub fn available(
+    pub const fn available(
         generation: u64,
         groups: Vec<MaskGroupOption>,
         selected_group: Option<String>,

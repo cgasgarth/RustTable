@@ -18,7 +18,7 @@ struct StoredVirtualCopy {
     history: Vec<Vec<u8>>,
 }
 
-pub(crate) fn encode(copy: &VirtualCopy) -> Result<Vec<u8>, ()> {
+pub fn encode(copy: &VirtualCopy) -> Result<Vec<u8>, ()> {
     let history = copy
         .history()
         .map(crate::edit_codec::encode)
@@ -36,7 +36,7 @@ pub(crate) fn encode(copy: &VirtualCopy) -> Result<Vec<u8>, ()> {
     .map_err(|_| ())
 }
 
-pub(crate) fn decode(bytes: &[u8]) -> Result<VirtualCopy, ()> {
+pub fn decode(bytes: &[u8]) -> Result<VirtualCopy, ()> {
     let stored: StoredVirtualCopy = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != VIRTUAL_COPY_FORMAT_VERSION {
         return Err(());

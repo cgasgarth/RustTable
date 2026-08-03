@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::{fmt, num::NonZeroU64};
 
 use rusttable_color::{ColorEncoding, Precision};
@@ -34,6 +32,11 @@ impl PipelineGeneration {
     }
 
     /// Advances a request generation without wrapping into an older request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::Overflow`] when the generation reaches its
+    /// maximum value.
     pub fn next(self) -> Result<Self, GenerationError> {
         self.get()
             .checked_add(1)
@@ -219,7 +222,7 @@ impl ColorIdentity {
     ///
     /// Returns [`ContractError::UntaggedColor`] or
     /// [`ContractError::InvalidVersion`] when the identity is invalid.
-    pub fn new(encoding: ColorEncoding, planner_version: u16) -> Result<Self, ContractError> {
+    pub const fn new(encoding: ColorEncoding, planner_version: u16) -> Result<Self, ContractError> {
         if !encoding.is_explicit() {
             return Err(ContractError::UntaggedColor);
         }
@@ -263,7 +266,7 @@ impl PipelineInput {
     /// # Errors
     ///
     /// Returns [`ContractError::UntaggedColor`] for an unspecified color.
-    pub fn new(
+    pub const fn new(
         dimensions: ImageDimensions,
         format: PixelFormat,
         color: ColorIdentity,
@@ -460,7 +463,7 @@ impl ResourceMetadata {
     /// # Errors
     ///
     /// Returns [`ContractError::InvalidResourceMetadata`] for invalid alignment.
-    pub fn new(
+    pub const fn new(
         input_bytes: u64,
         output_bytes: u64,
         temporary_bytes: u64,
@@ -602,7 +605,7 @@ pub struct SnapshotDiff {
 }
 
 impl SnapshotDiff {
-    pub(crate) fn new(components: Vec<SnapshotDiffComponent>) -> Self {
+    pub(crate) const fn new(components: Vec<SnapshotDiffComponent>) -> Self {
         Self { components }
     }
 
@@ -621,14 +624,14 @@ impl SnapshotDiff {
     }
 }
 
-pub(crate) fn color_bytes(color: ColorIdentity, output: &mut Vec<u8>) {
+pub fn color_bytes(color: ColorIdentity, output: &mut Vec<u8>) {
     output.extend_from_slice(
         &postcard::to_allocvec(&color.encoding()).expect("color encoding is serializable"),
     );
     output.extend_from_slice(&color.planner_version().to_le_bytes());
 }
 
-pub(crate) fn format_bytes(format: PixelFormat, output: &mut Vec<u8>) {
+pub fn format_bytes(format: PixelFormat, output: &mut Vec<u8>) {
     output.push(sample_tag(format.sample_type()));
     output.push(channel_tag(format.channels()));
     output.push(alpha_tag(format.alpha()));
@@ -636,7 +639,7 @@ pub(crate) fn format_bytes(format: PixelFormat, output: &mut Vec<u8>) {
     output.push(storage_tag(format.storage()));
 }
 
-pub(crate) fn write_stack(stack: &OperationStackSnapshot, output: &mut Vec<u8>) {
+pub fn write_stack(stack: &OperationStackSnapshot, output: &mut Vec<u8>) {
     write_text(stack.template().name(), output);
     output.extend_from_slice(&stack.revision().to_le_bytes());
     for operation in stack.operations() {
@@ -719,7 +722,7 @@ const fn stage_tag(value: StackStage) -> u8 {
     }
 }
 
-pub(crate) fn precision_tag(value: Precision) -> u8 {
+pub const fn precision_tag(value: Precision) -> u8 {
     match value {
         Precision::F32 => 0,
         Precision::F64 => 1,

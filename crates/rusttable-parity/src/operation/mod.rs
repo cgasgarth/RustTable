@@ -1,5 +1,5 @@
-pub(crate) mod model;
+pub mod model;
 mod reference;
-pub(crate) mod scan;
-pub(crate) mod trust_anchor;
-pub(crate) mod validate;
+pub mod scan;
+pub mod trust_anchor;
+pub mod validate;

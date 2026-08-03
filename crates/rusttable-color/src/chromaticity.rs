@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Color conversion arithmetic preserves the documented native f32 operation order; FMA would change parity bits."
+)]
+
 use crate::{FiniteF32, FiniteF32Error, Matrix3, Primaries, WhitePoint};
 use std::fmt;
 

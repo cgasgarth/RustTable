@@ -38,7 +38,11 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    clippy::suboptimal_flops,
+    reason = "The GTK boundary fixture keeps source Color Correction hierarchy, callbacks, window-state, and geometry checks together."
+)]
 fn colorcorrection_uses_atomic_grid_and_gates_unpersistable_presets_without_showing_a_window() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.colorcorrection-boundary"),
@@ -428,7 +432,11 @@ fn colorcorrection_uses_atomic_grid_and_gates_unpersistable_presets_without_show
     settle_gtk();
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    clippy::suboptimal_flops,
+    reason = "The targetless GTK fixture keeps source grid/reset callback order, geometry, and window-state checks together."
+)]
 fn targetless_colorcorrection_grid_and_reset_callbacks_remain_available_without_showing_a_window() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.colorcorrection-template-boundary"),

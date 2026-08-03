@@ -3,7 +3,7 @@ use std::process::Command;
 
 use crate::{Result, run_process};
 
-pub(crate) fn run(root: &Path) -> Result {
+pub fn run(root: &Path) -> Result {
     match std::env::consts::OS {
         "macos" => run_process(
             "macOS distribution",

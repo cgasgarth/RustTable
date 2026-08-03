@@ -16,7 +16,7 @@ pub struct ExpandedShaderSource {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct SourceCatalog {
+pub struct SourceCatalog {
     sources: BTreeMap<String, String>,
 }
 

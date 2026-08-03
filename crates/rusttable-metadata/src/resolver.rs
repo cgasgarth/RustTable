@@ -86,17 +86,17 @@ pub enum MetadataAssertion {
 
 impl MetadataAssertion {
     #[must_use]
-    pub fn value(record: MetadataRecord) -> Self {
+    pub const fn value(record: MetadataRecord) -> Self {
         Self::Value(record)
     }
 
     #[must_use]
-    pub fn clear(key: MetadataKey, provenance: MetadataProvenance) -> Self {
+    pub const fn clear(key: MetadataKey, provenance: MetadataProvenance) -> Self {
         Self::Clear { key, provenance }
     }
 
     #[must_use]
-    pub fn key(&self) -> &MetadataKey {
+    pub const fn key(&self) -> &MetadataKey {
         match self {
             Self::Value(record) => record.key(),
             Self::Clear { key, .. } => key,
@@ -839,7 +839,7 @@ fn same_logical_source(clear: MetadataSource, value: MetadataSource) -> bool {
         )
 }
 
-fn strategy_rule(strategy: MetadataMergeStrategy) -> DecisionRule {
+const fn strategy_rule(strategy: MetadataMergeStrategy) -> DecisionRule {
     match strategy {
         MetadataMergeStrategy::SourcePriority => DecisionRule::SourcePriority,
         MetadataMergeStrategy::SetUnion => DecisionRule::SetUnion,
@@ -869,7 +869,7 @@ fn evidence_for_record(
     }
 }
 
-fn evidence_for_clear(
+const fn evidence_for_clear(
     provenance: &MetadataProvenance,
     disposition: EvidenceDisposition,
 ) -> DecisionEvidence {

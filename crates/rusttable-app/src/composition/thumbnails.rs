@@ -19,7 +19,7 @@ use rusttable_render::{CacheStore, ThumbnailMemoryCache};
 use rusttable_ui::GtkShell;
 
 #[derive(Debug)]
-pub(crate) struct ThumbnailLifecycle {
+pub struct ThumbnailLifecycle {
     generation: u64,
     requested: BTreeMap<PhotoId, (ThumbnailTarget, u64)>,
     published: BTreeMap<PhotoId, ThumbnailTarget>,
@@ -65,7 +65,7 @@ impl ThumbnailLifecycle {
         Arc::clone(&self.durable_cache)
     }
 
-    fn begin(&mut self) -> u64 {
+    const fn begin(&mut self) -> u64 {
         self.generation = self.generation.wrapping_add(1);
         self.generation
     }
@@ -96,7 +96,7 @@ impl ThumbnailLifecycle {
             && self.published.get(&target.photo_id) != Some(&target)
     }
 
-    pub(crate) fn invalidate(&mut self, photo_id: PhotoId) {
+    pub fn invalidate(&mut self, photo_id: PhotoId) {
         // Invalidate only the selected target. A shared worker may still be rendering visible
         // filmstrip neighbors, and those requests remain valid. Publication checks the exact
         // target/generation pair so a late result for this photo cannot restore stale pixels.

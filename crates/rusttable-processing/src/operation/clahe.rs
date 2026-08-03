@@ -5,9 +5,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const PARAMETERS: [&str; 2] = ["radius", "slope"];
 
-pub(crate) fn compile_clahe(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
+pub fn compile_clahe(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &PARAMETERS)?;
     let config = ClaheConfig::new(
         super::parameter_f64(operation, "radius", 64.0)?,

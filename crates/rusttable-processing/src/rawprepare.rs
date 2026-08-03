@@ -126,10 +126,10 @@ impl RawPreparePlan {
                     .map_err(|_| RawPrepareError::InvalidDimensions)
             })
             .transpose()?
-            .unwrap_or(raw.dimensions());
+            .unwrap_or_else(|| raw.dimensions());
         let cfa = config
             .active_area()
-            .map_or(raw.cfa(), |roi| raw.cfa().after_crop(roi));
+            .map_or_else(|| raw.cfa(), |roi| raw.cfa().after_crop(roi));
         let mut digest = Sha256::new();
         digest.update(RAWPREPARE_COMPATIBILITY_ID.as_bytes());
         digest.update(RAWPREPARE_SCHEMA_VERSION.to_le_bytes());

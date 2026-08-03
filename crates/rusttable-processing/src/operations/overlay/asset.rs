@@ -117,7 +117,7 @@ impl OverlayAsset {
     pub fn original_bytes(&self) -> &[u8] {
         &self.original_bytes
     }
-    pub fn memory_bytes(&self) -> usize {
+    pub const fn memory_bytes(&self) -> usize {
         self.pixels.len()
     }
 }
@@ -141,7 +141,7 @@ pub struct OverlayAssetStore {
     budget: usize,
 }
 impl OverlayAssetStore {
-    pub fn new(budget: usize) -> Self {
+    pub const fn new(budget: usize) -> Self {
         Self {
             assets: BTreeMap::new(),
             bytes: 0,

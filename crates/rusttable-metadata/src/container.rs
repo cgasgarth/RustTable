@@ -8,7 +8,7 @@ const JPEG_XL_BARE_SIGNATURE: [u8; 2] = [0xff, 0x0a];
 const JPEG_XL_CONTAINER_SIGNATURE: [u8; 12] =
     [0, 0, 0, 12, b'J', b'X', b'L', b' ', 0x0d, 0x0a, 0x87, 0x0a];
 
-pub(crate) fn exif_payload(
+pub fn exif_payload(
     format: InputFormat,
     source: &[u8],
     limits: MetadataLimits,
@@ -381,7 +381,7 @@ fn check_payload(payload: &[u8], limits: MetadataLimits) -> Result<(), MetadataI
     Ok(())
 }
 
-fn malformed(format: InputFormat, reason: &'static str) -> MetadataInputError {
+const fn malformed(format: InputFormat, reason: &'static str) -> MetadataInputError {
     MetadataInputError::MalformedContainer { format, reason }
 }
 

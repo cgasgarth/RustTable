@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "raw linear blending preserves source operation order"
+)]
+
 use sha2::{Digest, Sha256};
 
 use super::planning::{self, PreparedSource};
@@ -86,7 +91,7 @@ impl<'a> RawLinearDenoiseWorkflow<'a> {
 
         let (canonical, provider) = if request.strength().is_zero() {
             (
-                canonical_source.clone(),
+                canonical_source,
                 initial_provider(request.provider(), self.model.descriptor()),
             )
         } else {
@@ -371,7 +376,7 @@ fn fill_tile(
     Ok(output)
 }
 
-fn reflect(value: u32, limit: u32) -> u32 {
+const fn reflect(value: u32, limit: u32) -> u32 {
     if limit <= 1 {
         return 0;
     }

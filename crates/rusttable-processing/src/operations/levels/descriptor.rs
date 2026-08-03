@@ -151,7 +151,7 @@ fn enum_parameter(id: &str, tags: &[&str], default: &str) -> ParameterDescriptor
     }
 }
 
-fn point_tiling() -> TilingContract {
+const fn point_tiling() -> TilingContract {
     TilingContract {
         overlap_pixels: 0,
         alignment_pixels: 1,

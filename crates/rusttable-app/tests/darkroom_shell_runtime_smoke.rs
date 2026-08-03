@@ -93,6 +93,10 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source-ordered darkroom shell transition and GTK publication assertions together"
+)]
 fn app_shell_transition_paints_darkroom_titles() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.darkroom-shell-runtime"),
@@ -160,8 +164,9 @@ fn app_shell_transition_paints_darkroom_titles() {
         let published_revision = Rc::clone(&published_revision);
         move |settled| {
             let action = ColorZonesEditAction::from(settled);
-            match controller.borrow_mut().apply_colorzones(&action) {
-                Ok(outcome) => {
+            controller.borrow_mut().apply_colorzones(&action).map_or(
+                ColorZonesGtkHandlerOutcome::Rollback,
+                |outcome| {
                     action_shell.update_darkroom_module_stack_snapshot(
                         outcome.modules(),
                         outcome.revision(),
@@ -195,9 +200,8 @@ fn app_shell_transition_paints_darkroom_titles() {
                     ColorZonesGtkHandlerOutcome::Commit {
                         revision: outcome.revision(),
                     }
-                }
-                Err(_) => ColorZonesGtkHandlerOutcome::Rollback,
-            }
+                },
+            )
         }
     });
     shell.set_colorzones_action_handler(Some(colorzones_handler));
@@ -563,7 +567,11 @@ fn settle_next_gtk_frame() {
     );
 }
 
-#[allow(clippy::too_many_lines)] // Keep the source-ordered mounted editor contract in one runtime assertion.
+#[expect(
+    clippy::too_many_lines,
+    clippy::suboptimal_flops,
+    reason = "keep the source-ordered mounted editor contract and native geometry formulas in one runtime assertion"
+)]
 fn assert_mounted_colorzones_geometry_and_paint(
     shell: &GtkShell,
     root: &gtk4::Widget,
@@ -1285,8 +1293,13 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
     );
 }
 
-#[allow(clippy::too_many_lines)] // Keep the native frame geometry and interaction contract auditable together.
-#[allow(clippy::cast_precision_loss, clippy::float_cmp)] // GTK allocates geometry as f32; exact edge assertions are intentional.
+#[expect(
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    clippy::suboptimal_flops,
+    reason = "keep the native frame geometry formulas and exact GTK edge assertions auditable together"
+)]
 fn assert_frame_edge_controls(root: &gtk4::Widget) {
     let border = i32::from(DARKTABLE_DESKTOP_SPEC.layout.outer_border_px);
     let frame = find_widget(root, "workspace-frame").expect("workspace frame");

@@ -192,6 +192,10 @@ fn only_v1_migrates_directly_to_v2_and_future_history_stays_opaque() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The descriptor contract test checks source order and every intentionally deferred surface together."
+)]
 fn local_descriptor_preserves_source_order_without_claiming_shared_surfaces() {
     assert_eq!(COLOR_CONTRAST_NATIVE_NAME, "color contrast");
     assert_eq!(COLOR_CONTRAST_NATIVE_ALIASES, "saturation");
@@ -818,6 +822,10 @@ fn point_operation_is_tile_equivalent_with_deterministic_fourth_lane_adaptation(
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source-map test verifies every ported dependency and explicit deferral in one completeness contract."
+)]
 fn source_maps_inventory_ported_dependencies_and_explicit_deferrals() {
     let responsibilities = COLOR_CONTRAST_SOURCE_MAP
         .iter()

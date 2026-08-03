@@ -15,12 +15,12 @@ const MAGIC: [u8; 4] = [0x76, 0x2f, 0x31, 0x01];
 const KNOWN_FLAGS: u32 = 0x0000_1e00;
 const MULTIPART_FLAG: u32 = 0x0000_1000;
 
-pub(crate) struct Inspection {
+pub struct Inspection {
     pub header: ExrHeader,
     pub meta: MetaData,
 }
 
-pub(crate) fn inspect(bytes: &[u8], limits: ExrDecodeLimits) -> Result<Inspection, ExrDecodeError> {
+pub fn inspect(bytes: &[u8], limits: ExrDecodeLimits) -> Result<Inspection, ExrDecodeError> {
     enforce_limit("source bytes", bytes.len() as u64, limits.max_source_bytes)?;
     let preflight = preflight_headers(bytes, limits)?;
     let reader = exr::block::read(Cursor::new(bytes), true).map_err(map_backend)?;
@@ -396,16 +396,15 @@ fn classify_channel(
         );
     }
     pieces.pop();
-    let view = if let Some(view) = part_view {
-        view.to_owned()
-    } else if let Some(position) = pieces
-        .iter()
-        .rposition(|piece| views.iter().any(|view| view == piece))
-    {
-        pieces.remove(position)
-    } else {
-        String::new()
-    };
+    let view = part_view.map_or_else(
+        || {
+            pieces
+                .iter()
+                .rposition(|piece| views.iter().any(|view| view == piece))
+                .map_or_else(String::new, |position| pieces.remove(position))
+        },
+        ToOwned::to_owned,
+    );
     (pieces.join("."), view, role)
 }
 
@@ -566,7 +565,7 @@ fn compression(
     })
 }
 
-fn sample_type(value: SampleType) -> ExrSampleType {
+const fn sample_type(value: SampleType) -> ExrSampleType {
     match value {
         SampleType::F16 => ExrSampleType::F16,
         SampleType::F32 => ExrSampleType::F32,
@@ -659,7 +658,7 @@ fn read_array<const N: usize>(bytes: &[u8], offset: usize) -> Result<[u8; N], Ex
         .map_err(|_| ExrDecodeError::Malformed("OpenEXR structure is truncated".to_owned()))
 }
 
-fn enforce_limit(kind: &'static str, actual: u64, limit: u64) -> Result<(), ExrDecodeError> {
+const fn enforce_limit(kind: &'static str, actual: u64, limit: u64) -> Result<(), ExrDecodeError> {
     if actual > limit {
         Err(ExrDecodeError::Limit {
             kind,
@@ -680,6 +679,6 @@ fn map_backend(error: exr::error::Error) -> ExrDecodeError {
     }
 }
 
-pub(crate) fn is_complete_group(group: &ExrLayerView) -> bool {
+pub const fn is_complete_group(group: &ExrLayerView) -> bool {
     group.has_rgb || group.has_luminance
 }

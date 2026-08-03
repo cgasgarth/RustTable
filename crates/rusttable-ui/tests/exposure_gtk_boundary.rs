@@ -14,7 +14,10 @@ fn main() {
     println!("Exposure GTK callback boundary regression passed");
 }
 
-#[allow(clippy::too_many_lines)] // Keep the native event sequence auditable in one regression.
+#[expect(
+    clippy::too_many_lines,
+    reason = "The native Exposure GTK event sequence remains auditable in one regression."
+)]
 fn full_interaction_and_panicking_handlers() {
     let panel = ExposurePanel::new();
     let root: gtk4::Widget = panel.widget().clone().upcast();
@@ -115,6 +118,10 @@ fn full_interaction_and_panicking_handlers() {
         })
         .skip(exposure_action_count)
         .collect::<Vec<_>>();
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "The fixture computes the source f32 slider round trip in source evaluation order."
+    )]
     let expected_source_value = {
         let minimum = -3.0_f32;
         let maximum = 10.0_f32;
@@ -128,12 +135,9 @@ fn full_interaction_and_panicking_handlers() {
         "one source-rounded value must cross the production action boundary; got \
          {rounded_actions:?}"
     );
-    let exposure_for_test = exposure.clone();
-    run_main_loop(move || exposure_for_test.set_value(1.25));
-    let black_for_test = black.clone();
-    run_main_loop(move || black_for_test.set_value(-0.2));
-    let reset_for_test = reset.clone();
-    run_main_loop(move || reset_for_test.emit_clicked());
+    run_main_loop(move || exposure.set_value(1.25));
+    run_main_loop(move || black.set_value(-0.2));
+    run_main_loop(move || reset.emit_clicked());
 
     assert!(
         actions
@@ -196,8 +200,7 @@ fn full_interaction_and_panicking_handlers() {
     assert!(status.text().starts_with("Ready · revision"));
 
     panel.set_action_handler(|_| panic!("deliberate Exposure action handler panic"));
-    let expander_for_panic = expander.clone();
-    run_main_loop(move || expander_for_panic.set_expanded(false));
+    run_main_loop(move || expander.set_expanded(false));
     assert!(status.text().contains("Exposure callback failed"));
     assert!(
         status
@@ -212,8 +215,7 @@ fn full_interaction_and_panicking_handlers() {
         })),
         Revision::from_u64(99),
     );
-    let enabled_for_panic = enabled.clone();
-    run_main_loop(move || enabled_for_panic.set_active(false));
+    run_main_loop(move || enabled.set_active(false));
     assert!(status.text().contains("Exposure callback failed"));
     assert!(
         status

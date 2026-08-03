@@ -131,7 +131,7 @@ impl ExportMetadata {
     }
 
     #[must_use]
-    pub fn packet(&self) -> Option<&MetadataPacket> {
+    pub const fn packet(&self) -> Option<&MetadataPacket> {
         self.packet.as_ref()
     }
 

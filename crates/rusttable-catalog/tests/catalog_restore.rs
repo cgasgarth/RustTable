@@ -92,15 +92,16 @@ fn restore_reproduces_current_state_from_shuffled_history_values() {
             CatalogCommand::ReplaceEdit {
                 edit_id: second_replacement.id(),
                 expected_edit_revision: Revision::from_u64(1),
-                replacement: second_replacement,
+                replacement: second_replacement.clone(),
             },
         )
         .unwrap();
 
-    let photos = state.photos().cloned().collect::<Vec<_>>();
-    let edits = state.edits().cloned().collect::<Vec<_>>();
-    let restored = CatalogState::restore(photos.into_iter().rev(), edits.into_iter().rev())
-        .expect("current values restore");
+    let restored = CatalogState::restore(
+        [second.clone(), first.clone()],
+        [second_edit.clone(), second_replacement],
+    )
+    .expect("current values restore");
 
     assert_eq!(restored, state);
     assert_eq!(restored.revision(), Revision::from_u64(6));

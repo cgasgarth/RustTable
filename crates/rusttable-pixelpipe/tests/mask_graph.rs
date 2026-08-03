@@ -42,6 +42,10 @@ fn graph(operations: Vec<Operation>) -> CompiledOperationGraph {
     CompiledOperationGraph::compile(&edit).expect("registered graph")
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived fixture arithmetic order for pixel parity"
+)]
 fn input(width: u32, height: u32) -> RgbaF32Image {
     let dimensions =
         rusttable_processing::RasterDimensions::new(width, height).expect("nonzero dimensions");
@@ -233,7 +237,7 @@ fn generated_masks_use_the_bounded_store_and_bind_to_restart_receipts() {
 
     let first = CpuPixelpipeExecutor.execute(&snapshot).expect("first run");
     let restarted = CpuPixelpipeExecutor
-        .execute(&snapshot.clone())
+        .execute(&snapshot)
         .expect("restart run");
     assert_eq!(first.image(), restarted.image());
     assert_eq!(first.receipt(), restarted.receipt());

@@ -66,7 +66,7 @@ impl PhotoGroup {
     }
 
     #[must_use]
-    pub fn empty(id: PhotoGroupId) -> Self {
+    pub const fn empty(id: PhotoGroupId) -> Self {
         Self {
             id,
             members: Vec::new(),

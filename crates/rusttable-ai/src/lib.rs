@@ -1,19 +1,20 @@
 #![forbid(unsafe_code)]
 #![doc = "Bounded, deterministic AI image workflows for `RustTable`."]
-#![allow(
+#![expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
-    clippy::format_collect,
-    clippy::implicit_clone,
+    reason = "AI workflow boundaries translate validated image and model values between fixed scalar representations"
+)]
+#![expect(
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
-    clippy::must_use_candidate,
+    reason = "the public AI facade centralizes failure and static-contract guarantees in its exported boundary types"
+)]
+#![expect(
     clippy::too_many_arguments,
     clippy::too_many_lines,
-    clippy::uninlined_format_args,
-    clippy::unreadable_literal,
-    clippy::useless_conversion
+    reason = "workflow constructors and stages keep fixed model-contract fields and lifecycle ordering explicit"
 )]
 
 mod cache;

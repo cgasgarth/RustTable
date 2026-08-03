@@ -15,12 +15,12 @@ pub struct CatalogEntry {
 
 impl CatalogEntry {
     #[must_use]
-    pub fn source(&self) -> &SourcePath {
+    pub const fn source(&self) -> &SourcePath {
         self.record.source()
     }
 
     #[must_use]
-    pub fn photo(&self) -> &Photo {
+    pub const fn photo(&self) -> &Photo {
         self.record.photo()
     }
 
@@ -35,7 +35,7 @@ impl CatalogEntry {
     }
 
     #[must_use]
-    pub fn metadata(&self) -> &ImageMetadata {
+    pub const fn metadata(&self) -> &ImageMetadata {
         self.record.metadata()
     }
 

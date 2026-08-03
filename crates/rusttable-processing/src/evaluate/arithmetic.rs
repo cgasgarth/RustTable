@@ -3,7 +3,7 @@ use crate::{
 };
 use rusttable_core::OperationId;
 
-pub(crate) fn apply_reconstruction(
+pub fn apply_reconstruction(
     pixels: &mut [LinearRgb],
     candidates: &[LinearRgb],
     opacity: f32,
@@ -51,7 +51,7 @@ pub(crate) fn apply_reconstruction(
     Ok(())
 }
 
-pub(crate) fn apply_channels<F>(
+pub fn apply_channels<F>(
     pixels: &mut [LinearRgb],
     step_index: PipelineStepIndex,
     operation_id: OperationId,
@@ -123,7 +123,7 @@ where
     Ok(())
 }
 
-pub(crate) fn blend(
+pub fn blend(
     current: f32,
     candidate: f32,
     opacity: f32,

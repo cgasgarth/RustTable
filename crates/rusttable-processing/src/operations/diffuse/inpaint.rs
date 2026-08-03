@@ -12,13 +12,13 @@ const TWO_PI: f32 = 2.0 * std::f32::consts::PI;
 
 /// Source `splitmix32`, including its unsigned 64-bit wrapping arithmetic.
 #[must_use]
-pub fn splitmix32(seed: u64) -> u32 {
+pub const fn splitmix32(seed: u64) -> u32 {
     let mut result = (seed ^ (seed >> 33)).wrapping_mul(0x062a_9d9e_d799_705f);
     result = (result ^ (result >> 28)).wrapping_mul(0xcb24_d0a5_c88c_35b3);
     (result >> 32) as u32
 }
 
-fn rotate_left_32(value: u32, amount: u32) -> u32 {
+const fn rotate_left_32(value: u32, amount: u32) -> u32 {
     value.rotate_left(amount)
 }
 

@@ -2,11 +2,11 @@ use redb::{Database, ReadableTable, TableDefinition};
 
 use rusttable_catalog::RepositoryError;
 
-pub(crate) const VIRTUAL_COPIES_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const VIRTUAL_COPIES_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_virtual_copies");
-pub(crate) const VIRTUAL_COPY_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const VIRTUAL_COPY_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_virtual_copy_state");
-pub(crate) const VIRTUAL_COPY_REVISION_KEY: &[u8] = b"virtual-copy-revision";
+pub const VIRTUAL_COPY_REVISION_KEY: &[u8] = b"virtual-copy-revision";
 
 pub(super) fn open_tables(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {
     transaction

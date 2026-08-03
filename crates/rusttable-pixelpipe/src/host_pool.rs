@@ -6,6 +6,7 @@ use rusttable_image::{
 use crate::ResourceMetadata;
 
 /// Builds the one temporary-buffer request planned by a prepared operation.
+///
 /// The byte count and alignment are copied from the immutable resource
 /// estimate; callers cannot acquire a differently sized temporary lease by
 /// accident.

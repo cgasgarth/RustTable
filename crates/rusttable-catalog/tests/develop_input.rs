@@ -5,7 +5,11 @@ use develop_support::fixture;
 use rusttable_catalog::{DevelopInput, DevelopSelection};
 use rusttable_core::{EditId, PhotoId, Revision};
 
-fn selection(catalog_revision: Revision, photo_id: PhotoId, edit_id: EditId) -> DevelopSelection {
+const fn selection(
+    catalog_revision: Revision,
+    photo_id: PhotoId,
+    edit_id: EditId,
+) -> DevelopSelection {
     DevelopSelection::new(
         catalog_revision,
         photo_id,

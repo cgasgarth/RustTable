@@ -92,7 +92,8 @@ fn minimal_jpeg(
         u8::try_from(components.len()).expect("test component count fits"),
     ];
     for &(component, sampling, quantization) in components {
-        frame.extend_from_slice(&[component, sampling, quantization]);
+        let bytes: [u8; 3] = (component, sampling, quantization).into();
+        frame.extend_from_slice(&bytes);
     }
     bytes.extend(segment(0xc0, &frame));
     if let Some(interval) = restart_interval {
@@ -154,7 +155,10 @@ fn matrix_icc_profile() -> Vec<u8> {
         put_tag(&mut profile, index, signature, offset, 20);
         profile[offset..offset + 4].copy_from_slice(b"XYZ ");
         for (component, value) in values.into_iter().enumerate() {
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "JPEG ICC fixtures intentionally encode bounded positive values into the serialized i32 format."
+            )]
             let fixed = (value * 65_536.0).round() as i32;
             profile[offset + 8 + component * 4..offset + 12 + component * 4]
                 .copy_from_slice(&fixed.to_be_bytes());
@@ -413,7 +417,7 @@ struct ChangingSource {
 }
 
 impl ChangingSource {
-    fn new(bytes: Vec<u8>) -> Self {
+    const fn new(bytes: Vec<u8>) -> Self {
         Self {
             bytes,
             revisions: AtomicUsize::new(0),

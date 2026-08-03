@@ -5,9 +5,9 @@
 //! graph-height state are consumed here; picker and mask lifecycles, the operation
 //! histogram, and global shortcut or hold-mode routing remain absent.
 
-#![allow(
+#![expect(
     clippy::too_many_lines,
-    reason = "the source-ordered GTK hierarchy and its adjacent controller wiring stay reviewable together"
+    reason = "The source-ordered GTK hierarchy and its adjacent controller wiring stay reviewable together."
 )]
 
 use std::{
@@ -252,7 +252,7 @@ pub struct ColorZonesGtkLeaf {
 
 impl ColorZonesGtkLeaf {
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -888,9 +888,9 @@ fn connect_non_graph_controls(
                 return;
             }
             let before = shared.interaction.borrow().clone();
-            #[allow(
+            #[expect(
                 clippy::cast_possible_truncation,
-                reason = "the Bauhaus range is bounded to native f32 strength"
+                reason = "The Bauhaus range is bounded to native f32 strength."
             )]
             let value = value as f32;
             if shared
@@ -933,7 +933,10 @@ fn resolved_graph_overlay(widget: &impl IsA<gtk4::Widget>) -> Option<gdk::RGBA> 
     widget.style_context().lookup_color("graph_overlay")
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source graph GTK controller keeps draw, pointer, drag, and scroll routing together."
+)]
 fn connect_graph(graph: &gtk4::DrawingArea, shared: &Rc<Shared>) {
     {
         let shared = Rc::clone(shared);
@@ -1262,9 +1265,9 @@ fn route_graph_scroll_interaction(
     delta_y: f64,
     modifiers: gdk::ModifierType,
 ) -> Result<ColorZonesScrollOutcome, ColorZonesInteractionError> {
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
-        reason = "GTK scroll deltas are immediately bounded by editor operations"
+        reason = "GTK scroll deltas are immediately bounded by editor operations."
     )]
     let delta_y = delta_y as f32;
     interaction.scroll_with_speed(
@@ -1275,6 +1278,10 @@ fn route_graph_scroll_interaction(
     )
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "The source graph pointer geometry preserves its original inset arithmetic order."
+)]
 fn graph_pointer(graph: &gtk4::DrawingArea, x: f64, y: f64) -> Option<(f32, f32, bool)> {
     let inset = f64::from(COLORZONES_GRAPH_INSET);
     let width = f64::from(graph.allocated_width()) - 2.0 * inset;
@@ -1282,14 +1289,14 @@ fn graph_pointer(graph: &gtk4::DrawingArea, x: f64, y: f64) -> Option<(f32, f32,
     if !x.is_finite() || !y.is_finite() || width <= 0.0 || height <= 0.0 {
         return None;
     }
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
-        reason = "normalized finite pointer coordinates fit f32"
+        reason = "Normalized finite pointer coordinates fit the native f32 graph domain."
     )]
     let pointer_x = ((x - inset).clamp(0.0, width) / width) as f32;
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
-        reason = "normalized finite pointer coordinates fit f32"
+        reason = "Normalized finite pointer coordinates fit the native f32 graph domain."
     )]
     let pointer_y = (1.0 - (y - inset).clamp(0.0, height) / height) as f32;
     Some((pointer_x, pointer_y, y > inset + height))
@@ -1322,9 +1329,9 @@ fn resized_graph_height(current: ColorZonesGraphHeight, delta_y: f64) -> ColorZo
     if !delta_y.is_finite() || delta_y == 0.0 {
         return current;
     }
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
-        reason = "source-normalized scroll units are integral and bounded to i32"
+        reason = "Source-normalized scroll units are integral and bounded to i32."
     )]
     let delta = delta_y
         .clamp(f64::from(i32::MIN), f64::from(i32::MAX))

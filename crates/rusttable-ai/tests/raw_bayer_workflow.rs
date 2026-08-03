@@ -39,7 +39,7 @@ fn frame(phase: (u32, u32), active: Option<Roi>, masked: Vec<Roi>) -> RawFrame {
     RawFrame::new(raw, active, None, masked, calibration).expect("frame")
 }
 
-fn descriptor() -> RawBayerModelDescriptor {
+const fn descriptor() -> RawBayerModelDescriptor {
     RawBayerModelDescriptor {
         identity: [8; 32],
         task: ModelTask::RawBayerDenoise,

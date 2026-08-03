@@ -140,7 +140,7 @@ impl QuotaLedger {
         )
     }
 
-    pub fn leave_call(&mut self) {
+    pub const fn leave_call(&mut self) {
         self.concurrent_calls = self.concurrent_calls.saturating_sub(1);
     }
 

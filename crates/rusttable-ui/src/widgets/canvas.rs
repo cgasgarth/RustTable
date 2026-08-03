@@ -270,7 +270,7 @@ pub struct PreviewFrameProjection {
 }
 
 impl PreviewFrameProjection {
-    fn from_frame(frame: &DisplayPresentationFrame) -> Self {
+    const fn from_frame(frame: &DisplayPresentationFrame) -> Self {
         Self {
             key: PreviewFrameKey::from_ticket(frame.ticket()),
             dimensions: frame.metadata().dimensions(),
@@ -506,7 +506,7 @@ impl ViewportCanvasState {
         Some(projected)
     }
 
-    fn bump_redraw(&mut self) -> RedrawToken {
+    const fn bump_redraw(&mut self) -> RedrawToken {
         self.redraw_serial = self.redraw_serial.saturating_add(1);
         self.redraw_token()
     }

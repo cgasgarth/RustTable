@@ -120,17 +120,17 @@ impl PhotoCardViewModel {
     }
 
     #[must_use]
-    pub fn id(&self) -> PhotoId {
+    pub const fn id(&self) -> PhotoId {
         self.id
     }
 
     #[must_use]
-    pub fn title(&self) -> &PresentationText {
+    pub const fn title(&self) -> &PresentationText {
         &self.title
     }
 
     #[must_use]
-    pub fn secondary(&self) -> Option<&PresentationText> {
+    pub const fn secondary(&self) -> Option<&PresentationText> {
         self.secondary.as_ref()
     }
 
@@ -148,17 +148,17 @@ pub struct PhotoFactViewModel {
 
 impl PhotoFactViewModel {
     #[must_use]
-    pub fn new(label: PresentationText, value: PresentationText) -> Self {
+    pub const fn new(label: PresentationText, value: PresentationText) -> Self {
         Self { label, value }
     }
 
     #[must_use]
-    pub fn label(&self) -> &PresentationText {
+    pub const fn label(&self) -> &PresentationText {
         &self.label
     }
 
     #[must_use]
-    pub fn value(&self) -> &PresentationText {
+    pub const fn value(&self) -> &PresentationText {
         &self.value
     }
 }
@@ -182,7 +182,7 @@ impl PreviewDimensions {
     /// # Errors
     ///
     /// Returns a stable error when either image dimension is zero.
-    pub fn new(width: u32, height: u32) -> Result<Self, PreviewDimensionsError> {
+    pub const fn new(width: u32, height: u32) -> Result<Self, PreviewDimensionsError> {
         if width == 0 {
             return Err(PreviewDimensionsError::ZeroWidth);
         }
@@ -194,12 +194,12 @@ impl PreviewDimensions {
     }
 
     #[must_use]
-    pub fn width(&self) -> u32 {
+    pub const fn width(&self) -> u32 {
         self.width
     }
 
     #[must_use]
-    pub fn height(&self) -> u32 {
+    pub const fn height(&self) -> u32 {
         self.height
     }
 }
@@ -258,12 +258,12 @@ impl Rgba8PreviewMetadata {
     }
 
     #[must_use]
-    pub fn dimensions(&self) -> PreviewDimensions {
+    pub const fn dimensions(&self) -> PreviewDimensions {
         self.dimensions
     }
 
     #[must_use]
-    pub fn status(&self) -> &PresentationText {
+    pub const fn status(&self) -> &PresentationText {
         &self.status
     }
 
@@ -293,12 +293,12 @@ pub struct SelectedPreviewFailure {
 
 impl SelectedPreviewFailure {
     #[must_use]
-    pub fn new(detail: PresentationText) -> Self {
+    pub const fn new(detail: PresentationText) -> Self {
         Self { detail }
     }
 
     #[must_use]
-    pub fn detail(&self) -> &PresentationText {
+    pub const fn detail(&self) -> &PresentationText {
         &self.detail
     }
 }
@@ -342,12 +342,12 @@ impl PhotoDetailViewModel {
     }
 
     #[must_use]
-    pub fn id(&self) -> PhotoId {
+    pub const fn id(&self) -> PhotoId {
         self.id
     }
 
     #[must_use]
-    pub fn title(&self) -> &PresentationText {
+    pub const fn title(&self) -> &PresentationText {
         &self.title
     }
 
@@ -357,7 +357,7 @@ impl PhotoDetailViewModel {
     }
 
     #[must_use]
-    pub fn selected_preview(&self) -> &SelectedPreviewState {
+    pub const fn selected_preview(&self) -> &SelectedPreviewState {
         &self.selected_preview
     }
 }

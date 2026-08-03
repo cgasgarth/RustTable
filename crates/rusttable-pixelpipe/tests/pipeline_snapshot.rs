@@ -53,7 +53,7 @@ fn stack_with_exposure() -> OperationStackSnapshot {
     .expect("operation");
     OperationStackSnapshot::new(OperationStackTemplate::raster_basic())
         .apply(StackCommand::Insert {
-            operation,
+            operation: Box::new(operation),
             position: InsertPosition::End,
         })
         .expect("insert")
@@ -127,7 +127,7 @@ fn disabled_operations_do_not_get_prepared_but_disabled_mandatory_operations_blo
     .expect("operation");
     let stack = OperationStackSnapshot::new(OperationStackTemplate::raster_basic())
         .apply(StackCommand::Insert {
-            operation,
+            operation: Box::new(operation),
             position: InsertPosition::End,
         })
         .expect("insert")
@@ -206,7 +206,7 @@ fn preparation_is_atomic_for_unknown_operations_and_dangling_references() {
     .with_mask_blend(Some(99), None);
     let dangling_stack = OperationStackSnapshot::new(OperationStackTemplate::raster_basic())
         .apply(StackCommand::Insert {
-            operation: dangling_operation,
+            operation: Box::new(dangling_operation),
             position: InsertPosition::End,
         })
         .expect("insert")

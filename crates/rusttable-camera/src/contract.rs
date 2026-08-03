@@ -248,7 +248,7 @@ impl CameraFrame {
         reason = "frame metadata and bounded pixel payload form one immutable service value"
     )]
     #[must_use]
-    pub fn new(
+    pub const fn new(
         width: u32,
         height: u32,
         stride: u32,

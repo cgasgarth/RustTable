@@ -3,7 +3,7 @@ use super::tags::parse_curve_sequence;
 use super::{IccClut, IccLut, IccLutDirection, IccMultiStageLut, IccSignature};
 use crate::{FiniteF32, Matrix3};
 
-pub(crate) fn parse_lut(
+pub fn parse_lut(
     tag: IccSignature,
     data: &[u8],
     type_signature: IccSignature,
@@ -302,7 +302,7 @@ fn parse_multi_clut(
     Ok((grid_points, Some(clut)))
 }
 
-fn validate_channels(
+const fn validate_channels(
     tag: IccSignature,
     input_channels: u8,
     output_channels: u8,
@@ -372,7 +372,7 @@ fn read_u16s(bytes: &[u8], offset: usize, count: usize) -> Result<Vec<u16>, IccP
     Ok(values)
 }
 
-pub(crate) fn fixed_values(
+pub fn fixed_values(
     bytes: &[u8],
     offset: usize,
     count: usize,

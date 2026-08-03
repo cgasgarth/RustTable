@@ -4,7 +4,7 @@ use rusttable_catalog::{
 };
 use rusttable_core::{ImageMetadata, MetadataEntry, MetadataText, PhotoId};
 
-fn photo_id() -> PhotoId {
+const fn photo_id() -> PhotoId {
     PhotoId::new(7).expect("nonzero photo ID")
 }
 

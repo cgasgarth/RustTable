@@ -7,7 +7,7 @@ use rusttable_core::ContentHash;
 
 use crate::{ArtifactBuffer, DependencySnapshot, EncoderSettings};
 
-pub(crate) fn artifact_hash(buffer: &ArtifactBuffer, metadata: &[u8]) -> [u8; 32] {
+pub fn artifact_hash(buffer: &ArtifactBuffer, metadata: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(buffer.dimensions().width().to_be_bytes());
     hasher.update(buffer.dimensions().height().to_be_bytes());
@@ -18,7 +18,7 @@ pub(crate) fn artifact_hash(buffer: &ArtifactBuffer, metadata: &[u8]) -> [u8; 32
     hasher.finalize().into()
 }
 
-pub(crate) fn dependency_hash(snapshot: Option<&DependencySnapshot>) -> [u8; 32] {
+pub fn dependency_hash(snapshot: Option<&DependencySnapshot>) -> [u8; 32] {
     let mut hasher = Sha256::new();
     if let Some(snapshot) = snapshot {
         hasher.update(snapshot.catalog_revision().get().to_be_bytes());
@@ -38,15 +38,15 @@ pub(crate) fn dependency_hash(snapshot: Option<&DependencySnapshot>) -> [u8; 32]
     hasher.finalize().into()
 }
 
-pub(crate) fn hash_option(value: Option<ContentHash>) -> String {
+pub fn hash_option(value: Option<ContentHash>) -> String {
     value.map_or_else(|| "none".to_owned(), |hash| hex(hash.bytes()))
 }
 
-pub(crate) fn opaque_string_hash(value: &str) -> String {
+pub fn opaque_string_hash(value: &str) -> String {
     hex(&Sha256::digest(value.as_bytes()).into())
 }
 
-pub(crate) fn encoder_settings_hash(settings: &EncoderSettings) -> String {
+pub fn encoder_settings_hash(settings: &EncoderSettings) -> String {
     let mut hasher = Sha256::new();
     hasher.update(format!("{:?}\n", settings.format()).as_bytes());
     for (name, value) in settings.parameters() {
@@ -58,8 +58,12 @@ pub(crate) fn encoder_settings_hash(settings: &EncoderSettings) -> String {
     hex(&hasher.finalize().into())
 }
 
-pub(crate) fn hex(bytes: &[u8; 32]) -> String {
-    let mut output = String::with_capacity(64);
+pub fn hex(bytes: &[u8; 32]) -> String {
+    hex_bytes(bytes)
+}
+
+pub fn hex_bytes(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         write!(output, "{byte:02x}").expect("writing to a String cannot fail");
     }
@@ -67,6 +71,6 @@ pub(crate) fn hex(bytes: &[u8; 32]) -> String {
 }
 
 #[allow(dead_code)]
-pub(crate) fn display_option<T: fmt::Display>(value: Option<T>) -> String {
+pub fn display_option<T: fmt::Display>(value: Option<T>) -> String {
     value.map_or_else(|| "none".to_owned(), |value| value.to_string())
 }

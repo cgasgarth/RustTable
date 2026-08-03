@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Reconstruction arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Lab bilateral-grid color reconstruction ported from
 //! `src/iop/colorreconstruction.c` and its coupled
 //! `data/kernels/colorreconstruction.cl` equations.
@@ -62,7 +67,7 @@ impl ColorReconstructionPrecedence {
         }
     }
 
-    pub fn from_id(id: i32) -> Result<Self, ColorReconstructionParameterError> {
+    pub const fn from_id(id: i32) -> Result<Self, ColorReconstructionParameterError> {
         match id {
             0 => Ok(Self::None),
             1 => Ok(Self::Chroma),
@@ -179,7 +184,7 @@ pub struct ColorReconstructionV3 {
 
 /// Native v1 -> v3 migration: add neutral precedence and the historical hue.
 #[must_use]
-pub fn migrate_v1(value: ColorReconstructionV1) -> ColorReconstructionV3 {
+pub const fn migrate_v1(value: ColorReconstructionV1) -> ColorReconstructionV3 {
     ColorReconstructionV3 {
         threshold: value.threshold,
         spatial: value.spatial,
@@ -191,7 +196,7 @@ pub fn migrate_v1(value: ColorReconstructionV1) -> ColorReconstructionV3 {
 
 /// Native v2 -> v3 migration: preserve precedence and add the historical hue.
 #[must_use]
-pub fn migrate_v2(value: ColorReconstructionV2) -> ColorReconstructionV3 {
+pub const fn migrate_v2(value: ColorReconstructionV2) -> ColorReconstructionV3 {
     ColorReconstructionV3 {
         threshold: value.threshold,
         spatial: value.spatial,
@@ -307,11 +312,12 @@ fn grid_extent(span: f32, requested_sigma: f32, maximum: usize) -> usize {
     rounded.clamp(4, maximum) + 1
 }
 
-/// Map a pixel in the current ROI back into the bilateral grid's image
-/// coordinates. The production plan is a full-frame boundary, so its ROI and
-/// bilateral origins are both zero and its rescale is one. Keeping the native
-/// transform explicit prevents a future tiled caller from silently treating a
-/// tile-local coordinate as a full-image coordinate.
+/// Map a pixel in the current ROI back into the bilateral grid's image coordinates.
+///
+/// The production plan is a full-frame boundary, so its ROI and bilateral
+/// origins are both zero and its rescale is one. Keeping the native transform
+/// explicit prevents a future tiled caller from silently treating a tile-local
+/// coordinate as a full-image coordinate.
 #[must_use]
 pub fn grid_rescale(
     i: i32,
@@ -352,14 +358,14 @@ impl ColorReconstructionPlan {
         let per_pixel = size_of::<LinearRgb>()
             .checked_mul(2)
             .and_then(|value| value.checked_add(size_of::<f32>() + 2))
-            .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: budget.maximum_bytes(),
             })?;
         let required_bytes = pixel_count
             .checked_mul(per_pixel)
             .and_then(|value| value.checked_add(geometry.single_buffer_bytes()))
-            .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: budget.maximum_bytes(),
             })?;
@@ -600,7 +606,7 @@ impl BilateralGrid {
                 let b = pixel.blue().get();
                 let weight = match config.precedence() {
                     ColorReconstructionPrecedence::None => 1.0,
-                    ColorReconstructionPrecedence::Chroma => (a * a + b * b).sqrt(),
+                    ColorReconstructionPrecedence::Chroma => a.hypot(b),
                     ColorReconstructionPrecedence::Hue => {
                         let mut distance = b.atan2(a) - converted_hue;
                         distance = if distance > PI {
@@ -738,7 +744,10 @@ impl BilateralGrid {
 }
 
 // Keep the seven native stride/extent arguments adjacent for source comparison.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "native grid stride and extent arguments preserve blur traversal order"
+)]
 fn blur_line<F: Fn() -> bool>(
     cells: &mut [GridLab],
     offset1: usize,

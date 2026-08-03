@@ -137,7 +137,7 @@ pub struct BloomGtkLeaf {
 
 impl BloomGtkLeaf {
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -228,9 +228,9 @@ fn connect_slider(parameter: BloomParameter, shared: &Rc<Shared>) {
             let Some(shared) = weak.upgrade() else {
                 return;
             };
-            #[allow(
+            #[expect(
                 clippy::cast_possible_truncation,
-                reason = "the Bauhaus range is finite and bounded to native f32 percentages"
+                reason = "The Bauhaus range is finite and bounded to native f32 percentages."
             )]
             shared.settle(parameter, value as f32);
         });
@@ -250,7 +250,7 @@ struct Widgets {
 }
 
 impl Widgets {
-    fn slider(&self, parameter: BloomParameter) -> &BauhausSlider {
+    const fn slider(&self, parameter: BloomParameter) -> &BauhausSlider {
         match parameter {
             BloomParameter::Threshold => &self.threshold,
             BloomParameter::Size => &self.size,

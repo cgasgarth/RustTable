@@ -401,7 +401,7 @@ pub struct SoftenGtkLeaf {
 
 impl SoftenGtkLeaf {
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -496,9 +496,9 @@ fn connect_slider(parameter: SoftenParameter, shared: &Rc<Shared>) {
             let Some(shared) = weak.upgrade() else {
                 return;
             };
-            #[allow(
+            #[expect(
                 clippy::cast_possible_truncation,
-                reason = "the Bauhaus range is finite and bounded to native f32 values"
+                reason = "The Bauhaus range is finite and bounded to native f32 values."
             )]
             shared.settle(parameter, value as f32);
         });
@@ -516,7 +516,7 @@ struct Widgets {
 }
 
 impl Widgets {
-    fn slider(&self, parameter: SoftenParameter) -> &BauhausSlider {
+    const fn slider(&self, parameter: SoftenParameter) -> &BauhausSlider {
         &self.sliders[parameter.index()]
     }
 }

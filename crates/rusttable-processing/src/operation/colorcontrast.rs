@@ -15,7 +15,7 @@ const COLOR_CONTRAST_PARAMETERS: [&str; 5] = [
     "unbound",
 ];
 
-pub(crate) fn compile_colorcontrast(
+pub fn compile_colorcontrast(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &COLOR_CONTRAST_PARAMETERS)?;

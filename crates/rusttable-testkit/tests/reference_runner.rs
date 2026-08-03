@@ -1,5 +1,4 @@
 #![cfg(unix)]
-
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -46,10 +45,10 @@ fn fake_executable(directory: &TempDirectory, mode: &str) -> PathBuf {
     let commit = COMMIT;
     let script = r#"#!/bin/sh
 case " $* " in
-  *" --version "*) printf 'darktable {version} {commit}\n'; exit 0 ;;
+  *" --version "*) printf 'darktable @VERSION@ @COMMIT@\n'; exit 0 ;;
   *" --help "*) printf '%s\n' '--configdir --cachedir --datadir --library --disable-opencl --width --height --icc-type --icc --out-ext'; exit 0 ;;
 esac
-case "{mode}" in
+case "@MODE@" in
   success) printf 'timestamp=111 pid=1 thread=2\n'; printf 'timestamp=222 pid=3 thread=4\n' >&2; printf 'fake-image\n' > "$RUSTTABLE_REFERENCE_OUTPUT"; exit 0 ;;
   timeout|ignored-cancellation|child-spawn) (sleep 30) & wait ;;
   excessive-output) printf '%4096s' x; exit 0 ;;
@@ -57,9 +56,9 @@ case "{mode}" in
   nonzero-exit|partial-output) printf 'partial\n' > "$RUSTTABLE_REFERENCE_OUTPUT"; exit 7 ;;
 esac
 "#
-    .replace("{mode}", mode)
-    .replace("{version}", version)
-    .replace("{commit}", commit);
+    .replace("@MODE@", mode)
+    .replace("@VERSION@", version)
+    .replace("@COMMIT@", commit);
     fs::write(&path, script).expect("fake executable should be written");
     let mut permissions = fs::metadata(&path)
         .expect("fake executable metadata")

@@ -101,7 +101,7 @@ pub struct RawOverexposedResult {
 
 impl RawOverexposedResult {
     #[must_use]
-    pub fn frame(&self) -> &DiagnosticFrame {
+    pub const fn frame(&self) -> &DiagnosticFrame {
         &self.frame
     }
 
@@ -116,7 +116,7 @@ impl RawOverexposedResult {
     }
 
     #[must_use]
-    pub fn applied(&self) -> bool {
+    pub const fn applied(&self) -> bool {
         self.finding.is_none()
     }
 }
@@ -159,7 +159,7 @@ impl RawOverexposedPlan {
         if !threshold.is_finite() || threshold < 0.0 || threshold > f64::from(u16::MAX) {
             return Err(DiagnosticFinding::InvalidThreshold);
         }
-        let threshold = checked_f64_to_u32(threshold);
+        let threshold = checked_f64_to_u32(threshold).ok_or(DiagnosticFinding::InvalidThreshold)?;
         let source_identity = source_identity(&raw);
         Ok(Self {
             raw,
@@ -205,7 +205,10 @@ impl RawOverexposedPlan {
     /// the render crate has no device lease, so it retries the identical plan on
     /// CPU and records that fallback in the receipt.
     #[must_use]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "RAW diagnostic execution keeps geometry mapping, CFA indexing, cancellation, and receipt counters in native order"
+    )]
     /// Executes the deterministic CPU plan, or the identical CPU fallback when
     /// the caller requests a GPU path that has no device lease at this boundary.
     ///
@@ -369,7 +372,7 @@ fn contains_fourth_bayer(pattern: &CfaPattern) -> bool {
     }
 }
 
-fn cfa_index(color: CfaColor) -> usize {
+const fn cfa_index(color: CfaColor) -> usize {
     match color {
         CfaColor::Red => 0,
         CfaColor::Green => 1,
@@ -379,15 +382,31 @@ fn cfa_index(color: CfaColor) -> usize {
 }
 
 fn truncate_coordinate((x, y): (f64, f64)) -> Option<(u32, u32)> {
-    if x < 0.0 || y < 0.0 || x > f64::from(u32::MAX) || y > f64::from(u32::MAX) {
+    if !x.is_finite()
+        || !y.is_finite()
+        || x < 0.0
+        || y < 0.0
+        || x > f64::from(u32::MAX)
+        || y > f64::from(u32::MAX)
+    {
         return None;
     }
-    Some((checked_f64_to_u32(x.trunc()), checked_f64_to_u32(y.trunc())))
+    Some((
+        checked_f64_to_u32(x.trunc())?,
+        checked_f64_to_u32(y.trunc())?,
+    ))
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn checked_f64_to_u32(value: f64) -> u32 {
-    value as u32
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "finite coordinates are explicitly bounded to the u32 range before truncation"
+)]
+fn checked_f64_to_u32(value: f64) -> Option<u32> {
+    if !value.is_finite() || !(0.0..=f64::from(u32::MAX)).contains(&value) {
+        return None;
+    }
+    Some(value as u32)
 }
 
 fn source_identity(raw: &RawMosaic) -> [u8; 32] {

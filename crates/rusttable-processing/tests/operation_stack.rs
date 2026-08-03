@@ -32,7 +32,7 @@ fn operation_stack_every_mutation_returns_a_new_snapshot_and_receipt() {
     let empty = OperationStackSnapshot::new(OperationStackTemplate::raster_basic());
     let inserted = empty
         .apply(StackCommand::Insert {
-            operation: operation(1, true),
+            operation: Box::new(operation(1, true)),
             position: InsertPosition::End,
         })
         .expect("insert");
@@ -54,7 +54,7 @@ fn operation_stack_every_mutation_returns_a_new_snapshot_and_receipt() {
 fn operation_stack_failed_commands_preserve_the_original_snapshot() {
     let snapshot = OperationStackSnapshot::new(OperationStackTemplate::raster_basic())
         .apply(StackCommand::Insert {
-            operation: operation(1, false),
+            operation: Box::new(operation(1, false)),
             position: InsertPosition::End,
         })
         .expect("insert")

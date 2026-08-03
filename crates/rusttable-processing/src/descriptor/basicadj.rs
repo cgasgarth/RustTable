@@ -12,9 +12,12 @@ use super::{
     ParameterDefault, ParameterDescriptor, ParameterKind, ParameterRole, RoiKind, TilingContract,
 };
 
+/// Builds the source-ordered Basic Adjustments descriptor.
+///
+/// # Panics
+///
+/// Panics only if the fixed native-compatible descriptor identity is invalid.
 #[must_use]
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::missing_panics_doc)]
 pub fn basicadj_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new("basicadj", "rusttable.basicadj", 2, 2, 1).expect("static ID"),

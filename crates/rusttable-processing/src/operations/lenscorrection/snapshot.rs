@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Lens Correction snapshot arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Compact generated-compatible records selected from Lensfun's database.
 //!
 //! Source: Lensfun `data/db` at [`LENSFUN_DATABASE_COMMIT`]. The upstream

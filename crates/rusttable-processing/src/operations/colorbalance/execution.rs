@@ -4,6 +4,11 @@
 //! `process`, `_process_legacy`, `_process_lgg`, `_process_sop`, and
 //! `src/develop/blends/blendif_lab.c::_blend_normal_unbounded`.
 
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Balance equations preserve source evaluation order and IEEE-754 parity."
+)]
+
 use std::fmt;
 
 use super::codec::{
@@ -23,7 +28,7 @@ const MAX_CPU_WORK_PIXELS: usize = 256;
 struct FiniteValue(u32);
 
 impl FiniteValue {
-    fn new(value: f32) -> Result<Self, ()> {
+    const fn new(value: f32) -> Result<Self, ()> {
         if value.is_finite() {
             Ok(Self(value.to_bits()))
         } else {
@@ -430,9 +435,9 @@ impl ColorBalancePlan {
                 mask: mask.len(),
             });
         }
-        #[allow(
+        #[expect(
             clippy::manual_clamp,
-            reason = "matches native fminf(fmaxf(opacity, 0), 1), including NaN handling"
+            reason = "Native fminf(fmaxf(opacity, 0), 1) ordering is required, including NaN handling."
         )]
         let global_opacity = f32::min(1.0, f32::max(opacity, 0.0));
         let candidates = self.execute_lab_tiled(input, tile_size, cancellation)?;
@@ -537,7 +542,7 @@ impl ColorBalancePlan {
     }
 }
 
-pub(crate) fn blend_lab_normal_pixel_for_test(
+pub fn blend_lab_normal_pixel_for_test(
     source: ColorBalancePixel,
     candidate: ColorBalancePixel,
     coverage: f32,

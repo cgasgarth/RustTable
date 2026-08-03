@@ -30,7 +30,7 @@ struct ImageInfo {
 }
 
 #[must_use]
-pub(crate) fn is_webp_signature(bytes: &[u8]) -> bool {
+pub fn is_webp_signature(bytes: &[u8]) -> bool {
     bytes.len() >= RIFF_HEADER_BYTES
         && bytes.get(..4) == Some(b"RIFF")
         && bytes.get(8..12) == Some(b"WEBP")
@@ -499,14 +499,14 @@ fn advance_rank(rank: &mut u8, next: u8, name: &str) -> Result<(), WebPDecodeErr
     Ok(())
 }
 
-fn is_singleton(kind: [u8; 4]) -> bool {
+const fn is_singleton(kind: [u8; 4]) -> bool {
     matches!(
         &kind,
         b"VP8X" | b"VP8 " | b"VP8L" | b"ALPH" | b"ICCP" | b"EXIF" | b"XMP " | b"ANIM"
     )
 }
 
-fn features_from_flags(flags: u8) -> WebPFeatures {
+const fn features_from_flags(flags: u8) -> WebPFeatures {
     WebPFeatures {
         icc_profile: flags & 0b0010_0000 != 0,
         alpha: flags & 0b0001_0000 != 0,
@@ -604,7 +604,7 @@ fn malformed(message: &str) -> WebPDecodeError {
     WebPDecodeError::Malformed(message.to_owned())
 }
 
-fn limit(kind: &'static str, actual: u64, limit: u64) -> WebPDecodeError {
+const fn limit(kind: &'static str, actual: u64, limit: u64) -> WebPDecodeError {
     WebPDecodeError::Limit {
         kind,
         actual,

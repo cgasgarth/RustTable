@@ -211,7 +211,10 @@ impl ManagedSvgAsset {
     ///
     /// Returns an error when the requested dimensions exceed the managed
     /// limits or the rasterizer cannot allocate the target.
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "tiny-skia Transform is f32-based; validated render dimensions cross that backend boundary once"
+    )]
     pub fn rasterize(&self, width: u32, height: u32) -> Result<SvgRaster, SvgError> {
         validate_dimensions(width, height, self.limits)?;
         let mut pixmap = Pixmap::new(width, height).ok_or(SvgError::RenderDimensionLimit)?;

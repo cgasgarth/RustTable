@@ -440,6 +440,7 @@ impl GpuResourcePool {
     pub fn try_acquire(&self, request: ResourceRequest) -> Result<ResourceLease, PoolError> {
         let mut state = lock(&self.shared.state);
         let id = acquire_entry(&mut state, request)?;
+        drop(state);
         Ok(ResourceLease::from_id(Arc::clone(&self.shared), id))
     }
 
@@ -460,13 +461,14 @@ impl GpuResourcePool {
                     if remaining.is_zero() {
                         return self.try_acquire(request);
                     }
-                    let state = lock(&self.shared.state);
-                    let (state, _) = self
+                    let _ = self
                         .shared
                         .wake
-                        .wait_timeout(state, remaining.min(Duration::from_millis(10)))
+                        .wait_timeout(
+                            lock(&self.shared.state),
+                            remaining.min(Duration::from_millis(10)),
+                        )
                         .expect("resource pool mutex is not poisoned");
-                    drop(state);
                 }
                 Err(error) => return Err(error),
             }
@@ -498,6 +500,7 @@ impl GpuResourcePool {
             .checked_add(1)
             .ok_or(PoolError::ArithmeticOverflow)?;
         state.accounting.leases = state.accounting.leases.saturating_add(1);
+        drop(state);
         Ok(ResourceLease::from_id(Arc::clone(&self.shared), id))
     }
 
@@ -534,6 +537,7 @@ impl GpuResourcePool {
         }
         state.events.push_back(PoolEvent::Lost(generation));
         state.generation = DeviceGeneration::new(generation.value().saturating_add(1));
+        drop(state);
         self.shared.wake.notify_all();
         Ok(())
     }
@@ -575,7 +579,7 @@ pub struct ResourceLease {
 }
 
 impl ResourceLease {
-    fn new(pool: Arc<PoolShared>, id: ResourceId) -> Self {
+    const fn new(pool: Arc<PoolShared>, id: ResourceId) -> Self {
         Self {
             pool,
             id: Some(id),
@@ -665,6 +669,7 @@ impl ResourceLease {
         state.accounting.submissions = state.accounting.submissions.saturating_add(1);
         state.accounting.in_flight_bytes = state.accounting.in_flight_bytes.saturating_add(bytes);
         state.events.push_back(PoolEvent::Submitted(id, submission));
+        drop(state);
         Ok(SubmissionToken {
             pool: Arc::clone(&self.pool),
             id: submission,
@@ -900,6 +905,7 @@ fn transition<F: FnOnce(&Entry) -> bool>(
         });
     }
     entry.state = next;
+    drop(state);
     Ok(())
 }
 
@@ -942,6 +948,7 @@ fn release_id(pool: &Arc<PoolShared>, id: ResourceId) -> Result<(), PoolError> {
     }
     state.clock = state.clock.saturating_add(1);
     evict_idle(&mut state, 0);
+    drop(state);
     pool.wake.notify_all();
     Ok(())
 }
@@ -971,6 +978,7 @@ fn retire_submission(pool: &Arc<PoolShared>, submission: SubmissionId) -> Result
         state.events.push_back(PoolEvent::Retired(id, submission));
     }
     state.accounting.submissions = state.accounting.submissions.saturating_sub(1);
+    drop(state);
     pool.wake.notify_all();
     Ok(())
 }
@@ -980,7 +988,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl ResourceLease {
-    fn from_id(pool: Arc<PoolShared>, id: ResourceId) -> Self {
+    const fn from_id(pool: Arc<PoolShared>, id: ResourceId) -> Self {
         Self::new(pool, id)
     }
 }

@@ -1,7 +1,19 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native LUT3D interpolation order is preserved for IEEE-754 parity."
+)]
+
 //! Native LUT3D interpolation equations ported from `src/iop/lut3d.c` and
 //! `data/kernels/lut3d.cl`.
 
-#![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "LUT3D coordinate conversion intentionally narrows bounded native indices to usize."
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "LUT3D coordinates are range-checked non-negative before native index conversion."
+)]
 
 use super::codec::Lut3dInterpolation;
 use super::parser::Lut3d;
@@ -80,7 +92,10 @@ fn blend(a: [f32; 3], b: [f32; 3], amount: f32) -> [f32; 3] {
     ]
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The native trilinear interpolation keeps all eight corner taps explicit."
+)]
 fn trilinear(
     p000: [f32; 3],
     p100: [f32; 3],
@@ -102,7 +117,10 @@ fn trilinear(
     blend(output, tmp1, delta[2])
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The native tetrahedral interpolation keeps all eight corner taps explicit."
+)]
 fn tetrahedral(
     p000: [f32; 3],
     p100: [f32; 3],
@@ -149,7 +167,10 @@ fn weighted4(
     ]
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The native pyramid interpolation keeps all eight corner taps explicit."
+)]
 fn pyramid(
     p000: [f32; 3],
     p100: [f32; 3],

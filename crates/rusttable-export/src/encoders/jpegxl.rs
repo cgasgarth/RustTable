@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::fmt;
 use std::io::{self, Write};
 use std::path::Path;
@@ -165,6 +163,12 @@ impl Encoder {
         self.settings
     }
 
+    /// Encodes an artifact into a JPEG XL byte vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, codec, cancellation, or output
+    /// inspection fails.
     pub fn encode_to_vec(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -172,6 +176,12 @@ impl Encoder {
         self.encode_to_vec_with_budget(artifact, EncodeBudget::default(), &NeverCancel)
     }
 
+    /// Encodes an artifact while applying queue-budget and cancellation limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when validation, codec, cancellation, or output
+    /// inspection fails.
     pub fn encode_to_vec_with_budget<C: EncodeCancellation>(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -236,6 +246,12 @@ impl Encoder {
         Ok((bytes, receipt))
     }
 
+    /// Encodes an artifact and writes it to a path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when encoding or file creation, writing, flushing, or
+    /// synchronization fails.
     pub fn encode_to_path(
         &self,
         artifact: &CanonicalArtifact<'_>,
@@ -259,6 +275,12 @@ impl Encoder {
 }
 
 impl Settings {
+    /// Validates JPEG XL limits and codec settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a limit, distance, effort, or decoding-speed
+    /// setting is unsupported.
     pub fn validate(self) -> Result<(), Error> {
         if self.max_metadata_bytes == 0 || self.max_metadata_bytes > MAX_METADATA_BYTES {
             return Err(Error::InvalidSettings("metadata limit"));
@@ -330,7 +352,7 @@ fn validate_artifact(artifact: &CanonicalArtifact<'_>, settings: Settings) -> Re
     Ok(())
 }
 
-fn native_sample(sample: SampleType) -> Result<rusttable_jxl_native::SampleType, Error> {
+const fn native_sample(sample: SampleType) -> Result<rusttable_jxl_native::SampleType, Error> {
     match sample {
         SampleType::U8 => Ok(rusttable_jxl_native::SampleType::U8),
         SampleType::U16 => Ok(rusttable_jxl_native::SampleType::U16),

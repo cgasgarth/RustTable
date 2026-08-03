@@ -41,7 +41,7 @@ pub struct CameraController<P> {
 
 impl<P: CameraServicePort> CameraController<P> {
     #[must_use]
-    pub fn new(port: P) -> Self {
+    pub const fn new(port: P) -> Self {
         Self {
             port,
             model: CameraViewModel::new(),

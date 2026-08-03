@@ -263,7 +263,11 @@ impl Parser<'_> {
             .map_err(|_| malformed("DNG rational array has an invalid count"))
     }
 
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        reason = "DNG TIFF numeric tags are normalized from on-disk widths into the downstream f32 metadata contract; consumers reject non-finite values"
+    )]
     fn f32_values_optional(
         &self,
         entries: &[Entry],

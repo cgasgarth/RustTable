@@ -174,7 +174,7 @@ impl HistoryOperationSummary {
     }
 
     #[must_use]
-    pub fn operation_key(&self) -> Option<&OperationKey> {
+    pub const fn operation_key(&self) -> Option<&OperationKey> {
         self.operation_key.as_ref()
     }
 
@@ -492,7 +492,7 @@ pub struct HistoryImportEntry {
 
 impl HistoryImportEntry {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         payload: HistoryPayload,
         source: HistoryImportSource,
         is_redo: bool,
@@ -522,7 +522,7 @@ impl HistoryImportEntry {
     }
 
     #[must_use]
-    pub fn source(&self) -> &HistoryImportSource {
+    pub const fn source(&self) -> &HistoryImportSource {
         &self.source
     }
 
@@ -646,7 +646,7 @@ impl HistoryJournalEntry {
     }
 
     #[must_use]
-    pub fn provenance(&self) -> &HistoryProvenance {
+    pub const fn provenance(&self) -> &HistoryProvenance {
         &self.provenance
     }
 }
@@ -675,7 +675,10 @@ pub struct HistoryStateSnapshot {
 }
 
 impl HistoryStateSnapshot {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "history state reconstruction preserves the persisted aggregate field order"
+    )]
     #[must_use]
     pub const fn from_parts(
         photo_id: PhotoId,
@@ -706,7 +709,10 @@ impl HistoryStateSnapshot {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "history state reconstruction preserves the persisted aggregate field order"
+    )]
     #[must_use]
     pub const fn from_parts_with_journal(
         photo_id: PhotoId,
@@ -801,11 +807,13 @@ impl HistoryStateSnapshot {
     }
 
     #[must_use]
-    pub fn provenance(&self) -> &std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance> {
+    pub const fn provenance(
+        &self,
+    ) -> &std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance> {
         &self.provenance
     }
 }
 
-pub(crate) fn validate_name(name: &str) -> bool {
+pub fn validate_name(name: &str) -> bool {
     !name.is_empty() && name.len() <= 64 && !name.chars().any(char::is_control)
 }

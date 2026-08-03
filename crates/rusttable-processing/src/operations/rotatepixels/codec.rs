@@ -69,7 +69,9 @@ impl RotatePixelsConfig {
     /// # Errors
     ///
     /// Returns an error when the angle is not finite.
-    pub fn new(parameters: RotatePixelsParametersV1) -> Result<Self, RotatePixelsParameterError> {
+    pub const fn new(
+        parameters: RotatePixelsParametersV1,
+    ) -> Result<Self, RotatePixelsParameterError> {
         if !parameters.angle.is_finite() {
             return Err(RotatePixelsParameterError::NonFiniteAngle);
         }

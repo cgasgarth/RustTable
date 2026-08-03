@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Bloom arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible bloom glow ported from retained `src/iop/bloom.c`.
 //!
 //! The executable leaf currently accepts one complete scale-1 Lab frame. The

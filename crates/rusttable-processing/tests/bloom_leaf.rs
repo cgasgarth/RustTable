@@ -25,7 +25,7 @@ fn dimensions(width: u32, height: u32) -> RasterDimensions {
     RasterDimensions::new(width, height).expect("nonzero test dimensions")
 }
 
-fn lab(lightness: f32, a: f32, b: f32, fourth: f32) -> [f32; 4] {
+const fn lab(lightness: f32, a: f32, b: f32, fourth: f32) -> [f32; 4] {
     [lightness, a, b, fourth]
 }
 

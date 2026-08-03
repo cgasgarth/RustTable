@@ -8,15 +8,15 @@ use super::{
     REFERENCE_PATH_INDEX_TABLE, SCHEMA_TABLE, VERSION_KEY,
 };
 
-pub(crate) const DUPLICATE_EVIDENCE_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const DUPLICATE_EVIDENCE_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_duplicate_evidence");
-pub(crate) const DUPLICATE_SOURCE_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const DUPLICATE_SOURCE_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_duplicate_source_index");
-pub(crate) const DUPLICATE_EXACT_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const DUPLICATE_EXACT_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_duplicate_exact_index");
-pub(crate) const DUPLICATE_EMBEDDED_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const DUPLICATE_EMBEDDED_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_duplicate_embedded_index");
-pub(crate) const DUPLICATE_VISUAL_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const DUPLICATE_VISUAL_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_duplicate_visual_index");
 
 pub(super) fn open_duplicate_tables(

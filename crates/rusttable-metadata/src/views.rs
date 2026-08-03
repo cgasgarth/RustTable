@@ -36,7 +36,7 @@ impl MetadataPacket {
     }
 }
 
-pub(crate) fn build_views(properties: &[MetadataProperty]) -> BTreeMap<FormatViewKind, FormatView> {
+pub fn build_views(properties: &[MetadataProperty]) -> BTreeMap<FormatViewKind, FormatView> {
     let kinds = [
         FormatViewKind::Exif,
         FormatViewKind::IptcIim,

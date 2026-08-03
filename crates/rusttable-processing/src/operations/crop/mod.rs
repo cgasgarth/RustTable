@@ -1,10 +1,13 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Crop arithmetic order is preserved for IEEE-754 parity."
+)]
 // Darktable-compatible crop operation.
 //
 // Crop is a geometry operation rather than a pointwise color transform.  The
 // module therefore owns its normalized parameter DTO, history codec, checked
 // ROI plan, coordinate callbacks, and scalar CPU copy.  The processing
 // orchestrator binds these pieces to its operation and pixelpipe registries.
-
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
@@ -215,8 +218,9 @@ impl CropLegacyParametersV1 {
     }
 }
 
-/// Exact semantic representation of darktable's 28-byte v2 payload. Native
-/// `gboolean` is a signed 32-bit integer; retaining it as `i32` avoids
+/// Exact semantic representation of darktable's 28-byte v2 payload.
+///
+/// Native `gboolean` is a signed 32-bit integer; retaining it as `i32` avoids
 /// normalizing unusual but byte-valid persisted values before v3 drops it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CropLegacyParametersV2 {
@@ -335,10 +339,11 @@ pub fn migrate_v1(
     })
 }
 
-/// Converts v2 to modern v3 and drops native's removed `gboolean`. When the
-/// owning develop/image state is available, this also reproduces the guarded
-/// issue #19919 recovery. With no context, native's `self && self->dev` guard
-/// skips that recovery and the first 24 bytes pass through unchanged.
+/// Converts v2 to modern v3 and drops native's removed `gboolean`.
+///
+/// When the owning develop/image state is available, this also reproduces the
+/// guarded issue #19919 recovery. With no context, native's `self && self->dev`
+/// guard skips that recovery and the first 24 bytes pass through unchanged.
 pub fn migrate_v2(
     value: CropLegacyParametersV2,
     context: Option<CropMigrationContext>,
@@ -994,7 +999,7 @@ fn decode_config(bytes: &[u8], expected: usize) -> Result<CropConfig, CropCodecE
     .map_err(CropCodecError::Config)
 }
 
-fn write_f32(target: &mut [u8], value: f32) {
+const fn write_f32(target: &mut [u8], value: f32) {
     target.copy_from_slice(&value.to_bits().to_le_bytes());
 }
 fn read_f32(source: &[u8]) -> f32 {

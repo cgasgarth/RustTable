@@ -1,6 +1,9 @@
 //! Display-safe model registry DTOs. No package parsing or persistence belongs here.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The AI model DTO reports registry service errors through the public typed model boundary."
+)]
 
 use std::fmt;
 use std::path::PathBuf;
@@ -207,7 +210,7 @@ pub struct ProviderCapability {
 
 impl ProviderCapability {
     #[must_use]
-    pub fn new(provider: AiProvider, state: QualificationState) -> Self {
+    pub const fn new(provider: AiProvider, state: QualificationState) -> Self {
         Self {
             provider,
             state,
@@ -261,7 +264,10 @@ pub struct InstalledModel {
 }
 
 impl InstalledModel {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The installed-model constructor mirrors the persisted model manifest fields."
+    )]
     pub fn new(
         model_id: impl Into<String>,
         version: impl Into<String>,
@@ -338,7 +344,7 @@ impl InstalledModel {
         self.last_validation.as_deref()
     }
 
-    pub fn set_enabled(&mut self, enabled: bool) {
+    pub const fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
     pub fn set_last_validation(&mut self, value: Option<String>) {
@@ -452,7 +458,7 @@ impl AiModelsSnapshot {
     pub fn announcement(&self) -> &str {
         &self.announcement
     }
-    pub fn set_provider_policy(&mut self, policy: AiProviderPolicy) {
+    pub const fn set_provider_policy(&mut self, policy: AiProviderPolicy) {
         self.provider_policy = policy;
     }
     pub fn set_task_default(&mut self, task: AiTask, hash: Option<ModelHash>) {
@@ -673,7 +679,7 @@ impl AiModelsViewModel {
         self.qualification.as_ref()
     }
     #[must_use]
-    pub fn failure(&self) -> Option<AiModelsFailure> {
+    pub const fn failure(&self) -> Option<AiModelsFailure> {
         self.failure
     }
     #[must_use]
@@ -732,7 +738,7 @@ impl AiModelsViewModel {
         "Loading installed AI model packages…".clone_into(&mut self.status);
     }
 
-    pub fn select_provider(&mut self, provider: AiProvider) {
+    pub const fn select_provider(&mut self, provider: AiProvider) {
         self.selected_provider = provider;
     }
 

@@ -1,6 +1,9 @@
 //! Darkroom rail and panel widget composition.
 
-#![allow(clippy::too_many_arguments)]
+#![expect(
+    clippy::too_many_arguments,
+    reason = "The darkroom panel helper keeps source GTK rail geometry and resize callback inputs explicit."
+)]
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -179,7 +182,7 @@ fn make_projection_resizable(
     scroll.set_widget_name(id);
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     content.append(&scroll);
-    let scroll_for_resize = scroll.clone();
+    let scroll_for_resize = scroll;
     content.append(&resize_handle(default_height, 1, 1_000, move |height| {
         scroll_for_resize.set_max_content_height(height);
     }));
@@ -187,7 +190,10 @@ fn make_projection_resizable(
     slot
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The source-ordered right rail keeps module groups, search, controls, and resize wiring together."
+)]
 pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     let panel = rail(
         "darkroom-right-panel",
@@ -775,7 +781,7 @@ fn navigation_module(width: i32) -> (gtk4::Box, NavigationPreview) {
     )
 }
 
-fn navigation_default_height(_width: i32) -> i32 {
+const fn navigation_default_height(_width: i32) -> i32 {
     clamp_resize_height(
         NAVIGATION_DEFAULT_HEIGHT,
         NAVIGATION_MIN_HEIGHT,
@@ -809,7 +815,10 @@ fn resize_handle(
     drag.connect_drag_begin(move |_, _, _| start_for_begin.set(current_for_begin.get()));
     let current_for_update = Rc::clone(&current_height);
     drag.connect_drag_update(move |_, _, offset_y| {
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "GTK drag offsets are rounded before entering the bounded i32 panel-height domain."
+        )]
         let rounded_offset = offset_y.round() as i32;
         let requested = start_height.get().saturating_add(rounded_offset);
         let height = clamp_resize_height(requested, minimum_height, maximum_height);

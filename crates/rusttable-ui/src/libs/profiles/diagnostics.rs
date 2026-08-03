@@ -14,7 +14,7 @@ use rusttable_display_profile::{
 use crate::viewport_presentation::PresentationMode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProfileDiagnosticStatus {
+pub enum ProfileDiagnosticStatus {
     Ready,
     Missing,
     Unsupported,
@@ -53,7 +53,7 @@ impl ProfileDiagnosticStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ProfileDiagnosticRequest {
+pub struct ProfileDiagnosticRequest {
     expected_generation: Option<u64>,
     presentation_mode: Option<PresentationMode>,
 }
@@ -93,7 +93,7 @@ impl Default for ProfileDiagnosticRequest {
 /// The immutable facts needed by the UI projection. All values originate from typed service
 /// decisions; no profile identity or profile payload is retained here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ProfileDiagnosticFacts {
+pub struct ProfileDiagnosticFacts {
     selection: ProfileSelection,
     status: SelectionStatus,
     hdr: HdrCapability,
@@ -129,7 +129,7 @@ impl From<&DisplayProfileSnapshot> for ProfileDiagnosticFacts {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProfileDiagnosticProjection {
+pub struct ProfileDiagnosticProjection {
     status: ProfileDiagnosticStatus,
     detail: String,
     generation: Option<u64>,
@@ -149,7 +149,7 @@ impl ProfileDiagnosticProjection {
 
 /// Projects a snapshot/receipt pair into a visible status without doing profile work.
 #[must_use]
-pub(crate) fn project_profile_diagnostic(
+pub fn project_profile_diagnostic(
     snapshot: Option<&DisplayProfileSnapshot>,
     receipt: Option<DisplayProfileReceipt>,
     request: ProfileDiagnosticRequest,
@@ -161,7 +161,7 @@ pub(crate) fn project_profile_diagnostic(
 /// Projects already-extracted typed profile facts. This keeps the decision table display-free and
 /// makes it straightforward for non-GTK callers to verify the same status contract.
 #[must_use]
-pub(crate) fn project_facts(
+pub fn project_facts(
     facts: Option<ProfileDiagnosticFacts>,
     receipt: Option<DisplayProfileReceipt>,
     request: ProfileDiagnosticRequest,
@@ -261,7 +261,7 @@ pub(crate) fn project_facts(
     }
 }
 
-fn projection(
+const fn projection(
     status: ProfileDiagnosticStatus,
     detail: String,
     generation: Option<u64>,
@@ -311,7 +311,7 @@ fn degraded_projection(
     projection(status, detail, generation)
 }
 
-fn mode_mismatches(mode: PresentationMode, hdr: HdrCapability) -> bool {
+const fn mode_mismatches(mode: PresentationMode, hdr: HdrCapability) -> bool {
     matches!(
         (mode, hdr.active),
         (PresentationMode::Hdr, false) | (PresentationMode::Sdr, true)
@@ -346,7 +346,7 @@ fn generation_label(generation: u64) -> String {
 }
 
 #[derive(Clone)]
-pub(crate) struct ProfileDiagnosticSurface {
+pub struct ProfileDiagnosticSurface {
     root: gtk4::Box,
     label: gtk4::Label,
 }

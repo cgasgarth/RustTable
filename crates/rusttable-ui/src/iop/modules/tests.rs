@@ -122,6 +122,10 @@ fn colorreconstruct_projection_keeps_deferred_surfaces_partial_and_hidden() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "This source-parity regression keeps the complete persisted-instance contract together."
+)]
 fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_targets() {
     let first_id = OperationId::new(41).expect("first operation id");
     let second_id = OperationId::new(73).expect("second operation id");
@@ -1214,6 +1218,10 @@ fn colorcontrast_projects_only_the_two_source_gui_sliders() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "This source-parity regression keeps Color Contrast metadata and outlier persistence together."
+)]
 fn colorcontrast_actions_preserve_source_metadata_and_persisted_outliers() {
     let mut colorcontrast = reference_modules()
         .expect("reference modules")

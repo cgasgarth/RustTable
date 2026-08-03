@@ -71,7 +71,7 @@ fn identities_and_projection_order_are_deterministic() {
     let mut state = TagState::new();
     let wildlife = definition(None, "Wildlife", &["animals"]);
     let people = definition(None, "People", &["humans"]);
-    create(&mut state, wildlife.clone());
+    create(&mut state, wildlife);
     create(&mut state, people.clone());
 
     assert_eq!(

@@ -19,7 +19,7 @@ const LIGHTTABLE_LEFT_MODULE_IDS: [&str; 5] = [
 ];
 
 /// Persistent left rail and the action-bearing import control it owns.
-pub(crate) struct LeftPanel {
+pub struct LeftPanel {
     root: gtk4::Box,
     import: gtk4::Button,
 }

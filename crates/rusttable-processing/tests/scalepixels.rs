@@ -1,4 +1,7 @@
-#![allow(clippy::cast_precision_loss, clippy::float_cmp)]
+#![expect(
+    clippy::float_cmp,
+    reason = "Scale-pixels compatibility tests assert exact native geometry and pixel values."
+)]
 
 use rusttable_processing::operations::{OperationExecutionError, scalepixels};
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};

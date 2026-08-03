@@ -89,7 +89,7 @@ impl Enclosure {
             samples: 0,
         }
     }
-    fn add(&mut self, point: Point) {
+    const fn add(&mut self, point: Point) {
         self.min_x = self.min_x.min(point.x);
         self.min_y = self.min_y.min(point.y);
         self.max_x = self.max_x.max(point.x);
@@ -125,9 +125,8 @@ fn subdivide(
         x: f64::midpoint(mapped_start.x, mapped_end.x),
         y: f64::midpoint(mapped_start.y, mapped_end.y),
     };
-    let deviation = ((mapped_midpoint.x - chord_midpoint.x).powi(2)
-        + (mapped_midpoint.y - chord_midpoint.y).powi(2))
-    .sqrt();
+    let deviation =
+        (mapped_midpoint.x - chord_midpoint.x).hypot(mapped_midpoint.y - chord_midpoint.y);
     if deviation <= binding.tolerance() {
         return Ok(());
     }
@@ -176,7 +175,11 @@ fn map_distortion(
     })
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "The finite nonnegative range check proves this compatibility conversion fits u32"
+)]
 fn u32_from_f64(value: f64) -> Result<u32, RoiPlanningError> {
     if !value.is_finite() || value < 0.0 || value > f64::from(u32::MAX) {
         return Err(RoiPlanningError::Arithmetic { operation_id: 0 });
@@ -219,6 +222,10 @@ pub(super) fn validate_mapping(mapping: &DistortionMapping) -> Result<(), Distor
     finite.then_some(()).ok_or(DistortionError::NonFinite)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve Darktable's IEEE-754 distortion arithmetic order for ROI parity"
+)]
 pub(super) fn map_point(
     mapping: &DistortionMapping,
     point: Point,
@@ -268,6 +275,10 @@ pub(super) fn map_point(
     }
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve Darktable's IEEE-754 radial inversion arithmetic order for ROI parity"
+)]
 fn invert_radial(
     point: Point,
     cx: f64,
@@ -298,6 +309,10 @@ fn invert_radial(
     Err(DistortionError::NotConverged)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve Darktable's IEEE-754 affine inverse arithmetic order for ROI parity"
+)]
 pub(super) fn invert_affine(matrix: [f64; 6]) -> Result<[f64; 6], DistortionError> {
     let determinant = matrix[0] * matrix[4] - matrix[1] * matrix[3];
     if !determinant.is_finite() || determinant.abs() < 1e-12 {
@@ -315,6 +330,10 @@ pub(super) fn invert_affine(matrix: [f64; 6]) -> Result<[f64; 6], DistortionErro
     Ok(inverse)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve Darktable's IEEE-754 homography inverse arithmetic order for ROI parity"
+)]
 pub(super) fn invert_homography(matrix: [f64; 9]) -> Result<[f64; 9], DistortionError> {
     let a = matrix;
     let cofactors = [

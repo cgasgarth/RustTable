@@ -7,8 +7,12 @@ use crate::descriptor::{
     UiHint,
 };
 
+/// Builds the source-ordered Censorize descriptor.
+///
+/// # Panics
+///
+/// Panics only if the fixed native-compatible descriptor identity is invalid.
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
 pub fn censorize_descriptor() -> OperationDescriptor {
     let scalar = |id: &str, maximum: f64, unit: &str| ParameterDescriptor {
         id: id.to_owned(),

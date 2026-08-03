@@ -51,7 +51,7 @@ fn params(crop: RawPrepareCrop, black: [u16; 4], white: u16) -> RawPrepareParame
     )
 }
 
-fn bayer_metadata(
+const fn bayer_metadata(
     dimensions: RasterDimensions,
     flags: u32,
     format: RawPrepareSampleFormat,
@@ -353,7 +353,7 @@ fn valid_bayer_gain_maps_apply_bilinear_gain_and_malformed_maps_fail_closed() {
         1,
         crop,
     )
-    .with_gain_maps(maps.clone());
+    .with_gain_maps(maps);
     let parameters =
         RawPrepareParametersV2::new(0, 0, 0, 0, [0; 4], 1000, RawPrepareFlatField::Embedded);
     let plan = RawPreparePlan::new(&metadata, &parameters).expect("gain-map plan");

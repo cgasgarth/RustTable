@@ -38,7 +38,10 @@ pub struct TagComponent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "preserve the native tag flag bit layout as named boolean fields"
+)]
 pub struct TagFlags {
     pub raw: i64,
     pub category: bool,
@@ -49,7 +52,7 @@ pub struct TagFlags {
 }
 
 impl TagFlags {
-    fn decode(raw: i64) -> Self {
+    const fn decode(raw: i64) -> Self {
         let bits = raw.cast_unsigned();
         Self {
             raw,
@@ -399,9 +402,7 @@ fn decode_tags(
                         format!("tag {} component {ordinal} is {} bytes", row.id, raw.len()),
                     ));
                 }
-                let display = if let Ok(value) = String::from_utf8(raw.to_vec()) {
-                    value
-                } else {
+                let display = String::from_utf8(raw.to_vec()).unwrap_or_else(|_| {
                     findings.push(finding(
                         FindingCode::InvalidUtf8,
                         Severity::Warning,
@@ -409,7 +410,7 @@ fn decode_tags(
                         format!("tag {} component {ordinal} is not UTF-8", row.id),
                     ));
                     String::from_utf8_lossy(raw).into_owned()
-                };
+                });
                 components.push(TagComponent {
                     ordinal,
                     raw: raw.to_vec(),
@@ -787,7 +788,12 @@ fn detect_group_cycles(
     }
 }
 
-fn finding(code: FindingCode, severity: Severity, source: SourceRowKey, detail: String) -> Finding {
+const fn finding(
+    code: FindingCode,
+    severity: Severity,
+    source: SourceRowKey,
+    detail: String,
+) -> Finding {
     Finding {
         code,
         severity,
@@ -796,7 +802,7 @@ fn finding(code: FindingCode, severity: Severity, source: SourceRowKey, detail: 
     }
 }
 
-fn finding_without_source(code: FindingCode, severity: Severity, detail: String) -> Finding {
+const fn finding_without_source(code: FindingCode, severity: Severity, detail: String) -> Finding {
     Finding {
         code,
         severity,

@@ -3,7 +3,7 @@ use rusttable_testkit::image_diff::{
     MatrixProfileConverter, ToleranceClass, TransferFunction, ciede2000, compare, normalize,
 };
 
-fn canonical(width: u32, height: u32, pixels: Vec<f32>) -> ImageBuffer {
+const fn canonical(width: u32, height: u32, pixels: Vec<f32>) -> ImageBuffer {
     ImageBuffer::canonical_rgba(width, height, CanonicalProfile::Srgb, pixels)
 }
 
@@ -217,7 +217,7 @@ fn alpha_is_compared_as_linear_coverage_and_infinities_are_explicit() {
     .expect("alpha comparison");
     assert!((receipt.metrics.maximum_absolute_error - 0.25).abs() < 1.0e-6);
 
-    let mut infinity = source.clone();
+    let mut infinity = source;
     infinity.pixels[0] = f32::INFINITY;
     let rejected = compare(
         &infinity,
@@ -254,6 +254,10 @@ fn alpha_weight_rmse_is_quadratic_for_all_supported_weights() {
         let mut policy = DiffPolicy::for_class(ToleranceClass::Pointwise);
         policy.alpha_weight = weight;
         let receipt = compare(&source, &reference, &policy).expect("weighted comparison");
+        #[expect(
+            clippy::suboptimal_flops,
+            reason = "preserve the reference alpha-weight RMSE equation"
+        )]
         let expected_rmse = weight / (3.0 + weight * weight).sqrt();
         assert!((receipt.metrics.rmse - expected_rmse).abs() < 1.0e-6);
         assert!((receipt.metrics.weighted_maximum_absolute_error - weight).abs() < 1.0e-6);
@@ -313,7 +317,10 @@ fn psnr_requires_an_explicit_finite_peak_for_extended_range() {
 
 #[test]
 fn bounded_reports_keep_only_deterministic_worst_thirty_two() {
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "fixture indices intentionally become bounded floating RGB values"
+    )]
     let pixels = (0..100)
         .flat_map(|index| [index as f32, 0.0, 0.0, 1.0])
         .collect::<Vec<_>>();

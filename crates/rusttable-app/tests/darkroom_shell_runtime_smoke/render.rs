@@ -1,16 +1,16 @@
 use gtk4::prelude::*;
 
-pub(super) struct RenderedWidget {
+pub struct RenderedWidget {
     bytes: Vec<u8>,
     width: usize,
 }
 
 impl RenderedWidget {
-    pub(super) fn bright_pixels(&self, bounds: gtk4::graphene::Rect) -> usize {
+    pub fn bright_pixels(&self, bounds: gtk4::graphene::Rect) -> usize {
         self.pixels_with_channel_at_least(bounds, 128)
     }
 
-    pub(super) fn pixels_with_channel_at_least(
+    pub fn pixels_with_channel_at_least(
         &self,
         bounds: gtk4::graphene::Rect,
         threshold: u8,
@@ -45,7 +45,7 @@ impl RenderedWidget {
             .count()
     }
 
-    pub(super) fn pixels_differing_from_first(
+    pub fn pixels_differing_from_first(
         &self,
         bounds: gtk4::graphene::Rect,
         tolerance: u8,
@@ -79,7 +79,7 @@ impl RenderedWidget {
             .count()
     }
 
-    pub(super) fn pixels_with_channel_at_most(
+    pub fn pixels_with_channel_at_most(
         &self,
         bounds: gtk4::graphene::Rect,
         threshold: u8,
@@ -111,7 +111,7 @@ impl RenderedWidget {
     }
 }
 
-pub(super) fn render_widget(widget: &gtk4::Widget) -> RenderedWidget {
+pub fn render_widget(widget: &gtk4::Widget) -> RenderedWidget {
     // The automated runtime smoke maps its toplevel transparently so it cannot
     // disturb the desktop. Snapshot the toplevel child directly: compositor
     // opacity is intentionally absent while the complete child paint tree and
@@ -148,7 +148,7 @@ pub(super) fn render_widget(widget: &gtk4::Widget) -> RenderedWidget {
     RenderedWidget { bytes, width }
 }
 
-pub(super) fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widget> {
+pub fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widget> {
     if root.widget_name() == name {
         return Some(root.clone());
     }
@@ -162,7 +162,7 @@ pub(super) fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widge
     None
 }
 
-pub(super) fn named_controller<W: IsA<gtk4::Widget>>(
+pub fn named_controller<W: IsA<gtk4::Widget>>(
     widget: &W,
     name: &str,
 ) -> Option<gtk4::EventController> {
@@ -176,7 +176,7 @@ pub(super) fn named_controller<W: IsA<gtk4::Widget>>(
     })
 }
 
-pub(super) fn find_widget_with_prefix(root: &gtk4::Widget, prefix: &str) -> Option<gtk4::Widget> {
+pub fn find_widget_with_prefix(root: &gtk4::Widget, prefix: &str) -> Option<gtk4::Widget> {
     if root.widget_name().starts_with(prefix) {
         return Some(root.clone());
     }

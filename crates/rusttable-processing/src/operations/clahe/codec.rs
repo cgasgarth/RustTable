@@ -1,4 +1,11 @@
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "CLAHE codec errors are documented by the typed history contract."
+)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "CLAHE codec invariants are enforced by bounded ABI validation before decoding."
+)]
 
 use rusttable_core::FiniteF64;
 use std::fmt;

@@ -14,7 +14,7 @@ use rusttable_render::{
     RenderSampling, RenderTarget, render_prepared_cpu_pixelpipe,
 };
 
-fn provenance() -> rusttable_render::RenderProvenance {
+const fn provenance() -> rusttable_render::RenderProvenance {
     rusttable_render::RenderProvenance::new(
         EditId::new(7).expect("edit"),
         PhotoId::new(8).expect("photo"),
@@ -55,7 +55,13 @@ fn quantize(value: f32) -> u8 {
         reason = "the encoded fixture channel is bounded to the u8 presentation range"
     )]
     {
-        (value * 255.0 + 0.5).floor() as u8
+        #[expect(
+            clippy::suboptimal_flops,
+            reason = "preserve the source quantization multiply/add rounding order"
+        )]
+        {
+            (value * 255.0 + 0.5).floor() as u8
+        }
     }
 }
 

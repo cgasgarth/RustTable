@@ -136,12 +136,12 @@ pub struct ImageBuffer {
 
 impl ImageBuffer {
     #[must_use]
-    pub fn rgba(width: u32, height: u32, pixels: Vec<f32>) -> Self {
+    pub const fn rgba(width: u32, height: u32, pixels: Vec<f32>) -> Self {
         Self::canonical_rgba(width, height, CanonicalProfile::Srgb, pixels)
     }
 
     #[must_use]
-    pub fn canonical_rgba(
+    pub const fn canonical_rgba(
         width: u32,
         height: u32,
         profile: CanonicalProfile,
@@ -188,7 +188,10 @@ impl ImageBuffer {
 ///
 /// Returns a typed error for invalid dimensions, layout, channel count, or an
 /// undeclared profile conversion.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "preserve the source normalization stages and their validation order"
+)]
 pub fn normalize(
     input: &ImageInput,
     target: CanonicalProfile,
@@ -324,7 +327,7 @@ pub struct DiffPolicy {
 
 impl DiffPolicy {
     #[must_use]
-    pub fn for_class(class: ToleranceClass) -> Self {
+    pub const fn for_class(class: ToleranceClass) -> Self {
         let (absolute, relative, rmse, delta_e, radius, max_outliers) = match class {
             ToleranceClass::Exact => (0.0, 0.0, 0.0, 0.0, 0, 0),
             ToleranceClass::Transfer => (2.0e-5, 2.0e-4, 2.0e-5, 0.02, 0, 0),
@@ -681,6 +684,10 @@ impl MetricsAccumulator {
         }
     }
 
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "preserve image-diff error accumulation order for reproducible metrics"
+    )]
     fn observe(&mut self, observation: &Observation) {
         let maximum = observation.errors.iter().copied().fold(0.0, f32::max);
         let rgb_maximum = observation.raw_errors[..3]
@@ -710,8 +717,12 @@ impl MetricsAccumulator {
         }
     }
 
-    #[allow(clippy::cast_precision_loss)]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::suboptimal_flops,
+        reason = "preserve reference metric accumulation and presentation casts"
+    )]
     fn finish(&mut self, pixels: usize, peak: Option<f32>) {
         self.pixel_count = pixels;
         let channel_weight = 3.0 + self.alpha_weight * self.alpha_weight;
@@ -724,8 +735,11 @@ impl MetricsAccumulator {
         });
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "metric reporting intentionally converts bounded aggregate values to f64/f32"
+    )]
     fn into_metrics(self) -> DiffMetrics {
         let pixels = self.pixel_count.max(1) as f64;
         let rgb_rmse = (self.rgb_squared_error / (pixels * 3.0)).sqrt() as f32;

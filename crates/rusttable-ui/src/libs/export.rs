@@ -215,7 +215,7 @@ impl ExportPanel {
 
     /// Returns the root GTK widget.
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Expander {
+    pub const fn widget(&self) -> &gtk4::Expander {
         &self.expander
     }
 

@@ -22,7 +22,10 @@ pub const ASHIFT_DESCRIPTOR_PARAMETER_COUNT: usize = 17 + ASHIFT_DESCRIPTOR_LINE
 ///
 /// Panics only if the fixed operation identifiers violate the descriptor key contract.
 #[must_use]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the perspective descriptor keeps source-ordered geometry parameters and migration data together"
+)]
 pub fn perspective_descriptor() -> OperationDescriptor {
     let mut parameters = vec![
         scalar("rotation", -180.0, 180.0, 0.0, "degree", 2),

@@ -474,7 +474,7 @@ impl fmt::Display for CodecError {
 
 impl std::error::Error for CodecError {}
 
-fn require_length(bytes: &[u8], expected: usize) -> Result<(), CodecError> {
+const fn require_length(bytes: &[u8], expected: usize) -> Result<(), CodecError> {
     if bytes.len() == expected {
         Ok(())
     } else {

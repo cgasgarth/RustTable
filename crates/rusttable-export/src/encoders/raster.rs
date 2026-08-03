@@ -7,17 +7,17 @@ use sha2::{Digest, Sha256};
 
 use crate::CanonicalArtifact;
 
-pub(crate) const MAX_METADATA_BYTES: usize = 16 * 1024 * 1024;
-pub(crate) const MAX_TEXT_BYTES: usize = 1 << 20;
+pub const MAX_METADATA_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_TEXT_BYTES: usize = 1 << 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RasterShape {
+pub struct RasterShape {
     pub channels: usize,
     pub sample_bytes: usize,
     pub sample_type: SampleType,
 }
 
-pub(crate) fn shape(artifact: &CanonicalArtifact<'_>) -> Result<RasterShape, RasterError> {
+pub fn shape(artifact: &CanonicalArtifact<'_>) -> Result<RasterShape, RasterError> {
     let descriptor = artifact.image().descriptor();
     let format = descriptor.format();
     if descriptor.orientation() != rusttable_image::Orientation::Normal {
@@ -42,7 +42,7 @@ pub(crate) fn shape(artifact: &CanonicalArtifact<'_>) -> Result<RasterShape, Ras
     })
 }
 
-pub(crate) fn metadata_len(artifact: &CanonicalArtifact<'_>) -> usize {
+pub fn metadata_len(artifact: &CanonicalArtifact<'_>) -> usize {
     let metadata = artifact.metadata();
     metadata.icc_profile().map_or(0, <[u8]>::len)
         + metadata.exif().map_or(0, <[u8]>::len)
@@ -55,7 +55,7 @@ pub(crate) fn metadata_len(artifact: &CanonicalArtifact<'_>) -> usize {
             .sum::<usize>()
 }
 
-pub(crate) fn validate_metadata(
+pub fn validate_metadata(
     artifact: &CanonicalArtifact<'_>,
     limit: usize,
 ) -> Result<(), RasterError> {
@@ -85,15 +85,12 @@ pub(crate) fn validate_metadata(
     Ok(())
 }
 
-pub(crate) fn row<'a>(
-    artifact: &'a CanonicalArtifact<'a>,
-    y: u32,
-) -> Result<&'a [u8], RasterError> {
+pub fn row<'a>(artifact: &'a CanonicalArtifact<'a>, y: u32) -> Result<&'a [u8], RasterError> {
     let view = artifact.view().map_err(|_| RasterError::InvalidImage)?;
     view.row(0, y).map_err(|_| RasterError::InvalidImage)
 }
 
-pub(crate) fn sample_u16(bytes: &[u8], order: ByteOrder) -> Result<u16, RasterError> {
+pub fn sample_u16(bytes: &[u8], order: ByteOrder) -> Result<u16, RasterError> {
     let pair = bytes.get(..2).ok_or(RasterError::InvalidImage)?;
     Ok(match order {
         ByteOrder::Big => u16::from_be_bytes([pair[0], pair[1]]),
@@ -102,7 +99,7 @@ pub(crate) fn sample_u16(bytes: &[u8], order: ByteOrder) -> Result<u16, RasterEr
     })
 }
 
-pub(crate) fn sample_f32(bytes: &[u8], order: ByteOrder) -> Result<f32, RasterError> {
+pub fn sample_f32(bytes: &[u8], order: ByteOrder) -> Result<f32, RasterError> {
     let bytes = bytes.get(..4).ok_or(RasterError::InvalidImage)?;
     let bits = match order {
         ByteOrder::Big => {
@@ -122,12 +119,12 @@ pub(crate) fn sample_f32(bytes: &[u8], order: ByteOrder) -> Result<f32, RasterEr
     Ok(value)
 }
 
-pub(crate) fn digest(bytes: &[u8]) -> [u8; 32] {
+pub fn digest(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RasterError {
+pub enum RasterError {
     Unsupported(&'static str),
     InvalidImage,
     InvalidLimit,

@@ -58,7 +58,7 @@ fn v1_parameters_round_trip_and_unknown_history_stays_opaque() {
     );
     assert_eq!(
         decode_history(1, &parameters.to_bytes()).expect("history"),
-        RasterFileHistory::V1(Box::new(parameters.clone()))
+        RasterFileHistory::V1(Box::new(parameters))
     );
     assert_eq!(
         decode_history(9, &[1, 2, 3]).expect("opaque history"),
@@ -113,7 +113,7 @@ fn plan_publishes_tiles_rejects_dimension_mismatch_and_is_path_independent() {
     assert_eq!(first.identity(), second.identity());
     assert_eq!(first.mask().values(), second.mask().values());
 
-    let plan = RasterFilePlan::new(first.clone(), 42).expect("plan");
+    let plan = RasterFilePlan::new(first, 42).expect("plan");
     plan.validate_input_dimensions((3, 2))
         .expect("matching dimensions");
     assert!(plan.validate_input_dimensions((2, 3)).is_err());

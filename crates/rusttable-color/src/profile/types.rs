@@ -294,7 +294,7 @@ pub enum IccClut {
 
 impl IccClut {
     #[must_use]
-    pub fn sample_count(&self) -> usize {
+    pub const fn sample_count(&self) -> usize {
         match self {
             Self::U8(values) => values.len(),
             Self::U16(values) => values.len(),

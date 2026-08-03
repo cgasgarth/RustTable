@@ -567,7 +567,7 @@ impl HistoryState {
         let source_branch = self
             .branches
             .get(&source.branch())
-            .ok_or(HistoryError::UnknownBranch(source.branch()))?;
+            .ok_or_else(|| HistoryError::UnknownBranch(source.branch()))?;
         let lineage = lineage_prefix(source_branch, source.revision())?;
         let id = self.allocate_branch_id()?;
         self.branches.insert(
@@ -811,7 +811,7 @@ impl HistoryState {
         let branch = self
             .branches
             .get(&cursor.branch())
-            .ok_or(HistoryError::UnknownBranch(cursor.branch()))?;
+            .ok_or_else(|| HistoryError::UnknownBranch(cursor.branch()))?;
         if cursor
             .revision()
             .is_some_and(|revision| !branch.lineage().contains(&revision))
@@ -1096,15 +1096,17 @@ fn lineage_prefix(
     branch: &HistoryBranch,
     cursor: Option<HistoryRevisionId>,
 ) -> Result<Vec<HistoryRevisionId>, HistoryError> {
-    match cursor {
-        None => Ok(Vec::new()),
-        Some(cursor) => branch
-            .lineage()
-            .iter()
-            .position(|revision| *revision == cursor)
-            .map(|index| branch.lineage()[..=index].to_vec())
-            .ok_or(HistoryError::InvalidCursor),
-    }
+    cursor.map_or_else(
+        || Ok(Vec::new()),
+        |cursor| {
+            branch
+                .lineage()
+                .iter()
+                .position(|revision| *revision == cursor)
+                .map(|index| branch.lineage()[..=index].to_vec())
+                .ok_or(HistoryError::InvalidCursor)
+        },
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -13,11 +13,11 @@ use super::{
     DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role,
 };
 
-pub(crate) const CONTROL_GAP: i32 = DARKTABLE_UI_TOKENS.controls.control_gap;
-pub(crate) const MODULE_GAP: i32 = DARKTABLE_UI_TOKENS.controls.module_gap;
-pub(crate) const MODULE_ROW_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.module_row_height;
-pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_height;
-pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
+pub const CONTROL_GAP: i32 = DARKTABLE_UI_TOKENS.controls.control_gap;
+pub const MODULE_GAP: i32 = DARKTABLE_UI_TOKENS.controls.module_gap;
+pub const MODULE_ROW_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.module_row_height;
+pub const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_height;
+pub const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
 const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
 const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 52;
 const MODULE_HEADER_BUTTON_SIZE: i32 = DARKTABLE_UI_TOKENS.controls.module_header_button_size;
@@ -28,7 +28,7 @@ fn rail_content_width(width: i32) -> i32 {
     width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE)
 }
 
-pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
+pub fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     toolbar.set_widget_name(id);
     toolbar.set_height_request(TOOLBAR_HEIGHT);
@@ -39,7 +39,7 @@ pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     toolbar
 }
 
-pub(crate) fn module_expander(
+pub fn module_expander(
     id: &str,
     title: &str,
     expanded: bool,
@@ -59,7 +59,7 @@ pub(crate) fn module_expander(
     module_widget
 }
 
-pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
+pub fn module_title(id: &str, title: &str) -> gtk4::Box {
     let title_row = module_title_row(id);
     title_row.append(&module_title_label(id, title));
     let action_button = module_action_button(
@@ -76,14 +76,14 @@ pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
 /// The preset affordance is deliberately absent until preset application is
 /// implemented. The returned controls retain enable/reset routing ownership in
 /// the image-operation module builder.
-pub(crate) struct ImageOperationModuleHeader {
+pub struct ImageOperationModuleHeader {
     pub(crate) widget: gtk4::Box,
     pub(crate) enabled: gtk4::CheckButton,
     pub(crate) icon_slot: gtk4::Box,
     pub(crate) reset: Option<gtk4::Button>,
 }
 
-pub(crate) fn image_operation_module_header(
+pub fn image_operation_module_header(
     id: &str,
     operation: &str,
     title: &str,
@@ -180,7 +180,7 @@ fn module_title_label(id: &str, title: &str) -> gtk4::Label {
     title_label
 }
 
-pub(crate) fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4::Box {
+pub fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4::Box {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     row.set_height_request(MODULE_ROW_HEIGHT);
     row.set_width_request(0);
@@ -196,12 +196,7 @@ pub(crate) fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4:
     row
 }
 
-pub(crate) fn scale_row(
-    label: &str,
-    scale: &BauhausSlider,
-    value: &gtk4::Label,
-    unit: &str,
-) -> gtk4::Box {
+pub fn scale_row(label: &str, scale: &BauhausSlider, value: &gtk4::Label, unit: &str) -> gtk4::Box {
     let row = gtk4::Box::new(gtk4::Orientation::Vertical, MODULE_GAP);
     row.set_width_request(0);
     row.set_hexpand(true);
@@ -222,7 +217,7 @@ pub(crate) fn scale_row(
     row
 }
 
-pub(crate) fn button(id: &str, label: &str) -> gtk4::Button {
+pub fn button(id: &str, label: &str) -> gtk4::Button {
     let button = gtk4::Button::with_label(label);
     button.set_widget_name(id);
     button.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
@@ -231,7 +226,7 @@ pub(crate) fn button(id: &str, label: &str) -> gtk4::Button {
     button
 }
 
-pub(crate) fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
+pub fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
     let button = gtk4::ToggleButton::with_label(label);
     button.set_widget_name(id);
     button.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
@@ -242,7 +237,7 @@ pub(crate) fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
 
 /// Disabled until the owning module exposes an action handler, but retained in
 /// the title row so rail geometry matches Darktable's action affordance slot.
-pub(crate) fn module_action_button(id: &str, accessible_name: &str) -> gtk4::Button {
+pub fn module_action_button(id: &str, accessible_name: &str) -> gtk4::Button {
     module_header_button(id, "open-menu-symbolic", accessible_name)
 }
 
@@ -261,7 +256,7 @@ fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk
     button
 }
 
-pub(crate) fn dropdown(id: &str, values: &[&str]) -> gtk4::DropDown {
+pub fn dropdown(id: &str, values: &[&str]) -> gtk4::DropDown {
     let dropdown = gtk4::DropDown::from_strings(values);
     dropdown.set_widget_name(id);
     dropdown.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
@@ -271,13 +266,7 @@ pub(crate) fn dropdown(id: &str, values: &[&str]) -> gtk4::DropDown {
     dropdown
 }
 
-pub(crate) fn slider(
-    id: &str,
-    minimum: f64,
-    maximum: f64,
-    step: f64,
-    draw_value: bool,
-) -> BauhausSlider {
+pub fn slider(id: &str, minimum: f64, maximum: f64, step: f64, draw_value: bool) -> BauhausSlider {
     slider_with_input_spec(
         id,
         minimum,
@@ -288,7 +277,7 @@ pub(crate) fn slider(
     )
 }
 
-pub(crate) fn slider_with_input_spec(
+pub fn slider_with_input_spec(
     id: &str,
     minimum: f64,
     maximum: f64,
@@ -305,7 +294,7 @@ pub(crate) fn slider_with_input_spec(
 /// Generic processing descriptors do not yet carry Darktable's presentation
 /// curve, soft range, digits, or formatting metadata, so they must not expose
 /// the source-specific Bauhaus fine-tune popup until that mapping exists.
-pub(crate) fn provisional_scale(
+pub fn provisional_scale(
     id: &str,
     minimum: f64,
     maximum: f64,
@@ -326,7 +315,7 @@ fn styled_scale(id: &str, minimum: f64, maximum: f64, step: f64, draw_value: boo
     slider
 }
 
-pub(crate) fn switch(id: &str) -> gtk4::Switch {
+pub fn switch(id: &str) -> gtk4::Switch {
     let control = gtk4::Switch::new();
     control.set_widget_name(id);
     control.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
@@ -335,7 +324,7 @@ pub(crate) fn switch(id: &str) -> gtk4::Switch {
     control
 }
 
-pub(crate) fn rail(id: &str, _width: i32, accessible_name: &str) -> gtk4::Box {
+pub fn rail(id: &str, _width: i32, accessible_name: &str) -> gtk4::Box {
     let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     panel.set_widget_name(id);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
@@ -354,11 +343,7 @@ pub(crate) fn rail(id: &str, _width: i32, accessible_name: &str) -> gtk4::Box {
     panel
 }
 
-pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
-    child: &W,
-    _width: i32,
-    id: &str,
-) -> gtk4::ScrolledWindow {
+pub fn rail_scroll<W: IsA<gtk4::Widget>>(child: &W, _width: i32, id: &str) -> gtk4::ScrolledWindow {
     let scroll = gtk4::ScrolledWindow::builder()
         .child(child)
         .hexpand(true)

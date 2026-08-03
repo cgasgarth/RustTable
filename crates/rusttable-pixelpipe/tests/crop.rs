@@ -63,6 +63,10 @@ fn crop_operation(id: u128, cx: f64, cy: f64, cw: f64, ch: f64) -> Operation {
     )
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived crop fixture arithmetic order for pixel parity"
+)]
 fn input(width: u32, height: u32) -> RgbaF32Image {
     let dimensions = RasterDimensions::new(width, height).expect("nonzero dimensions");
     let pixels = (0..dimensions.pixel_count())
@@ -160,6 +164,10 @@ fn crop_full_frame_and_legal_tiled_execution_have_identical_public_results() {
 }
 
 #[test]
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve source-derived crop mask blend arithmetic order"
+)]
 fn crop_selects_the_source_roi_after_a_source_space_masked_operation() {
     let source = input(8, 6);
     let source_pixels = source.pixels().to_vec();
@@ -221,7 +229,7 @@ fn cpu_only_crop_publishes_canonical_backend_and_binds_snapshot_identity() {
         graph(vec![crop_operation(40, 0.125, 0.0, 0.75, 1.0)]),
         CpuPixelpipeOutputMode::FullExport,
     );
-    assert_eq!(snapshot.identity(), snapshot.clone().identity());
+    assert_eq!(snapshot.identity(), snapshot.identity());
     assert_ne!(snapshot.identity(), changed_crop.identity());
 
     let service = PixelpipeExecutionService::cpu_only();

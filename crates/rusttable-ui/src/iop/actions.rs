@@ -287,7 +287,7 @@ impl DarkroomModuleAction {
     /// Compatibility-only actions may be resolved only when the application
     /// has already proven that exactly one matching operation exists.
     #[must_use]
-    pub fn with_operation_id(mut self, operation_id: Option<OperationId>) -> Self {
+    pub const fn with_operation_id(mut self, operation_id: Option<OperationId>) -> Self {
         match &mut self {
             Self::Disclosure {
                 operation_id: target,

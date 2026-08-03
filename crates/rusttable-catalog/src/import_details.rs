@@ -274,7 +274,7 @@ impl ImportRegistrationReceipt {
     }
 
     #[must_use]
-    pub fn with_replaces_photo_id(mut self, photo_id: Option<PhotoId>) -> Self {
+    pub const fn with_replaces_photo_id(mut self, photo_id: Option<PhotoId>) -> Self {
         self.replaces_photo_id = photo_id;
         self
     }
@@ -315,7 +315,7 @@ impl ImportDetails {
     }
 
     #[must_use]
-    pub fn with_metadata_status(mut self, status: ImportMetadataStatus) -> Self {
+    pub const fn with_metadata_status(mut self, status: ImportMetadataStatus) -> Self {
         self.summary.metadata_status = status;
         self
     }
@@ -391,7 +391,7 @@ impl ImportRegistration {
     }
 
     #[must_use]
-    pub fn with_duplicate_evidence(mut self, evidence: DuplicateEvidence) -> Self {
+    pub const fn with_duplicate_evidence(mut self, evidence: DuplicateEvidence) -> Self {
         self.duplicate_evidence = Some(evidence);
         self
     }

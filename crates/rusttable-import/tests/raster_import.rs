@@ -361,7 +361,7 @@ struct RefreshableMetadata {
 }
 
 impl RefreshableMetadata {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             unavailable: std::sync::atomic::AtomicBool::new(true),
         }
@@ -423,7 +423,7 @@ struct ConcurrentReader {
 }
 
 impl ConcurrentReader {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             delegate: FileSourceSnapshotReader,
             first_wave: Barrier::new(4),
@@ -499,7 +499,7 @@ fn source_opening_failures_preserve_exact_stage_without_physical_paths() {
         ),
         (
             SourceSnapshotError::AllocationFailure {
-                path: evidence_path.clone(),
+                path: evidence_path,
             },
             RasterImportFailure::SourceUnavailable,
         ),

@@ -275,7 +275,7 @@ pub enum TiffSampleData {
 
 impl TiffSampleData {
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         match self {
             Self::U8(values) => values.len(),
             Self::U16(values) | Self::F16(values) => values.len(),
@@ -288,7 +288,7 @@ impl TiffSampleData {
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
@@ -332,7 +332,7 @@ pub struct TiffNativeRaster {
 
 impl TiffNativeRaster {
     #[must_use]
-    pub fn is_hdr(&self) -> bool {
+    pub const fn is_hdr(&self) -> bool {
         self.sample_format.is_hdr()
     }
 }

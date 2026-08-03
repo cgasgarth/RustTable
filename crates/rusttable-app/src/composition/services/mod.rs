@@ -1,4 +1,4 @@
-pub(crate) mod ai;
-pub(crate) mod catalog_preview;
-pub(crate) mod darkroom;
-pub(crate) mod preview;
+pub mod ai;
+pub mod catalog_preview;
+pub mod darkroom;
+pub mod preview;

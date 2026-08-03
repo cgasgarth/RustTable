@@ -15,7 +15,7 @@ use rusttable_processing::common::splines::{
     SplineError, interpolate_value_v2, interpolate_value_v2_periodic, sample_curve_v2,
 };
 
-fn anchor(x: f32, y: f32) -> CurveAnchor {
+const fn anchor(x: f32, y: f32) -> CurveAnchor {
     CurveAnchor::new(x, y)
 }
 

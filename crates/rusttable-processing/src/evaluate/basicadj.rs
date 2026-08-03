@@ -54,7 +54,7 @@ impl BasicAdjPlanSet {
         Self { plans, identity }
     }
 
-    pub(super) fn transient(
+    pub(super) const fn transient(
         plans: BTreeMap<OperationId, crate::operations::basicadj::BasicAdjPlan>,
     ) -> Self {
         Self {

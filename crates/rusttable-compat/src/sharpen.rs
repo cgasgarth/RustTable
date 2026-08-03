@@ -174,9 +174,11 @@ pub enum SharpenHistoryStepDecode {
 }
 
 /// Decodes one Sharpen history row's native v1 core without editing the
-/// exhaustive operation dispatch. The canonical import integrator can call
-/// this helper from its Sharpen-specific branch and retain `source` as the
-/// authoritative row until blend/mask and multi-instance support is ported.
+/// exhaustive operation dispatch.
+///
+/// The canonical import integrator can call this helper from its Sharpen-specific
+/// branch and retain `source` as the authoritative row until blend/mask and
+/// multi-instance support is ported.
 #[must_use]
 pub fn decode_sharpen_history_step(step: &CompatHistoryStep) -> SharpenHistoryStepDecode {
     let Some(raw_version) = step.module else {

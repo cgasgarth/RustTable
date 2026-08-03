@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Clipping geometry arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_lossless,
     clippy::cast_possible_truncation,
@@ -69,7 +73,7 @@ pub enum KeystoneMode {
 }
 
 impl KeystoneMode {
-    fn from_value(value: i32) -> Result<Self, ClippingPlanError> {
+    const fn from_value(value: i32) -> Result<Self, ClippingPlanError> {
         match value {
             0 => Ok(Self::None),
             1 => Ok(Self::Vertical),
@@ -267,6 +271,10 @@ impl ClippingPlan {
         self.identity
     }
     #[must_use]
+    #[expect(
+        clippy::suspicious_operation_groupings,
+        reason = "Homography identity comparison intentionally compares the whole transform."
+    )]
     pub fn is_identity(&self) -> bool {
         self.output_dimensions == self.source_dimensions
             && self.source_to_output.coefficients() == Homography::identity().coefficients()
@@ -554,7 +562,11 @@ fn rounded_dimension(value: f64) -> Result<u32, ClippingPlanError> {
     {
         return Err(ClippingPlanError::EmptyOutput);
     }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "validated native rounded dimensions are nonnegative and within the u32 contract"
+    )]
     Ok(rounded as u32)
 }
 

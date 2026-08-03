@@ -175,7 +175,7 @@ pub(super) fn hex(bytes: &[u8; 32]) -> String {
     }
     output
 }
-pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
+pub fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     super::reconstruction::operation_descriptor_for(operation)
 }
 fn prepare_exposure(
@@ -1146,7 +1146,10 @@ fn geometry_definition_with_gpu(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "factory arguments preserve the registry CPU/GPU, ROI, tiling, and analysis contract"
+)]
 pub(super) fn geometry_definition_with_traits(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,

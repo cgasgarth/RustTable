@@ -351,7 +351,7 @@ const fn failure_stage(error: &RenderError) -> RenderFailureStage {
     }
 }
 
-fn source_color_decision(
+const fn source_color_decision(
     actual: ColorEncoding,
     policy: SourceColorPolicy,
 ) -> Result<SourceColorDecision, RenderError> {

@@ -43,7 +43,10 @@ fn prohibit_macos_test_activation() {
 #[cfg(not(target_os = "macos"))]
 fn prohibit_macos_test_activation() {}
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Vibrance GTK boundary fixture keeps source slider projection, target routing, and lifecycle checks together."
+)]
 fn vibrance_uses_one_deprecated_bauhaus_slider_and_exact_operation_target() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.vibrance-boundary"),
@@ -266,7 +269,10 @@ fn vibrance_uses_one_deprecated_bauhaus_slider_and_exact_operation_target() {
     settle_gtk();
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Vibrance GTK lifecycle fixture keeps live controller, snapshot, and revision transitions together."
+)]
 fn slider_snapshot_bridge_preserves_live_controllers_and_revision() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.vibrance-slider-lifecycle"),
@@ -304,7 +310,7 @@ fn slider_snapshot_bridge_preserves_live_controllers_and_revision() {
     let first_value_for_handler = Rc::clone(&first_value);
     let second_value_for_handler = Rc::clone(&second_value);
     let revision_for_handler = Rc::clone(&current_revision);
-    let template_for_handler = template.clone();
+    let template_for_handler = template;
     let shell_for_handler = shell.clone();
     let handler: DarkroomModuleActionHandler = Rc::new(move |action| {
         let DarkroomModuleAction::Control {

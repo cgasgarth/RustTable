@@ -10,7 +10,7 @@ pub enum ParameterValue {
     Unsigned(u64),
     Float(f64),
     Bytes(Vec<u8>),
-    Array(Vec<ParameterValue>),
+    Array(Vec<Self>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -320,7 +320,10 @@ fn encode_scalar(
             write_unsigned(
                 destination,
                 if field.kind == "f32" {
-                    #[allow(clippy::cast_possible_truncation)]
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "The declared f32 history field is intentionally narrowed at the ABI boundary."
+                    )]
                     let narrowed = value as f32;
                     u64::from(narrowed.to_bits())
                 } else {

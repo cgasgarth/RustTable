@@ -3,6 +3,10 @@
     clippy::float_cmp,
     clippy::manual_midpoint
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Tone Equalizer test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 #[path = "../src/operations/toneequal/mod.rs"]
 mod toneequal;
@@ -14,7 +18,7 @@ use toneequal::{
     ToneEqualizerTile, ToneEqualizerTileContract,
 };
 
-fn no_filter_parameters(method: LuminanceMethod) -> ToneEqualizerParametersV2 {
+const fn no_filter_parameters(method: LuminanceMethod) -> ToneEqualizerParametersV2 {
     ToneEqualizerParametersV2::from_values(
         [0.0; CHANNELS],
         0.0,

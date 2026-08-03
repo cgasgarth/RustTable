@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Velvia arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible Velvia saturation at the scene-linear RGB boundary.
 //!
 //! The history codec retains the exact native `float` field order and uses an
@@ -396,7 +401,7 @@ impl VelviaPlan {
     }
 }
 
-#[allow(
+#[expect(
     clippy::manual_midpoint,
     reason = "the native `(max + min) / 2` grouping intentionally retains f32 overflow behavior"
 )]
@@ -424,7 +429,7 @@ fn velvia_rgb(input: [f32; 3], strength: f32, bias: f32) -> [f32; 3] {
     ]
 }
 
-#[allow(
+#[expect(
     clippy::manual_midpoint,
     reason = "the native `0.5 * (other1 + other2)` grouping intentionally retains f32 overflow behavior"
 )]

@@ -182,7 +182,7 @@ impl BinaryWindow {
         }
     }
 
-    fn leading_bits(&self, count: u32) -> u64 {
+    const fn leading_bits(&self, count: u32) -> u64 {
         if count == 0 {
             0
         } else if self.stored_bits >= count {
@@ -192,16 +192,16 @@ impl BinaryWindow {
         }
     }
 
-    fn bit(&self, index: u32) -> bool {
+    const fn bit(&self, index: u32) -> bool {
         index < self.stored_bits && self.bits & (1_u64 << (self.stored_bits - index - 1)) != 0
     }
 
-    fn has_bits_after(&self, index: u32) -> bool {
+    const fn has_bits_after(&self, index: u32) -> bool {
         let remaining = self.stored_bits.saturating_sub(index.saturating_add(1));
         self.tail_nonzero || (remaining != 0 && self.bits & ((1_u64 << remaining) - 1) != 0)
     }
 
-    fn rounded(&self, retained_bits: u32) -> u64 {
+    const fn rounded(&self, retained_bits: u32) -> u64 {
         let retained = self.leading_bits(retained_bits);
         let guard = self.bit(retained_bits);
         if guard && (self.has_bits_after(retained_bits) || retained & 1 != 0) {

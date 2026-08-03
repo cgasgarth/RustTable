@@ -11,7 +11,7 @@ thread_local! {
     static CONFIGURATION: RefCell<Option<ConfigurationService>> = const { RefCell::new(None) };
 }
 
-pub(crate) fn load() -> Result<LoadReport, ConfigError> {
+pub fn load() -> Result<LoadReport, ConfigError> {
     let directories = ProjectDirs::from("com", "cgasgarth", "RustTable").ok_or_else(|| {
         ConfigError::invalid("configuration directory", "platform path unavailable")
     })?;
@@ -22,7 +22,7 @@ pub(crate) fn load() -> Result<LoadReport, ConfigError> {
     Ok(report)
 }
 
-pub(crate) fn colorzones_gui_preferences() -> ColorZonesGuiPreferences {
+pub fn colorzones_gui_preferences() -> ColorZonesGuiPreferences {
     CONFIGURATION.with_borrow(|slot| {
         slot.as_ref()
             .and_then(ConfigurationService::snapshot)
@@ -32,7 +32,7 @@ pub(crate) fn colorzones_gui_preferences() -> ColorZonesGuiPreferences {
     })
 }
 
-pub(crate) fn persist_colorzones_gui_preferences(
+pub fn persist_colorzones_gui_preferences(
     preferences: ColorZonesGuiPreferences,
 ) -> Result<(), ConfigError> {
     CONFIGURATION.with_borrow(|slot| {

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Highlights arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Highlight reconstruction, mapped from Darktable's `src/iop/highlights.c`.
 //!
 //! The scalar path is deliberately the reference implementation.  It freezes
@@ -54,7 +59,7 @@ impl HighlightsMethod {
     }
 
     /// Decodes the upstream enum without silently substituting a method.
-    pub fn from_id(id: i32) -> Result<Self, HighlightsParameterError> {
+    pub const fn from_id(id: i32) -> Result<Self, HighlightsParameterError> {
         match id {
             0 => Ok(Self::Clip),
             1 => Ok(Self::ReconstructLCh),
@@ -98,7 +103,7 @@ impl RecoveryMode {
         }
     }
 
-    pub fn from_id(id: i32) -> Result<Self, HighlightsParameterError> {
+    pub const fn from_id(id: i32) -> Result<Self, HighlightsParameterError> {
         match id {
             0 => Ok(Self::Off),
             1 => Ok(Self::Small),
@@ -117,7 +122,7 @@ impl RecoveryMode {
 pub struct WaveletScale(u8);
 
 impl WaveletScale {
-    pub fn new(id: u8) -> Result<Self, HighlightsParameterError> {
+    pub const fn new(id: u8) -> Result<Self, HighlightsParameterError> {
         if id < 12 {
             Ok(Self(id))
         } else {
@@ -321,7 +326,7 @@ pub struct HighlightsV4 {
     pub solid_color: f32,
 }
 
-pub fn migrate_v1(value: HighlightsV1) -> Result<HighlightsV4, HighlightsParameterError> {
+pub const fn migrate_v1(value: HighlightsV1) -> Result<HighlightsV4, HighlightsParameterError> {
     Ok(HighlightsV4 {
         method: value.method,
         blend_l: value.blend_l,
@@ -337,7 +342,7 @@ pub fn migrate_v1(value: HighlightsV1) -> Result<HighlightsV4, HighlightsParamet
         solid_color: 0.0,
     })
 }
-pub fn migrate_v2(value: HighlightsV2) -> Result<HighlightsV4, HighlightsParameterError> {
+pub const fn migrate_v2(value: HighlightsV2) -> Result<HighlightsV4, HighlightsParameterError> {
     Ok(HighlightsV4 {
         method: value.method,
         blend_l: value.blend_l,
@@ -353,7 +358,7 @@ pub fn migrate_v2(value: HighlightsV2) -> Result<HighlightsV4, HighlightsParamet
         solid_color: 0.0,
     })
 }
-pub fn migrate_v3(value: HighlightsV3) -> Result<HighlightsV4, HighlightsParameterError> {
+pub const fn migrate_v3(value: HighlightsV3) -> Result<HighlightsV4, HighlightsParameterError> {
     Ok(HighlightsV4 {
         method: value.method,
         blend_l: value.blend_l,

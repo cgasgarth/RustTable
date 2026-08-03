@@ -87,7 +87,7 @@ impl Sink {
     }
 }
 
-pub(crate) struct Storage {
+pub struct Storage {
     state: Mutex<State>,
     sequence: AtomicU64,
     redactor: Redactor,
@@ -100,7 +100,7 @@ struct State {
 }
 
 impl Storage {
-    pub(crate) fn open(directory: &Path) -> Result<Self, DiagnosticsError> {
+    pub fn open(directory: &Path) -> Result<Self, DiagnosticsError> {
         fs::create_dir_all(directory)?;
         let human = Sink::open(directory, "rusttable.log").ok();
         let json = Sink::open(directory, "rusttable.jsonl").ok();
@@ -115,7 +115,7 @@ impl Storage {
         })
     }
 
-    pub(crate) fn append(
+    pub fn append(
         &self,
         event: &DiagnosticEvent,
         package_version: &str,
@@ -149,6 +149,7 @@ impl Storage {
             }
         }
         if successes == 0 {
+            drop(state);
             if event.severity().is_warning_or_higher() {
                 fallback(event);
             }
@@ -164,12 +165,15 @@ impl Storage {
                 Some(SinkStatus::Degraded)
             )
         {
+            drop(state);
             fallback(event);
+        } else {
+            drop(state);
         }
         Ok(())
     }
 
-    pub(crate) fn health(&self) -> Result<DiagnosticsHealth, DiagnosticsError> {
+    pub fn health(&self) -> Result<DiagnosticsHealth, DiagnosticsError> {
         self.state
             .lock()
             .map_err(|_| DiagnosticsError::Poisoned)
@@ -185,11 +189,11 @@ impl Storage {
             })
     }
 
-    pub(crate) fn snapshot(&self) -> Result<Vec<PresentationEvent>, DiagnosticsError> {
+    pub fn snapshot(&self) -> Result<Vec<PresentationEvent>, DiagnosticsError> {
         self.recent.snapshot()
     }
 
-    pub(crate) fn redactor(&self) -> &Redactor {
+    pub(crate) const fn redactor(&self) -> &Redactor {
         &self.redactor
     }
 }
@@ -220,7 +224,7 @@ fn backup_path(path: &Path, index: usize) -> PathBuf {
     PathBuf::from(value)
 }
 
-pub(crate) fn refuse_symlink(path: &Path, name: &'static str) -> Result<(), DiagnosticsError> {
+pub fn refuse_symlink(path: &Path, name: &'static str) -> Result<(), DiagnosticsError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             Err(DiagnosticsError::SymlinkRefused(name))

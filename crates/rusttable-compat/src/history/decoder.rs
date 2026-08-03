@@ -36,7 +36,10 @@ impl HistoryDecoder {
             .collect()
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep exhaustive source-compatible history row decoding in one dispatch"
+    )]
     fn decode_image(
         &self,
         schema: DarktableSchema,

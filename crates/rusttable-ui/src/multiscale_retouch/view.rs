@@ -141,7 +141,7 @@ impl MultiscaleRetouchPanel {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -216,7 +216,11 @@ impl MultiscaleRetouchPanel {
             let guard = Rc::clone(&self.signal_guard);
             self.strength.connect_value_changed(move |scale| {
                 if !guard.get() {
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        reason = "The GTK strength slider is bounded to the source u8 control domain."
+                    )]
                     callback(MultiscaleRetouchAction::SetStrength(
                         scale.value().round() as u8
                     ));
@@ -256,7 +260,7 @@ fn band_index(band: MultiscaleBand) -> u32 {
     }
 }
 
-fn source_target(index: usize) -> MultiscaleSourceTarget {
+const fn source_target(index: usize) -> MultiscaleSourceTarget {
     if index == 1 {
         MultiscaleSourceTarget::Target
     } else {
@@ -264,7 +268,7 @@ fn source_target(index: usize) -> MultiscaleSourceTarget {
     }
 }
 
-fn is_running(state: &MultiscaleRetouchSnapshot) -> bool {
+const fn is_running(state: &MultiscaleRetouchSnapshot) -> bool {
     matches!(
         state.status(),
         MultiscaleRetouchStatus::Running { .. } | MultiscaleRetouchStatus::Cancelling { .. }

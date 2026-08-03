@@ -156,7 +156,10 @@ pub fn rgb_gain_descriptor() -> OperationDescriptor {
 /// # Panics
 ///
 /// This function cannot panic because its fixed descriptor identity is valid.
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the source-ordered temperature parameters and migration metadata stay together"
+)]
 pub fn temperature_descriptor() -> OperationDescriptor {
     let mut descriptor = base_exposure_descriptor();
     descriptor.id =
@@ -377,8 +380,12 @@ pub fn linear_offset_descriptor() -> OperationDescriptor {
     descriptor
 }
 
+/// Builds the source-ordered Highlights descriptor.
+///
+/// # Panics
+///
+/// Panics only if the fixed native-compatible descriptor identity is invalid.
 #[must_use]
-#[allow(clippy::assigning_clones, clippy::missing_panics_doc)]
 pub fn highlights_descriptor() -> OperationDescriptor {
     let mut descriptor = base_exposure_descriptor();
     descriptor.id =
@@ -406,7 +413,7 @@ pub fn highlights_descriptor() -> OperationDescriptor {
         .insert(OperationFlags::MASKS)
         .insert(OperationFlags::BLENDING)
         .insert(OperationFlags::ANALYSIS);
-    descriptor.stage = "raw-highlight-reconstruction".to_owned();
+    "raw-highlight-reconstruction".clone_into(&mut descriptor.stage);
     descriptor.roi = RoiKind::FullImage;
     descriptor.tiling.overlap_pixels = 2048;
     descriptor.tiling.preferred_tile_edge = 1024;
@@ -432,8 +439,12 @@ pub fn highlights_descriptor() -> OperationDescriptor {
     descriptor
 }
 
+/// Builds the source-ordered Color Reconstruction descriptor.
+///
+/// # Panics
+///
+/// Panics only if the fixed native-compatible descriptor identity is invalid.
 #[must_use]
-#[allow(clippy::assigning_clones, clippy::missing_panics_doc)]
 pub fn color_reconstruction_descriptor() -> OperationDescriptor {
     let mut descriptor = base_exposure_descriptor();
     descriptor.id = DescriptorId::new("colorreconstruct", "rusttable.colorreconstruct", 3, 3, 1)
@@ -456,7 +467,7 @@ pub fn color_reconstruction_descriptor() -> OperationDescriptor {
         .insert(OperationFlags::FULL_IMAGE)
         .insert(OperationFlags::COLOR)
         .insert(OperationFlags::ANALYSIS);
-    descriptor.stage = "post-demosaic-color-reconstruction".to_owned();
+    "post-demosaic-color-reconstruction".clone_into(&mut descriptor.stage);
     descriptor.roi = RoiKind::FullImage;
     descriptor.tiling.overlap_pixels = 1000;
     descriptor.tiling.preferred_tile_edge = 1024;
@@ -537,7 +548,7 @@ fn color_reconstruction_io() -> InputOutputContract {
     }
 }
 
-pub(crate) fn default_io_contract() -> InputOutputContract {
+pub fn default_io_contract() -> InputOutputContract {
     let image = ImagePredicate {
         channels: 3,
         alpha: AlphaPolicy::Preserve,
@@ -551,7 +562,7 @@ pub(crate) fn default_io_contract() -> InputOutputContract {
     }
 }
 
-pub(crate) fn default_mask_blend() -> MaskBlendContract {
+pub const fn default_mask_blend() -> MaskBlendContract {
     MaskBlendContract {
         consumes_mask: false,
         publishes_mask: false,

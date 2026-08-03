@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 mod contracts;
 mod distortion;
 mod geometry;

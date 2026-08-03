@@ -288,7 +288,7 @@ impl Rational {
     /// # Errors
     ///
     /// Returns an error when the denominator is zero.
-    pub fn new(numerator: i32, denominator: u32) -> Result<Self, &'static str> {
+    pub const fn new(numerator: i32, denominator: u32) -> Result<Self, &'static str> {
         if denominator == 0 {
             return Err("rational denominator cannot be zero");
         }
@@ -311,7 +311,7 @@ impl Dimensions {
     /// # Errors
     ///
     /// Returns an error when either dimension is zero.
-    pub fn new(width: u32, height: u32) -> Result<Self, &'static str> {
+    pub const fn new(width: u32, height: u32) -> Result<Self, &'static str> {
         if width == 0 || height == 0 {
             return Err("dimensions must be nonzero");
         }
@@ -492,12 +492,12 @@ impl TemplateContext {
     }
 
     #[must_use]
-    pub fn values(&self) -> &BTreeMap<VariableId, VariableValue> {
+    pub const fn values(&self) -> &BTreeMap<VariableId, VariableValue> {
         &self.values
     }
 }
 
-fn standard_ids() -> [VariableId; 59] {
+const fn standard_ids() -> [VariableId; 59] {
     [
         VariableId::SourceBasename,
         VariableId::SourceStem,
@@ -561,7 +561,7 @@ fn standard_ids() -> [VariableId; 59] {
     ]
 }
 
-fn descriptor_for(id: VariableId) -> VariableDescriptor {
+const fn descriptor_for(id: VariableId) -> VariableDescriptor {
     let value_type = match id {
         VariableId::PhotoId
         | VariableId::ImageId

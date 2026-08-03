@@ -5,6 +5,10 @@
     clippy::float_cmp,
     reason = "source-derived tests assert native f32 arithmetic and integer boundaries"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Highpass test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 #[path = "../src/operations/highpass.rs"]
 mod highpass;

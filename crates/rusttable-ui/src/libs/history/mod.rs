@@ -528,7 +528,10 @@ fn validate_entries(entries: &[DarkroomHistoryEntry]) -> Result<(), DarkroomHist
     Ok(())
 }
 
-fn validate_selection(selected: Option<usize>, entries: usize) -> Result<(), DarkroomHistoryError> {
+const fn validate_selection(
+    selected: Option<usize>,
+    entries: usize,
+) -> Result<(), DarkroomHistoryError> {
     if let Some(selected) = selected
         && selected >= entries
     {

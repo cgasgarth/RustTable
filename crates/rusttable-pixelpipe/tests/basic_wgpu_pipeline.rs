@@ -661,6 +661,10 @@ fn colorcorrection_snapshot(
     colorcorrection_snapshot_with_input(colorcorrection_input(), opacity, parameters)
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Color Correction coefficient arithmetic order"
+)]
 fn native_colorcorrection_pixel(
     source: RgbaF32Pixel,
     config: ColorCorrectionConfig,
@@ -1059,6 +1063,10 @@ fn colorcontrast_snapshot_identity_includes_every_native_parameter() {
     }
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Color Contrast channel arithmetic order"
+)]
 fn native_colorcontrast_channel(value: f32, steepness: f32, offset: f32, unbound: bool) -> f32 {
     let scaled = value * steepness + offset;
     if unbound {
@@ -1519,6 +1527,10 @@ fn vibrance_snapshot(
     )
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native Vibrance channel arithmetic order"
+)]
 fn native_vibrance_pixel(pixel: RgbaF32Pixel, amount: f32) -> RgbaF32Pixel {
     let sw = (pixel.green() * pixel.green() + pixel.blue() * pixel.blue()).sqrt() / 256.0;
     let lightness_scale = 1.0 - amount * sw * 0.25;

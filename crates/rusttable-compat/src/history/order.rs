@@ -131,7 +131,7 @@ pub(super) fn decode_module_order(
             "multiple module_order rows provide competing order evidence",
         );
     }
-    let Some(version) = ModuleOrderVersion::decode(raw.version) else {
+    let Some(raw_version) = raw.version else {
         finding(
             findings,
             FindingCode::InvalidModuleOrderVersion,
@@ -141,6 +141,7 @@ pub(super) fn decode_module_order(
         );
         return None;
     };
+    let version = ModuleOrderVersion::decode(raw_version);
     if matches!(version, ModuleOrderVersion::Unknown(_)) {
         finding(
             findings,
@@ -517,13 +518,13 @@ fn darktable_hash(
             ModuleOrderVersion::V30Jpeg => 3,
             ModuleOrderVersion::V50 => 4,
             ModuleOrderVersion::V50Jpeg => 5,
-            ModuleOrderVersion::Unknown(value) => {
-                i32::try_from(value).unwrap_or(if value.is_negative() {
+            ModuleOrderVersion::Unknown(value) => i32::try_from(value).unwrap_or_else(|_| {
+                if value.is_negative() {
                     i32::MIN
                 } else {
                     i32::MAX
-                })
-            }
+                }
+            }),
         };
         digest.consume(version.to_ne_bytes());
         if matches!(order.version, ModuleOrderVersion::Custom) {

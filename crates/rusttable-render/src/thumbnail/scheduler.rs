@@ -1,9 +1,3 @@
-#![allow(
-    clippy::missing_errors_doc,
-    clippy::needless_pass_by_value,
-    clippy::should_implement_trait
-)]
-
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, BinaryHeap};
 
@@ -136,6 +130,11 @@ pub struct PrefetchScheduler {
 }
 
 impl PrefetchScheduler {
+    /// Creates a scheduler with bounded queued and active work.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PrefetchError::InvalidLimits`] when either bound is zero.
     pub const fn new(max_queued: usize, max_active: usize) -> Result<Self, PrefetchError> {
         if max_queued == 0 || max_active == 0 {
             return Err(PrefetchError::InvalidLimits);
@@ -152,6 +151,11 @@ impl PrefetchScheduler {
         })
     }
 
+    /// Queues a prefetch request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PrefetchError::QueueFull`] when the configured queue bound is reached.
     pub fn submit(
         &mut self,
         request: PrefetchRequest,
@@ -179,6 +183,11 @@ impl PrefetchScheduler {
         self.cancelled.insert(handle)
     }
 
+    /// Advances the generation used to reject stale completed work.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PrefetchError::InvalidLimits`] when the generation counter would overflow.
     pub fn invalidate_generation(&mut self) -> Result<u64, PrefetchError> {
         self.generation = self
             .generation
@@ -187,6 +196,10 @@ impl PrefetchScheduler {
         Ok(self.generation)
     }
 
+    #[expect(
+        clippy::should_implement_trait,
+        reason = "the scheduler drains bounded priority work rather than iterating a reusable collection"
+    )]
     pub fn next(&mut self) -> Option<PrefetchJob> {
         if self.active >= self.max_active {
             return None;
@@ -201,6 +214,10 @@ impl PrefetchScheduler {
         None
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "completion consumes the worker-owned job so a completed job cannot be reused"
+    )]
     pub fn complete(&mut self, job: PrefetchJob) -> PrefetchCompletion {
         self.active = self.active.saturating_sub(1);
         if job.cancellation.is_cancelled() {
@@ -226,7 +243,7 @@ impl PrefetchScheduler {
     }
 }
 
-fn priority_rank(priority: PrefetchPriority) -> u8 {
+const fn priority_rank(priority: PrefetchPriority) -> u8 {
     match priority {
         PrefetchPriority::Visible => 0,
         PrefetchPriority::Explicit => 1,

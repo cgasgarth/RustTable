@@ -177,7 +177,7 @@ impl IccSemanticIdentity {
     }
 }
 
-pub(crate) fn semantic_identity(
+pub fn semantic_identity(
     header: &IccHeader,
     entries: &[(IccSignature, &[u8])],
 ) -> IccSemanticIdentity {
@@ -207,7 +207,7 @@ pub(crate) fn semantic_identity(
     IccSemanticIdentity::new(digest.finalize().into())
 }
 
-pub(crate) fn product_profile_id(
+pub fn product_profile_id(
     bytes: &[u8],
     header: &IccHeader,
     model: ProfileModel,

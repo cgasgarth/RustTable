@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Sharpen arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Source-faithful CPU Sharpen port for four-channel D50 Lab frames.
 //!
 //! This leaf is ported from `src/iop/sharpen.c`.  The canonical operation
@@ -167,7 +172,7 @@ impl SharpenHistory {
         }
     }
 
-    pub fn current(&self) -> Result<SharpenParametersV1, SharpenCodecError> {
+    pub const fn current(&self) -> Result<SharpenParametersV1, SharpenCodecError> {
         match self {
             Self::V1(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(SharpenCodecError::UnsupportedVersion(*version)),
@@ -571,13 +576,12 @@ impl SharpenPlan {
                 actual: input.len(),
             }
         })?;
-        let expected =
-            width
-                .checked_mul(height)
-                .ok_or(OperationExecutionError::MemoryBudgetExceeded {
-                    required: usize::MAX,
-                    budget: self.budget.maximum_bytes(),
-                })?;
+        let expected = width.checked_mul(height).ok_or_else(|| {
+            OperationExecutionError::MemoryBudgetExceeded {
+                required: usize::MAX,
+                budget: self.budget.maximum_bytes(),
+            }
+        })?;
         if expected != input.len() {
             return Err(OperationExecutionError::DimensionsMismatch {
                 expected,
@@ -621,7 +625,7 @@ impl SharpenPlan {
         })?;
         let output_bytes = expected
             .checked_mul(std::mem::size_of::<SharpenPixel>())
-            .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                 required: usize::MAX,
                 budget: self.budget.maximum_bytes(),
             })?;
@@ -638,16 +642,17 @@ impl SharpenPlan {
         let required = if identity {
             output_bytes
         } else {
-            let temporary_bytes = width.checked_mul(std::mem::size_of::<f32>()).ok_or(
-                OperationExecutionError::MemoryBudgetExceeded {
-                    required: usize::MAX,
-                    budget: self.budget.maximum_bytes(),
-                },
-            )?;
+            let temporary_bytes =
+                width
+                    .checked_mul(std::mem::size_of::<f32>())
+                    .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
+                        required: usize::MAX,
+                        budget: self.budget.maximum_bytes(),
+                    })?;
             output_bytes
                 .checked_add(temporary_bytes)
                 .and_then(|bytes| bytes.checked_add(kernel_bytes(self.radius)))
-                .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+                .ok_or_else(|| OperationExecutionError::MemoryBudgetExceeded {
                     required: usize::MAX,
                     budget: self.budget.maximum_bytes(),
                 })?

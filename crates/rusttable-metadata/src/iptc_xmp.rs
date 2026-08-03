@@ -401,7 +401,7 @@ fn parse_structure(
 fn with_qualifiers(
     property: Node<'_, '_>,
     value: DomainValue,
-    state: &mut ParseState,
+    state: &ParseState,
 ) -> Result<DomainValue, MetadataPacketError> {
     let qualifiers: Vec<_> = property
         .attributes()
@@ -519,11 +519,11 @@ fn property_key(namespace: Option<&str>, name: &str) -> Result<MetadataKey, Meta
     Ok(MetadataKey::new(namespace, name)?)
 }
 
-fn text_value(text: &str, state: &mut ParseState) -> Result<DomainValue, MetadataPacketError> {
+fn text_value(text: &str, state: &ParseState) -> Result<DomainValue, MetadataPacketError> {
     Ok(DomainValue::Text(canonical_text(text, state)?))
 }
 
-fn canonical_text(text: &str, state: &mut ParseState) -> Result<String, MetadataPacketError> {
+fn canonical_text(text: &str, state: &ParseState) -> Result<String, MetadataPacketError> {
     let text = text.trim();
     let actual = u64::try_from(text.len()).map_err(|_| MetadataPacketError::TextTooLarge {
         limit: state.limits.text_bytes,
@@ -664,7 +664,7 @@ fn preflight_xml(source: &[u8], limits: MetadataPacketLimits) -> Result<(), Meta
     Ok(())
 }
 
-fn tag_end(source: &[u8], mut index: usize) -> Option<usize> {
+const fn tag_end(source: &[u8], mut index: usize) -> Option<usize> {
     let mut quote = None;
     while index < source.len() {
         match (quote, source[index]) {
@@ -714,7 +714,7 @@ fn decode_iptc_text(value: &[u8], utf8: bool) -> Result<String, MetadataPacketEr
     Ok(value.iter().map(|byte| char::from(*byte)).collect())
 }
 
-fn iptc_key(record: u8, dataset: u8) -> Option<&'static str> {
+const fn iptc_key(record: u8, dataset: u8) -> Option<&'static str> {
     match (record, dataset) {
         (2, 5) => Some("object-name"),
         (2, 15) => Some("category"),

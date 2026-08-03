@@ -2,11 +2,12 @@
 //!
 //! The recovery-strength control maps `src/libs/neural_restore.c:4241-4258`.
 
-#![allow(
+#![expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
-    clippy::too_many_lines
+    clippy::too_many_lines,
+    reason = "The RGB-denoise GTK view preserves source f32 control projection and source-ordered hierarchy."
 )]
 
 use std::cell::{Cell, RefCell};
@@ -56,7 +57,10 @@ pub struct RgbDenoisePanel {
 
 impl RgbDenoisePanel {
     #[must_use]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The source-ordered RGB-denoise GTK builder keeps hierarchy, controls, and action wiring together."
+    )]
     pub fn new() -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 5);
         root.set_widget_name("rgb-denoise");
@@ -199,7 +203,7 @@ impl RgbDenoisePanel {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 

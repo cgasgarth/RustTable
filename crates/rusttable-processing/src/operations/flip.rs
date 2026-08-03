@@ -286,7 +286,7 @@ impl Default for FlipParametersV2 {
     }
 }
 
-pub fn migrate_v1(value: FlipParametersV1) -> FlipParametersV2 {
+pub const fn migrate_v1(value: FlipParametersV1) -> FlipParametersV2 {
     FlipParametersV2 {
         orientation: value.orientation,
     }
@@ -586,7 +586,7 @@ impl FlipPlan {
         )
     }
 
-    pub fn output_cfa(&self, source: ImageDimensions, cfa: CfaDescriptor) -> CfaDescriptor {
+    pub const fn output_cfa(&self, source: ImageDimensions, cfa: CfaDescriptor) -> CfaDescriptor {
         cfa.after_orientation(source, self.resolved_orientation)
     }
 

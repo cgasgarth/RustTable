@@ -64,7 +64,7 @@ impl ImportCandidate {
         self.asset_id
     }
     #[must_use]
-    pub fn source(&self) -> &SourcePath {
+    pub const fn source(&self) -> &SourcePath {
         &self.source
     }
     #[must_use]
@@ -80,7 +80,7 @@ impl ImportCandidate {
         self.probe
     }
     #[must_use]
-    pub fn metadata(&self) -> &ImageMetadata {
+    pub const fn metadata(&self) -> &ImageMetadata {
         &self.metadata
     }
 }
@@ -153,7 +153,7 @@ impl ImportRecord {
         &self.photo
     }
     #[must_use]
-    pub fn source(&self) -> &SourcePath {
+    pub const fn source(&self) -> &SourcePath {
         &self.source
     }
     #[must_use]
@@ -161,7 +161,7 @@ impl ImportRecord {
         self.probe
     }
     #[must_use]
-    pub fn metadata(&self) -> &ImageMetadata {
+    pub const fn metadata(&self) -> &ImageMetadata {
         &self.metadata
     }
 

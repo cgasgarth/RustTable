@@ -202,7 +202,7 @@ pub struct RasterImportBatch {
 
 impl RasterImportBatch {
     #[must_use]
-    pub fn new(receipts: Vec<RasterImportReceipt>) -> Self {
+    pub const fn new(receipts: Vec<RasterImportReceipt>) -> Self {
         Self { receipts }
     }
 

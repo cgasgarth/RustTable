@@ -266,6 +266,7 @@ pub fn evaluate_graph_output_with_basicadj_plans(
 }
 
 /// Evaluates a graph with detached, evaluated mask planes keyed by operation.
+///
 /// The mask is applied after each operation's normal opacity blend, matching
 /// darktable's post-operation blend semantics while keeping all operation
 /// implementations on the shared dispatch path.

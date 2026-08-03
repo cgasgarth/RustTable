@@ -940,8 +940,7 @@ fn distortion_full_frame_and_tiled_paths_are_consistent_and_cancel_cleanly() {
         ],
     )]);
     let input = image(7, 5);
-    let snapshot =
-        CpuPixelpipeSnapshot::new(input.clone(), graph, CpuPixelpipeOutputMode::FullExport);
+    let snapshot = CpuPixelpipeSnapshot::new(input, graph, CpuPixelpipeOutputMode::FullExport);
     let executor = CpuPixelpipeExecutor;
     let full = executor.execute(&snapshot).expect("full frame");
     let tiled = executor
@@ -986,6 +985,10 @@ fn invalid_distortion_fails_before_output_publication() {
     assert!(!error.to_string().contains("GeometryRequiresFrameBoundary"));
 }
 
+#[expect(
+    clippy::suboptimal_flops,
+    reason = "Preserve the native sRGB transfer equation arithmetic order"
+)]
 fn encode_srgb(value: f32) -> f32 {
     if value <= 0.003_130_8 {
         12.92 * value

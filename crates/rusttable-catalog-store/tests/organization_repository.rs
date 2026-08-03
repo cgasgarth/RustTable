@@ -134,6 +134,6 @@ fn failed_batch_rolls_back_every_photo_and_does_not_emit_an_event() {
     support::remove(&path);
 }
 
-fn photo(value: u128) -> PhotoId {
+const fn photo(value: u128) -> PhotoId {
     PhotoId::new(value).unwrap()
 }

@@ -23,7 +23,7 @@ pub fn commit_basic_edit(
     let persisted = repository
         .find_by_edit_id(draft.edit_id())
         .map_err(BasicEditCommitError::Repository)?
-        .ok_or(BasicEditCommitError::MissingEdit {
+        .ok_or_else(|| BasicEditCommitError::MissingEdit {
             edit_id: draft.edit_id(),
         })?;
     verify_persisted_edit(&persisted, draft)?;

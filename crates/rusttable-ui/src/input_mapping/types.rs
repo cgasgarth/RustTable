@@ -574,7 +574,7 @@ pub enum EditorStatus {
 }
 
 /// Typed operations sent from GTK controls to the editor model.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditorMessage {
     SetView(EditorView),
     SetSearch(String),
@@ -609,7 +609,7 @@ pub struct ApplyResult {
 }
 
 /// Recoverable editor operation errors.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditorError {
     NoSelectedAction,
     LearnNotActive,

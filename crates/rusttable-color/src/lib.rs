@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Color transform errors are documented by the shared typed color contracts."
+)]
 #![doc = "Typed color-management contracts for the `RustTable` rewrite."]
 
 mod chromaticity;

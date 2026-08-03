@@ -55,7 +55,7 @@ impl CommandEncoder {
         &self.commands
     }
 
-    pub fn reject_next(&mut self) {
+    pub const fn reject_next(&mut self) {
         self.reject = true;
     }
 

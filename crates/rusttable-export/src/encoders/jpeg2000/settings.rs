@@ -92,7 +92,7 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsError {
     ZeroQualityLayers,
     LosslessRequiresReversible,

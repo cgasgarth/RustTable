@@ -145,7 +145,7 @@ impl InvertHistory {
 }
 
 #[must_use]
-pub fn migrate_v1_to_v2(parameters: InvertParametersV1) -> InvertParametersV2 {
+pub const fn migrate_v1_to_v2(parameters: InvertParametersV1) -> InvertParametersV2 {
     InvertParametersV2::new([
         parameters.color[0],
         parameters.color[1],

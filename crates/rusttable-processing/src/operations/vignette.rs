@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Vignette arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Darktable-compatible vignette at the typed scene-linear RGB boundary.
 //!
 //! CPU scalar execution is canonical. The plan uses absolute raster indices
@@ -48,7 +53,7 @@ pub enum VignetteDither {
 }
 
 impl VignetteDither {
-    pub fn from_id(id: u32) -> Result<Self, VignetteParameterError> {
+    pub const fn from_id(id: u32) -> Result<Self, VignetteParameterError> {
         match id {
             0 => Ok(Self::Off),
             1 => Ok(Self::EightBit),
@@ -100,7 +105,10 @@ impl VignetteParametersV4 {
     }
 
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor fields retain the native vignette parameter and byte-layout order"
+    )]
     pub const fn new(
         scale: f32,
         falloff_scale: f32,
@@ -188,7 +196,7 @@ impl VignetteParametersV4 {
     }
 }
 
-fn flag(value: u32) -> Option<bool> {
+const fn flag(value: u32) -> Option<bool> {
     match value {
         0 => Some(false),
         1 => Some(true),
@@ -236,7 +244,7 @@ impl VignetteHistory {
     }
 
     /// Legacy v1-v3 blobs are retained but intentionally not guessed at.
-    pub fn current(&self) -> Result<VignetteParametersV4, VignetteCodecError> {
+    pub const fn current(&self) -> Result<VignetteParametersV4, VignetteCodecError> {
         match self {
             Self::V4(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(VignetteCodecError::UnsupportedVersion(*version)),
@@ -570,11 +578,12 @@ impl VignettePlan {
     ) -> Result<LinearRgb, OperationExecutionError> {
         let raw_weight = self.raw_weight(absolute_index);
         let mut weight = raw_weight.clamp(0.0, 1.0);
-        let mut dither = 0.0;
-        if self.dither_applies(absolute_index) {
+        let dither = if self.dither_applies(absolute_index) {
             weight = 0.5 - (std::f32::consts::PI * weight).cos() * 0.5;
-            dither = self.config.dithering.amplitude() * tea_state.encrypt_and_tpdf();
-        }
+            self.config.dithering.amplitude() * tea_state.encrypt_and_tpdf()
+        } else {
+            0.0
+        };
         let mut values = [pixel.red().get(), pixel.green().get(), pixel.blue().get()];
         if weight > 0.0 {
             if self.config.brightness.get() < 0.0 {

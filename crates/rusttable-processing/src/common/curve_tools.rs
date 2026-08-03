@@ -584,7 +584,7 @@ impl InterpolatorV1 {
     }
 }
 
-fn validate_anchor_capacity(count: usize) -> Result<(), CurveError> {
+const fn validate_anchor_capacity(count: usize) -> Result<(), CurveError> {
     if count > MAX_ANCHORS {
         return Err(CurveError::TooManyAnchors {
             count,
@@ -865,10 +865,10 @@ fn truncate_f64_to_i32(value: f64, context: &'static str) -> Result<i32, CurveEr
     Ok(value as i32)
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     reason = "this helper marks the exact C double-to-float assignment boundaries"
 )]
-fn narrow_f64(value: f64) -> f32 {
+const fn narrow_f64(value: f64) -> f32 {
     value as f32
 }

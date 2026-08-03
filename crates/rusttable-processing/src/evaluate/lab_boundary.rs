@@ -40,7 +40,7 @@ use crate::{
 const COLOR_PLANNER_VERSION: u16 = 1;
 
 #[derive(Debug)]
-pub(crate) enum LabBoundaryError {
+pub enum LabBoundaryError {
     Request(ColorTransformRequestError),
     Planner(rusttable_color::PlannerError),
     Transform(TransformExecutionError),
@@ -148,7 +148,7 @@ impl LabBoundaryError {
     }
 }
 
-pub(crate) fn apply_bloom_with_cancellation<C: Fn() -> bool>(
+pub fn apply_bloom_with_cancellation<C: Fn() -> bool>(
     config: BloomConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -199,7 +199,7 @@ pub(crate) fn apply_bloom_with_cancellation<C: Fn() -> bool>(
         .collect()
 }
 
-pub(crate) fn apply_levels_with_cancellation<C: Fn() -> bool>(
+pub fn apply_levels_with_cancellation<C: Fn() -> bool>(
     config: LevelsConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -249,7 +249,7 @@ pub(crate) fn apply_levels_with_cancellation<C: Fn() -> bool>(
         .collect()
 }
 
-pub(crate) fn apply_colormapping_with_cancellation<C: Fn() -> bool>(
+pub fn apply_colormapping_with_cancellation<C: Fn() -> bool>(
     config: &ColorMappingConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -299,7 +299,7 @@ pub(crate) fn apply_colormapping_with_cancellation<C: Fn() -> bool>(
         .collect()
 }
 
-pub(crate) fn apply_colortransfer_with_cancellation<C: Fn() -> bool>(
+pub fn apply_colortransfer_with_cancellation<C: Fn() -> bool>(
     parameters: &ColorTransferParameters,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -396,7 +396,7 @@ impl<E: std::error::Error + 'static> std::error::Error for ShadhiBilateralEvalua
     }
 }
 
-pub(crate) fn apply_defringe(
+pub fn apply_defringe(
     config: DefringeConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -439,7 +439,7 @@ pub(crate) fn apply_defringe(
         .collect()
 }
 
-pub(crate) fn apply_shadhi_with_cancellation<C: Fn() -> bool>(
+pub fn apply_shadhi_with_cancellation<C: Fn() -> bool>(
     config: ShadhiConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -644,7 +644,7 @@ fn check_bilateral_cancellation<E, C: Fn() -> bool>(
     }
 }
 
-pub(crate) fn apply_relight_with_cancellation<C: Fn() -> bool>(
+pub fn apply_relight_with_cancellation<C: Fn() -> bool>(
     config: RelightConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -694,7 +694,7 @@ pub(crate) fn apply_relight_with_cancellation<C: Fn() -> bool>(
         .collect()
 }
 
-pub(crate) fn apply_colorreconstruction_with_cancellation<C: Fn() -> bool>(
+pub fn apply_colorreconstruction_with_cancellation<C: Fn() -> bool>(
     config: ColorReconstructionConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
@@ -748,7 +748,7 @@ pub(crate) fn apply_colorreconstruction_with_cancellation<C: Fn() -> bool>(
         .collect()
 }
 
-pub(crate) fn apply_colorcontrast(
+pub fn apply_colorcontrast(
     config: ColorContrastConfig,
     pixels: &[LinearRgb],
     source_frame: WorkingFrameDescriptor,
@@ -802,7 +802,7 @@ pub(crate) fn apply_colorcontrast(
         .collect()
 }
 
-pub(crate) fn apply_colorcorrection(
+pub fn apply_colorcorrection(
     config: ColorCorrectionConfig,
     pixels: &[LinearRgb],
     source_frame: WorkingFrameDescriptor,
@@ -856,7 +856,7 @@ pub(crate) fn apply_colorcorrection(
         .collect()
 }
 
-pub(crate) fn apply_colorzones(
+pub fn apply_colorzones(
     plan: &ColorZonesPlan,
     pixels: &[LinearRgb],
     source_frame: WorkingFrameDescriptor,
@@ -909,7 +909,7 @@ pub(crate) fn apply_colorzones(
         .collect()
 }
 
-pub(crate) fn apply_vibrance(
+pub fn apply_vibrance(
     config: VibranceConfig,
     pixels: &[LinearRgb],
     source_frame: WorkingFrameDescriptor,

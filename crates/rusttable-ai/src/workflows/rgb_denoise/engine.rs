@@ -4,7 +4,8 @@
     clippy::cast_precision_loss,
     clippy::too_many_lines,
     clippy::too_many_arguments,
-    reason = "the processing seam mirrors Darktable's fixed tile and pixel policies"
+    clippy::suboptimal_flops,
+    reason = "the processing seam mirrors Darktable's fixed tile, pixel, and equation policies"
 )]
 
 use rusttable_pixelpipe::{RgbaF32Image, RgbaF32Pixel};
@@ -242,7 +243,7 @@ fn validate_model(descriptor: &ModelDescriptor) -> Result<(), ProcessError> {
     Ok(())
 }
 
-fn requested_provider(selection: ProviderSelection) -> ProviderUsed {
+const fn requested_provider(selection: ProviderSelection) -> ProviderUsed {
     match selection {
         ProviderSelection::Cpu => ProviderUsed::Cpu,
         ProviderSelection::Auto | ProviderSelection::Gpu => ProviderUsed::Gpu,
@@ -397,7 +398,7 @@ fn srgb_to_linear(value: f32) -> f32 {
     }
 }
 
-fn reflect(index: isize, length: usize) -> usize {
+const fn reflect(index: isize, length: usize) -> usize {
     if length <= 1 {
         return 0;
     }

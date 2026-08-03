@@ -41,7 +41,7 @@ impl Roi {
     /// # Errors
     ///
     /// Returns [`RoiError::OutOfBounds`] when an endpoint exceeds the image.
-    pub fn within(self, dimensions: ImageDimensions) -> Result<Self, RoiError> {
+    pub const fn within(self, dimensions: ImageDimensions) -> Result<Self, RoiError> {
         if self.right() > dimensions.width() || self.bottom() > dimensions.height() {
             return Err(RoiError::OutOfBounds);
         }
@@ -136,7 +136,7 @@ pub enum Orientation {
 
 impl Orientation {
     #[must_use]
-    pub fn output_dimensions(self, source: ImageDimensions) -> ImageDimensions {
+    pub const fn output_dimensions(self, source: ImageDimensions) -> ImageDimensions {
         match self {
             Self::Transpose | Self::Rotate90 | Self::Transverse | Self::Rotate270 => {
                 ImageDimensions::from_nonzero(source.height(), source.width())
@@ -172,7 +172,7 @@ impl Orientation {
 }
 
 impl ImageDimensions {
-    pub(crate) fn from_nonzero(width: u32, height: u32) -> Self {
+    pub(crate) const fn from_nonzero(width: u32, height: u32) -> Self {
         Self::from_nonzero_parts(width, height)
     }
 }

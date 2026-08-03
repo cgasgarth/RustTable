@@ -37,7 +37,7 @@ pub enum ExposureMode {
 
 /// Complete typed state for one Exposure IOP instance.
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "the independent booleans mirror Darktable's Exposure parameter schema"
 )]

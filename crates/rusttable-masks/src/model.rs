@@ -157,7 +157,7 @@ impl GeometryStep {
             Self::Affine { .. } => Err(MaskModelError::NonFiniteGeometry),
         }
     }
-    fn map(self, point: (f32, f32)) -> (f32, f32) {
+    const fn map(self, point: (f32, f32)) -> (f32, f32) {
         match self {
             Self::Identity | Self::Opaque { .. } => point,
             Self::Affine {
@@ -221,7 +221,7 @@ pub struct MaskGeometry {
 
 impl MaskGeometry {
     #[must_use]
-    pub fn new(ancestry: GeometryAncestry, source_roi: MaskRoi, full_frame: bool) -> Self {
+    pub const fn new(ancestry: GeometryAncestry, source_roi: MaskRoi, full_frame: bool) -> Self {
         Self {
             ancestry,
             source_roi,
@@ -229,7 +229,7 @@ impl MaskGeometry {
         }
     }
     #[must_use]
-    pub fn ancestry(&self) -> &GeometryAncestry {
+    pub const fn ancestry(&self) -> &GeometryAncestry {
         &self.ancestry
     }
     #[must_use]
@@ -353,7 +353,7 @@ impl RasterMaskDescriptor {
         self.identity
     }
     #[must_use]
-    pub fn producer(&self) -> &ProducerIdentity {
+    pub const fn producer(&self) -> &ProducerIdentity {
         &self.producer
     }
     #[must_use]
@@ -364,7 +364,7 @@ impl RasterMaskDescriptor {
 }
 
 /// Source kinds preserve opaque imported values without pretending they are evaluable.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MaskSource {
     Raster,
     Generated(RasterMaskDescriptor),

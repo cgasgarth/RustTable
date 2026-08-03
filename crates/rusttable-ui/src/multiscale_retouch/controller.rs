@@ -1,6 +1,9 @@
 //! Generation-safe controller for multiscale-retouch intent and job events.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The multiscale-retouch controller keeps typed preview-service failures at the UI boundary."
+)]
 
 use super::model::{
     MULTISCALE_RETOUCH_BANDS, MULTISCALE_RETOUCH_MAX_STRENGTH, MultiscaleBand,

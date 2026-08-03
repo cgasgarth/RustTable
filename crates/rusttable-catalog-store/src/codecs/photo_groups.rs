@@ -13,7 +13,7 @@ struct StoredPhotoGroup {
     representative: Option<[u8; 16]>,
 }
 
-pub(crate) fn encode(group: &PhotoGroup) -> Result<Vec<u8>, ()> {
+pub fn encode(group: &PhotoGroup) -> Result<Vec<u8>, ()> {
     to_allocvec(&StoredPhotoGroup {
         version: PHOTO_GROUP_FORMAT_VERSION,
         id: group.id().get().to_be_bytes(),
@@ -29,7 +29,7 @@ pub(crate) fn encode(group: &PhotoGroup) -> Result<Vec<u8>, ()> {
     .map_err(|_| ())
 }
 
-pub(crate) fn decode(bytes: &[u8]) -> Result<PhotoGroup, ()> {
+pub fn decode(bytes: &[u8]) -> Result<PhotoGroup, ()> {
     let stored: StoredPhotoGroup = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != PHOTO_GROUP_FORMAT_VERSION {
         return Err(());

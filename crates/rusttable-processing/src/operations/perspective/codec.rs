@@ -469,20 +469,20 @@ impl PerspectiveConfig {
     }
 
     #[must_use]
-    pub fn with_method(mut self, method: AutoMethod, fit_axis: FitAxis) -> Self {
+    pub const fn with_method(mut self, method: AutoMethod, fit_axis: FitAxis) -> Self {
         self.method = method;
         self.fit_axis = fit_axis;
         self
     }
 
     #[must_use]
-    pub fn with_lens_model(mut self, lens_model: LensModel) -> Self {
+    pub const fn with_lens_model(mut self, lens_model: LensModel) -> Self {
         self.lens_model = lens_model;
         self
     }
 
     #[must_use]
-    pub fn with_quad(mut self, quad: Quad) -> Self {
+    pub const fn with_quad(mut self, quad: Quad) -> Self {
         self.quad = Some(quad);
         self.method = AutoMethod::Quad;
         self
@@ -543,7 +543,7 @@ impl PerspectiveConfig {
         self.fit_axis
     }
     #[must_use]
-    pub fn crop_rectangle(&self) -> [f32; 4] {
+    pub const fn crop_rectangle(&self) -> [f32; 4] {
         [
             self.crop_left.get(),
             self.crop_right.get(),
@@ -764,7 +764,7 @@ fn bounded(
     Ok(value)
 }
 
-fn write_f32(target: &mut [u8], value: f32) {
+const fn write_f32(target: &mut [u8], value: f32) {
     target.copy_from_slice(&value.to_le_bytes());
 }
 

@@ -3,6 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::package::hex_digest;
 use crate::types::{CancellationToken, SuperResolutionScale};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -134,6 +135,7 @@ pub struct ModelTileContract {
 }
 
 impl ModelTileContract {
+    #[must_use]
     pub const fn new(width: u32, height: u32, overlap: u32, scale: u32) -> Self {
         Self {
             width,
@@ -256,19 +258,19 @@ impl ModelManifest {
     }
 
     #[must_use]
-    pub fn with_color_contract(mut self, color: ModelColorContract) -> Self {
+    pub const fn with_color_contract(mut self, color: ModelColorContract) -> Self {
         self.color = color;
         self
     }
 
     #[must_use]
-    pub fn with_alpha_policy(mut self, alpha: AlphaPolicy) -> Self {
+    pub const fn with_alpha_policy(mut self, alpha: AlphaPolicy) -> Self {
         self.alpha = alpha;
         self
     }
 
     #[must_use]
-    pub fn with_shadow_boost(mut self, enabled: bool) -> Self {
+    pub const fn with_shadow_boost(mut self, enabled: bool) -> Self {
         self.shadow_boost = enabled;
         self
     }
@@ -361,11 +363,3 @@ impl fmt::Display for ModelInferenceError {
     }
 }
 impl std::error::Error for ModelInferenceError {}
-
-fn hex_digest(digest: impl AsRef<[u8]>) -> String {
-    digest
-        .as_ref()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}

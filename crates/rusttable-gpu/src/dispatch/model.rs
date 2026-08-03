@@ -50,7 +50,7 @@ pub enum ScalarValue {
 }
 
 impl ScalarValue {
-    fn scalar_type(self) -> &'static str {
+    const fn scalar_type(self) -> &'static str {
         match self {
             Self::F32(_) => "f32",
             Self::U32(_) => "u32",
@@ -254,7 +254,7 @@ pub struct DispatchRegion {
 }
 
 impl DispatchRegion {
-    pub fn new(
+    pub const fn new(
         image_width: u32,
         image_height: u32,
         roi: Roi,
@@ -592,17 +592,17 @@ impl PreparedGpuKernel {
     }
 
     #[must_use]
-    pub fn identity(&self) -> &KernelIdentity {
+    pub const fn identity(&self) -> &KernelIdentity {
         &self.identity
     }
 
     #[must_use]
-    pub fn parameter_block(&self) -> &ParameterBlock {
+    pub const fn parameter_block(&self) -> &ParameterBlock {
         &self.parameters
     }
 
     #[must_use]
-    pub fn cache_identity(&self) -> &PipelineCacheIdentity {
+    pub const fn cache_identity(&self) -> &PipelineCacheIdentity {
         &self.cache_identity
     }
 

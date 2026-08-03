@@ -1,3 +1,7 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Clipping arithmetic order is preserved for IEEE-754 parity."
+)]
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
@@ -14,7 +18,7 @@ use sha2::{Digest, Sha256};
 
 use super::{ClippingInterpolation, ClippingPlan, TransformPointError};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClippingExecution {
     pixels: Vec<LinearRgb>,
     dimensions: crate::RasterDimensions,
@@ -387,7 +391,7 @@ pub struct ClippingWgpuDispatch {
 }
 
 #[must_use]
-pub fn wgpu_dispatch(plan: &ClippingPlan, channels: u32) -> ClippingWgpuDispatch {
+pub const fn wgpu_dispatch(plan: &ClippingPlan, channels: u32) -> ClippingWgpuDispatch {
     ClippingWgpuDispatch {
         workgroups_x: plan.output_dimensions().width().saturating_add(7) / 8,
         workgroups_y: plan.output_dimensions().height().saturating_add(7) / 8,

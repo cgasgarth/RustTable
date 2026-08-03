@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Mapping arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded Color Mapping CPU leaf ported from `src/iop/colormapping.c`.
 //!
 //! The leaf keeps the native Lab histogram transfer, source/target cluster
@@ -247,7 +252,7 @@ impl ColorMappingParametersV1 {
 
     /// Applies native source acquisition output and sets `HAS_SOURCE`.
     #[must_use]
-    pub fn with_source_analysis(mut self, analysis: &ColorMappingSourceAnalysis) -> Self {
+    pub const fn with_source_analysis(mut self, analysis: &ColorMappingSourceAnalysis) -> Self {
         self.source_ihist = analysis.inverse_histogram;
         self.source_mean = analysis.mean;
         self.source_var = analysis.variance;
@@ -259,7 +264,7 @@ impl ColorMappingParametersV1 {
 
     /// Applies native target acquisition output and sets `HAS_TARGET`.
     #[must_use]
-    pub fn with_target_analysis(mut self, analysis: &ColorMappingTargetAnalysis) -> Self {
+    pub const fn with_target_analysis(mut self, analysis: &ColorMappingTargetAnalysis) -> Self {
         self.target_hist = analysis.histogram;
         self.target_mean = analysis.mean;
         self.target_var = analysis.variance;
@@ -286,7 +291,7 @@ impl ColorMappingParametersV1 {
 }
 
 /// Known native history payload and byte-preserved future values.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColorMappingHistory {
     V1(Box<ColorMappingParametersV1>),
     Opaque { version: u16, bytes: Vec<u8> },
@@ -390,7 +395,7 @@ impl TryFrom<ColorMappingParametersV1> for ColorMappingConfig {
 }
 
 /// Parameter validation failures at the bounded execution boundary.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColorMappingParameterError {
     InvalidClusterCount(i32),
     NonFinite(&'static str),
@@ -464,7 +469,7 @@ fn validate_parameters(
     Ok(())
 }
 
-fn finite(value: f32, name: &'static str) -> Result<(), ColorMappingParameterError> {
+const fn finite(value: f32, name: &'static str) -> Result<(), ColorMappingParameterError> {
     if value.is_finite() {
         Ok(())
     } else {
@@ -1148,7 +1153,7 @@ fn native_max(left: f32, right: f32) -> f32 {
     }
 }
 
-fn channel_from_index(index: usize) -> ColorMappingChannel {
+const fn channel_from_index(index: usize) -> ColorMappingChannel {
     match index {
         0 => ColorMappingChannel::Lightness,
         1 => ColorMappingChannel::A,
@@ -1670,7 +1675,7 @@ fn validate_execution_input_with_cancel<F: FnMut() -> bool>(
     }
 }
 
-fn map_bilateral_error(error: BilateralError) -> ColorMappingExecutionError {
+const fn map_bilateral_error(error: BilateralError) -> ColorMappingExecutionError {
     match error {
         BilateralError::SizeOverflow => ColorMappingExecutionError::SizeOverflow,
         BilateralError::AllocationFailed { required_bytes } => {

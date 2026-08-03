@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Color Balance RGB execution order is preserved for IEEE-754 parity."
+)]
+
 //! Native CPU `process`, `commit_params`, and gamut-LUT preparation.
 //!
 //! Direct source lineage: `src/iop/colorbalancergb.c` (`commit_params`,
@@ -173,7 +178,7 @@ impl fmt::Display for ColorBalanceRgbParameterError {
 
 impl std::error::Error for ColorBalanceRgbParameterError {}
 
-fn parameter_name(index: usize) -> &'static str {
+const fn parameter_name(index: usize) -> &'static str {
     match index {
         0..=2 => "shadows",
         3..=5 => "midtones",
@@ -194,7 +199,7 @@ fn parameter_name(index: usize) -> &'static str {
     }
 }
 
-fn array_index(index: usize) -> Option<usize> {
+const fn array_index(index: usize) -> Option<usize> {
     match index {
         0..=2 => Some(index % 3),
         3..=5 => Some(index % 3),

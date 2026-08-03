@@ -367,7 +367,7 @@ fn photo_tag_key(photo_id: PhotoId, tag_id: TagId) -> [u8; 32] {
     key
 }
 
-fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> TagError {
+const fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> TagError {
     match error {
         rusttable_catalog::RepositoryError::CorruptPersistedData => TagError::CorruptPersistedData,
         _ => TagError::Unavailable,

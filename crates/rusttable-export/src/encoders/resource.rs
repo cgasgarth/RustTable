@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::fmt;
 
 use rusttable_pixelpipe::{CancellationToken, ResourceClaim};
@@ -38,7 +36,12 @@ impl std::error::Error for BudgetError {}
 
 impl EncodeBudget {
     /// Creates the bounded reservation supplied by the export queue.
-    pub fn new(
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when memory or worker capacity is zero or the
+    /// requested parallelism exceeds a bound.
+    pub const fn new(
         memory_bytes: u64,
         worker_tokens: u16,
         max_parallelism: u16,
@@ -62,7 +65,12 @@ impl EncodeBudget {
         })
     }
 
-    pub fn from_resource_claim(claim: &ResourceClaim) -> Result<Self, BudgetError> {
+    /// Converts a pixelpipe resource claim into an encoder budget.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the claim contains invalid capacity values.
+    pub const fn from_resource_claim(claim: &ResourceClaim) -> Result<Self, BudgetError> {
         Self::new(
             claim.memory_bytes(),
             claim.worker_tokens(),
@@ -129,7 +137,7 @@ impl EncodeCancellation for NeverCancel {
     }
 }
 
-pub(crate) fn checked_memory(
+pub fn checked_memory(
     dimensions: rusttable_image::ImageDimensions,
     channels: usize,
     sample_bytes: usize,

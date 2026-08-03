@@ -30,7 +30,7 @@ const GRADUATED_ND_PARAMETERS: [&str; 6] = [
     "saturation",
 ];
 
-pub(crate) fn compile_vignette(
+pub fn compile_vignette(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &VIGNETTE_PARAMETERS)?;
@@ -63,7 +63,7 @@ pub(crate) fn compile_vignette(
     })
 }
 
-pub(crate) fn compile_graduatednd(
+pub fn compile_graduatednd(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &GRADUATED_ND_PARAMETERS)?;

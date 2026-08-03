@@ -58,7 +58,7 @@ pub struct RasterFileParametersV1 {
 
 impl RasterFileParametersV1 {
     #[must_use]
-    pub fn defaults() -> Self {
+    pub const fn defaults() -> Self {
         Self {
             mode: RasterFileChannelMode::ALL,
             path: [0; RASTERFILE_PATH_BYTES],
@@ -335,7 +335,7 @@ impl RasterMaskAsset {
         self.identity
     }
     #[must_use]
-    pub fn memory_bytes(&self) -> usize {
+    pub const fn memory_bytes(&self) -> usize {
         self.original_bytes
             .len()
             .saturating_add(self.mask.memory_bytes())
@@ -351,7 +351,7 @@ pub struct RasterMaskCache {
 
 impl RasterMaskCache {
     #[must_use]
-    pub fn new(budget: usize) -> Self {
+    pub const fn new(budget: usize) -> Self {
         Self {
             budget,
             resident: 0,

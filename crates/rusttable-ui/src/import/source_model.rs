@@ -211,7 +211,7 @@ impl ImportSourceModel {
         };
     }
 
-    pub fn set_recursive(&mut self, recursive: bool) {
+    pub const fn set_recursive(&mut self, recursive: bool) {
         self.recursive = recursive;
     }
 
@@ -224,7 +224,7 @@ impl ImportSourceModel {
         }
     }
 
-    pub fn set_ignore_nonraws(&mut self, ignore_nonraws: bool) {
+    pub const fn set_ignore_nonraws(&mut self, ignore_nonraws: bool) {
         self.ignore_nonraws = ignore_nonraws;
     }
 
@@ -247,7 +247,7 @@ impl ImportSourceModel {
     }
 
     #[must_use]
-    pub fn row_is_effectively_selected(&self, row: &ImportSourceRow) -> bool {
+    pub const fn row_is_effectively_selected(&self, row: &ImportSourceRow) -> bool {
         row.selected && (!self.ignore_nonraws || row.raw)
     }
 

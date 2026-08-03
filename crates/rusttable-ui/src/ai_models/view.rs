@@ -1,7 +1,5 @@
 //! GTK4 view for AI model settings. It emits typed actions and never inspects package bytes.
 
-#![allow(clippy::missing_panics_doc)]
-
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -47,7 +45,10 @@ pub struct AiModelsPanel {
 
 impl AiModelsPanel {
     #[must_use]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The AI Models panel keeps its GTK hierarchy and selection controls in source order."
+    )]
     pub fn new() -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         root.set_widget_name("ai-models");
@@ -209,7 +210,7 @@ impl AiModelsPanel {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -375,7 +376,10 @@ impl AiModelsPanel {
             .set_active(models.get(selected).is_some_and(|model| model.enabled()));
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The AI Models panel keeps all GTK signal wiring and action routing together."
+    )]
     pub fn connect_action<F>(&self, handler: F)
     where
         F: Fn(AiModelsAction) + 'static,

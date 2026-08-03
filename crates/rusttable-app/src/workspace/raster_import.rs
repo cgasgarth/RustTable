@@ -47,7 +47,7 @@ pub fn run_raster_import(
     )
 }
 
-pub(crate) fn run_raster_import_with_diagnostics(
+pub fn run_raster_import_with_diagnostics(
     catalog_path: &Path,
     paths: Vec<PathBuf>,
     cancellation: &RasterImportCancellation,
@@ -60,13 +60,16 @@ pub(crate) fn run_raster_import_with_diagnostics(
     let image = FileImageInput::new(decode_limits());
     let metadata = ExifMetadataInput::new(metadata_limits());
     let service = RasterImportService::new(source_limits(), &snapshot, &image, &metadata);
-    let batch = if let Ok(repository) = RedbCatalogRepository::open(catalog_path) {
-        let mut catalog = AppCatalog(repository);
-        service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
-    } else {
-        let mut catalog = UnavailableCatalog;
-        service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
-    };
+    let batch = RedbCatalogRepository::open(catalog_path).map_or_else(
+        |_| {
+            let mut catalog = UnavailableCatalog;
+            service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
+        },
+        |repository| {
+            let mut catalog = AppCatalog(repository);
+            service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
+        },
+    );
     for receipt in batch.receipts() {
         diagnostics.raster_import_failure(receipt);
     }
@@ -259,7 +262,7 @@ impl RasterPreviewPort for AppPreview {
     }
 }
 
-fn preview_error_reason(error: &crate::PreviewError) -> RasterPreviewError {
+const fn preview_error_reason(error: &crate::PreviewError) -> RasterPreviewError {
     match error {
         crate::PreviewError::Decode(_) => RasterPreviewError::Decode,
         crate::PreviewError::RawDecode(_) => RasterPreviewError::RawDecode,
@@ -277,7 +280,7 @@ fn preview_error_reason(error: &crate::PreviewError) -> RasterPreviewError {
     }
 }
 
-fn map_store_error(error: AtomicCatalogStoreError) -> AtomicRasterCatalogError {
+const fn map_store_error(error: AtomicCatalogStoreError) -> AtomicRasterCatalogError {
     match error {
         AtomicCatalogStoreError::Unavailable => AtomicRasterCatalogError::Unavailable,
         AtomicCatalogStoreError::Conflict => AtomicRasterCatalogError::Conflict,
@@ -635,10 +638,9 @@ mod tests {
         );
         assert_eq!(same_path_receipt.photo_id, Some(first_photo));
 
-        let duplicate_path = duplicate.clone();
         let duplicate_batch = run_raster_import(
             &catalog,
-            vec![duplicate_path],
+            vec![duplicate],
             &RasterImportCancellation::default(),
             &|_| {},
         );

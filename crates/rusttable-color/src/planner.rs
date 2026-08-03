@@ -205,7 +205,7 @@ pub fn verify_builtin_contracts(
     })
 }
 
-fn request(
+const fn request(
     source: ColorEncoding,
     target: ColorEncoding,
 ) -> Result<ColorTransformRequest, crate::ColorTransformRequestError> {

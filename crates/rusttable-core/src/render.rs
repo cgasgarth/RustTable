@@ -89,7 +89,7 @@ impl RenderSizeRequest {
     }
 }
 
-fn validate_dimensions(width: u32, height: u32) -> Result<(), RenderSizeError> {
+const fn validate_dimensions(width: u32, height: u32) -> Result<(), RenderSizeError> {
     if width == 0 {
         return Err(RenderSizeError::ZeroWidth);
     }

@@ -1,5 +1,3 @@
-#![allow(clippy::cast_precision_loss)]
-
 use rusttable_masks::MaskRaster;
 use rusttable_processing::{
     LinearRgb, RasterDimensions, SpotsConfig, SpotsEntry, SpotsForm, SpotsFormKind, SpotsHistory,

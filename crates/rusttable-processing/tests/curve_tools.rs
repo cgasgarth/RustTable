@@ -12,7 +12,7 @@ use rusttable_processing::common::curve_tools::{
     interpolate_value_v1, sample_curve_v1,
 };
 
-fn anchor(x: u32, y: u32) -> CurveAnchor {
+const fn anchor(x: u32, y: u32) -> CurveAnchor {
     CurveAnchor::new(f32::from_bits(x), f32::from_bits(y))
 }
 
@@ -20,7 +20,7 @@ fn unit_curve(curve_type: CurveType, anchors: &[CurveAnchor]) -> Curve {
     Curve::new(curve_type, CurveBounds::unit(), anchors).expect("valid unit curve")
 }
 
-fn standard_anchors() -> [CurveAnchor; 5] {
+const fn standard_anchors() -> [CurveAnchor; 5] {
     [
         anchor(0x0000_0000, 0x3dcc_cccd),
         anchor(0x3e4c_cccd, 0x3f59_999a),

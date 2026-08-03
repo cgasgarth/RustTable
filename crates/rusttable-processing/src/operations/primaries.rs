@@ -55,7 +55,10 @@ impl fmt::Display for PrimariesConfigError {
 impl std::error::Error for PrimariesConfigError {}
 
 impl PrimariesConfig {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor order mirrors the native primaries history payload"
+    )]
     pub fn new(
         achromatic_tint_hue: f32,
         achromatic_tint_purity: f32,
@@ -373,7 +376,7 @@ fn plan_identity(
     Ok(Sha256::digest(bytes).into())
 }
 
-fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
+const fn pair(value: (rusttable_color::FiniteF32, rusttable_color::FiniteF32)) -> (f32, f32) {
     (value.0.get(), value.1.get())
 }
 fn finite(value: f32) -> FiniteF32 {

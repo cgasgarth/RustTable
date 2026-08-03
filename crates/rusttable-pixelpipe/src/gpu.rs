@@ -259,7 +259,7 @@ impl PixelpipeExecutionService {
     }
 
     #[must_use]
-    pub fn with_gpu(gpu: GpuRuntime) -> Self {
+    pub const fn with_gpu(gpu: GpuRuntime) -> Self {
         Self {
             cpu: CpuPixelpipeExecutor,
             gpu: Some(gpu),
@@ -334,11 +334,10 @@ impl PixelpipeExecutionService {
                 if let CacheError::Cancellation(error) = error {
                     return Err(CpuPixelpipeError::Cancelled(error));
                 }
-                if let Some(error) = self.execution_error(&builder_key) {
-                    Err(error)
-                } else {
-                    self.execute_uncached_with_cancellation(snapshot, scope)
-                }
+                self.execution_error(&builder_key).map_or_else(
+                    || self.execute_uncached_with_cancellation(snapshot, scope),
+                    Err,
+                )
             }
         }
     }
@@ -483,11 +482,10 @@ impl PixelpipeExecutionService {
                 if let CacheError::Cancellation(error) = error {
                     return Err(CpuPixelpipeError::Cancelled(error));
                 }
-                if let Some(error) = self.execution_error(&builder_key) {
-                    Err(error)
-                } else {
-                    self.execute_tiled_uncached_with_cancellation(snapshot, tile_plan, scope)
-                }
+                self.execution_error(&builder_key).map_or_else(
+                    || self.execute_tiled_uncached_with_cancellation(snapshot, tile_plan, scope),
+                    Err,
+                )
             }
         }
     }
@@ -818,7 +816,7 @@ impl GpuPlan {
         }
     }
 
-    fn availability_error(&self, cpu_only: bool) -> PixelpipeGpuFallback {
+    const fn availability_error(&self, cpu_only: bool) -> PixelpipeGpuFallback {
         match self {
             Self::Basic(_) => PixelpipeGpuFallback::Basic(if cpu_only {
                 BasicPointError::CpuOnly
@@ -912,7 +910,7 @@ enum BasicPointCandidate {
 }
 
 impl BasicPointCandidate {
-    fn resolve(self) -> BasicPointOperation {
+    const fn resolve(self) -> BasicPointOperation {
         match self {
             Self::Ready(operation) => operation,
         }
@@ -934,6 +932,10 @@ fn resolve_gpu_plan_candidate(candidate: GpuPlanCandidate) -> QualifiedGpuPlan {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "GPU eligibility preserves the source-derived operation ordering in one decision table."
+)]
 fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidate> {
     if validate_input_encoding(snapshot.input()).is_err()
         || snapshot.mask_graph().is_some()
@@ -1109,7 +1111,7 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
     }
 }
 
-fn velvia_point_operation(
+const fn velvia_point_operation(
     config: rusttable_processing::operations::velvia::VelviaConfig,
 ) -> BasicPointOperation {
     BasicPointOperation::Velvia {
@@ -1118,7 +1120,7 @@ fn velvia_point_operation(
     }
 }
 
-fn colorcorrection_point_operation(
+const fn colorcorrection_point_operation(
     config: rusttable_processing::operations::colorcorrection::ColorCorrectionConfig,
 ) -> BasicPointOperation {
     let coefficients = config.committed_coefficients();
@@ -1131,7 +1133,7 @@ fn colorcorrection_point_operation(
     }
 }
 
-fn colorcontrast_point_operation(
+const fn colorcontrast_point_operation(
     config: rusttable_processing::operations::colorcontrast::ColorContrastConfig,
 ) -> BasicPointOperation {
     BasicPointOperation::ColorContrast {
@@ -1143,7 +1145,7 @@ fn colorcontrast_point_operation(
     }
 }
 
-fn vibrance_point_operation(
+const fn vibrance_point_operation(
     config: rusttable_processing::operations::vibrance::VibranceConfig,
 ) -> BasicPointOperation {
     BasicPointOperation::Vibrance {
@@ -1517,7 +1519,7 @@ fn execute_gpu_bloom_image(
             .zip(candidate_channels)
             .map(|(source, candidate)| {
                 let mut blended = *source;
-                blended[0] = source[0] + (candidate[0] - source[0]) * opacity;
+                blended[0] = (candidate[0] - source[0]).mul_add(opacity, source[0]);
                 blended
             })
             .collect()
@@ -1594,7 +1596,7 @@ fn execute_gpu_colorreconstruct_image(
                 let mut blended = *source;
                 for channel in 0..3 {
                     blended[channel] =
-                        source[channel] * (1.0 - opacity) + candidate[channel] * opacity;
+                        candidate[channel].mul_add(opacity, source[channel] * (1.0 - opacity));
                 }
                 blended
             })
@@ -1632,7 +1634,7 @@ fn colorreconstruct_boundary_fallback(
     }
 }
 
-fn gpu_colorreconstruct_precedence(
+const fn gpu_colorreconstruct_precedence(
     precedence: rusttable_processing::operations::colorreconstruction::ColorReconstructionPrecedence,
 ) -> GpuColorReconstructionPrecedence {
     match precedence {
@@ -2672,19 +2674,17 @@ mod tests {
         let service = Arc::new(PixelpipeExecutionService::cpu_only());
         let snapshot = Arc::new(snapshot_with_encoding(RgbaF32ColorEncoding::Rec2020D65));
         let start = Arc::new(Barrier::new(3));
-        let workers = (0..2)
-            .map(|_| {
-                let service = service.clone();
-                let snapshot = snapshot.clone();
-                let start = start.clone();
-                std::thread::spawn(move || {
-                    start.wait();
-                    service
-                        .execute(&snapshot)
-                        .expect_err("unsupported encoding")
-                })
+        let workers = [0, 1].map(|_| {
+            let service = service.clone();
+            let snapshot = snapshot.clone();
+            let start = start.clone();
+            std::thread::spawn(move || {
+                start.wait();
+                service
+                    .execute(&snapshot)
+                    .expect_err("unsupported encoding")
             })
-            .collect::<Vec<_>>();
+        });
         start.wait();
         let errors = workers
             .into_iter()

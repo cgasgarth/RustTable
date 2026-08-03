@@ -185,7 +185,10 @@ pub struct LocaleSelection {
 impl LocaleSelection {
     /// Creates a selection request from explicit and OS candidates.
     #[must_use]
-    pub fn new(user_preference: Option<String>, operating_system_languages: Vec<String>) -> Self {
+    pub const fn new(
+        user_preference: Option<String>,
+        operating_system_languages: Vec<String>,
+    ) -> Self {
         Self {
             user_preference,
             operating_system_languages,

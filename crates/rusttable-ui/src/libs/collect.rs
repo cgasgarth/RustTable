@@ -238,20 +238,20 @@ impl CollectionControlState {
 
     /// Returns a loading projection without exposing catalog internals to GTK.
     #[must_use]
-    pub fn loading(mut self) -> Self {
+    pub const fn loading(mut self) -> Self {
         self.status = CollectionStatus::Loading;
         self
     }
 
     /// Returns an error projection with a bounded user-facing message.
     #[must_use]
-    pub fn failed(mut self) -> Self {
+    pub const fn failed(mut self) -> Self {
         self.status = CollectionStatus::Error;
         self
     }
 
     #[must_use]
-    fn status_message(&self) -> Option<&'static str> {
+    const fn status_message(&self) -> Option<&'static str> {
         self.status.message()
     }
 }
@@ -396,7 +396,7 @@ impl CollectionControls {
 
     /// Returns the root widget for insertion into a GTK panel.
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 

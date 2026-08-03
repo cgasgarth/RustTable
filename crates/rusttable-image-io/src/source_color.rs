@@ -8,7 +8,7 @@ const ICC_HEADER_BYTES: usize = 128;
 const ICC_TAG_TABLE_BYTES: usize = 132;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SourceColorParseError {
+pub enum SourceColorParseError {
     TruncatedIcc,
     InvalidIcc,
     UnsupportedIcc,
@@ -16,7 +16,7 @@ pub(crate) enum SourceColorParseError {
     InvalidCicp,
 }
 
-pub(crate) fn embedded_icc(bytes: &[u8]) -> Result<SourceColor, SourceColorParseError> {
+pub fn embedded_icc(bytes: &[u8]) -> Result<SourceColor, SourceColorParseError> {
     let profile = IccMatrixProfile::parse(bytes)?;
     SourceColor::external(
         profile.id,
@@ -29,7 +29,7 @@ pub(crate) fn embedded_icc(bytes: &[u8]) -> Result<SourceColor, SourceColorParse
 
 /// Retains a bounded, validated ICC profile even when matrix source-color
 /// fields cannot express its grayscale or LUT transform.
-pub(crate) fn embedded_icc_profile_authoritative(
+pub fn embedded_icc_profile_authoritative(
     bytes: &[u8],
     expected_color_space: IccColorSpace,
 ) -> Result<SourceColor, SourceColorParseError> {
@@ -49,7 +49,7 @@ pub(crate) fn embedded_icc_profile_authoritative(
     Ok(SourceColor::profile_authoritative_icc(profile.profile_id()))
 }
 
-pub(crate) fn embedded_chromaticities(
+pub fn embedded_chromaticities(
     primaries: Primaries,
     transfer: TransferFunction,
     evidence: SourceColorEvidence,
@@ -90,7 +90,7 @@ pub(crate) fn embedded_chromaticities(
 ///
 /// Returns an error when the range flag is not a valid PNG cICP value or when
 /// the supported declaration cannot be represented as matrix source evidence.
-pub(crate) fn embedded_cicp(
+pub fn embedded_cicp(
     color_primaries: u8,
     transfer_characteristics: u8,
     matrix_coefficients: u8,
@@ -335,7 +335,7 @@ fn parametric_curve(value: &[u8]) -> Result<TransferFunction, SourceColorParseEr
     Err(SourceColorParseError::UnsupportedIcc)
 }
 
-fn profile_class(value: [u8; 4]) -> ProfileClass {
+const fn profile_class(value: [u8; 4]) -> ProfileClass {
     match &value {
         b"mntr" => ProfileClass::Display,
         b"prtr" => ProfileClass::Output,
@@ -593,17 +593,17 @@ mod tests {
 }
 
 #[cfg(test)]
-pub(crate) mod test_profiles {
+pub mod test_profiles {
     const D50: [f32; 3] = [0.964_2, 1.0, 0.824_9];
 
-    pub(crate) fn gray() -> Vec<u8> {
+    pub fn gray() -> Vec<u8> {
         ProfileBuilder::new(*b"GRAY")
             .tag(*b"wtpt", xyz_tag(D50))
             .tag(*b"kTRC", gamma_curve(2.2))
             .build()
     }
 
-    pub(crate) fn lut() -> Vec<u8> {
+    pub fn lut() -> Vec<u8> {
         ProfileBuilder::new(*b"RGB ")
             .tag(*b"A2B0", multi_stage_identity())
             .build()
@@ -696,7 +696,11 @@ pub(crate) mod test_profiles {
         let mut data = vec![0; 14];
         data[..4].copy_from_slice(b"curv");
         put_u32(&mut data, 8, 1);
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "the synthetic ICC gamma fixture uses the bounded positive u8.8 value supplied by its tests"
+        )]
         put_u16(&mut data, 12, (gamma * 256.0).round() as u16);
         data
     }
@@ -730,7 +734,10 @@ pub(crate) mod test_profiles {
         bytes[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
     }
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "synthetic ICC s15Fixed16 fixture values are finite and bounded before encoding"
+    )]
     fn put_fixed(bytes: &mut [u8], offset: usize, value: f32) {
         let fixed = (f64::from(value) * 65_536.0).round() as i32;
         bytes[offset..offset + 4].copy_from_slice(&fixed.to_be_bytes());

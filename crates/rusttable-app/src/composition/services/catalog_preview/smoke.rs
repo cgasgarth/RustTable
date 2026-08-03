@@ -76,20 +76,20 @@ impl CatalogPreviewSmokeRequest {
     }
 
     #[must_use]
-    pub fn with_catalog_revision(mut self, revision: Revision) -> Self {
+    pub const fn with_catalog_revision(mut self, revision: Revision) -> Self {
         self.catalog_revision = revision;
         self
     }
 
     #[must_use]
-    pub fn with_preview_bounds(mut self, max_width: u32, max_height: u32) -> Self {
+    pub const fn with_preview_bounds(mut self, max_width: u32, max_height: u32) -> Self {
         self.max_width = max_width;
         self.max_height = max_height;
         self
     }
 
     #[must_use]
-    pub fn with_source_limit(mut self, max_source_bytes: u64) -> Self {
+    pub const fn with_source_limit(mut self, max_source_bytes: u64) -> Self {
         self.max_source_bytes = max_source_bytes;
         self
     }

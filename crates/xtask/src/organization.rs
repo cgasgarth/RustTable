@@ -11,7 +11,7 @@ const SOURCE_MAP: &str = "architecture/rusttable-organization-source-map.toml";
 const SOURCE_MAP_SCHEMA: &str = "rusttable.organization-source-map.v1";
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum CompatibilityCommand {
+pub enum CompatibilityCommand {
     /// Decode the bounded organization contract across all supported schema boundaries.
     DecodeOrganization {
         #[arg(long)]
@@ -23,7 +23,7 @@ pub(crate) enum CompatibilityCommand {
     },
 }
 
-pub(crate) fn run(root: &Path, command: &CompatibilityCommand) -> Result {
+pub fn run(root: &Path, command: &CompatibilityCommand) -> Result {
     match command {
         CompatibilityCommand::DecodeOrganization {
             all_schema_fixtures,
@@ -74,7 +74,7 @@ pub(crate) fn run(root: &Path, command: &CompatibilityCommand) -> Result {
     }
 }
 
-pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
+pub fn verify_source_map(root: &Path, issue: i64) -> Result {
     let text = fs::read_to_string(root.join(SOURCE_MAP))
         .map_err(|error| format!("organization source map: read failed: {error}"))?;
     let document = toml::from_str::<toml::Value>(&text)

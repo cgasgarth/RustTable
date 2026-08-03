@@ -8,7 +8,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const COLORCORRECTION_PARAMETERS: [&str; 5] = ["hia", "hib", "loa", "lob", "saturation"];
 
-pub(crate) fn compile_colorcorrection(
+pub fn compile_colorcorrection(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &COLORCORRECTION_PARAMETERS)?;

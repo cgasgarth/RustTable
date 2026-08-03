@@ -62,7 +62,7 @@ impl ImageDimensions {
             .ok_or(ImageDimensionsError::ArithmeticOverflow)
     }
 
-    pub(crate) fn from_nonzero_parts(width: u32, height: u32) -> Self {
+    pub(crate) const fn from_nonzero_parts(width: u32, height: u32) -> Self {
         let width = NonZeroU32::new(width).expect("orientation swaps nonzero dimensions");
         let height = NonZeroU32::new(height).expect("orientation swaps nonzero dimensions");
         Self { width, height }
@@ -185,7 +185,7 @@ impl DecodedImage {
 
     /// Returns source dimensions after applying the typed orientation property.
     #[must_use]
-    pub fn oriented_dimensions(&self) -> ImageDimensions {
+    pub const fn oriented_dimensions(&self) -> ImageDimensions {
         self.source_orientation()
             .output_dimensions(self.dimensions())
     }

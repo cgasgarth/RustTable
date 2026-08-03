@@ -96,7 +96,7 @@ pub struct RecoverySession {
 
 impl RecoverySession {
     #[must_use]
-    pub fn new(request: RecoveryRequest) -> Self {
+    pub const fn new(request: RecoveryRequest) -> Self {
         Self {
             request,
             next_candidate: 0,
@@ -288,7 +288,7 @@ impl RecoverySession {
             None,
             retired_resources.saturating_add(released_resources),
         );
-        self.receipts.push(attempt.clone());
+        self.receipts.push(attempt);
         self.success = Some(assembly.clone());
         self.state = SessionState::Succeeded;
         Ok(assembly)

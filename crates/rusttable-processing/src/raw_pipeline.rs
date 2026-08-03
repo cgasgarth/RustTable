@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native RAW pipeline arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! The source-side RAW segment shared by preview and export.
 //!
 //! RAW white balance is intentionally resolved here, on the normalized CFA
@@ -101,7 +106,7 @@ impl RawPipelinePlan {
     ) -> Result<Self, RawPipelineError> {
         let prepare = RawPreparePlan::new(
             source.mosaic(),
-            RawPrepareConfig::new(source.default_crop().or(source.active_area())),
+            RawPrepareConfig::new(source.default_crop().or_else(|| source.active_area())),
         )?;
         let normalized = prepare.execute(source.mosaic())?;
         let (temperature, opacity, temperature_receipt) = match temperature {

@@ -1,4 +1,11 @@
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Watermark codec errors are documented by the typed history contract."
+)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "Watermark codec invariants are enforced by bounded ABI validation before decoding."
+)]
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -86,7 +93,10 @@ impl Default for WatermarkParametersV7 {
 }
 
 impl WatermarkParametersV7 {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor arguments preserve the native watermark history field order"
+    )]
     pub fn new(
         template_hash: [u8; 32],
         opacity: f32,
@@ -129,11 +139,11 @@ impl WatermarkParametersV7 {
         self.template_hash
     }
     #[must_use]
-    pub fn opacity(&self) -> f32 {
+    pub const fn opacity(&self) -> f32 {
         f32::from_bits(self.opacity_bits)
     }
     #[must_use]
-    pub fn scale(&self) -> f32 {
+    pub const fn scale(&self) -> f32 {
         f32::from_bits(self.scale_bits)
     }
     #[must_use]
@@ -145,15 +155,15 @@ impl WatermarkParametersV7 {
         self.anchor
     }
     #[must_use]
-    pub fn x_offset(&self) -> f32 {
+    pub const fn x_offset(&self) -> f32 {
         f32::from_bits(self.x_offset_bits)
     }
     #[must_use]
-    pub fn y_offset(&self) -> f32 {
+    pub const fn y_offset(&self) -> f32 {
         f32::from_bits(self.y_offset_bits)
     }
     #[must_use]
-    pub fn rotation(&self) -> f32 {
+    pub const fn rotation(&self) -> f32 {
         f32::from_bits(self.rotation_bits)
     }
     #[must_use]

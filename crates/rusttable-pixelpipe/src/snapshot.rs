@@ -462,7 +462,10 @@ fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "extended snapshot tags and fields must remain in native operation order"
+)]
 fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
     match kind {
         ProcessingOperationKind::Agx { config } => {

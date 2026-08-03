@@ -112,7 +112,7 @@ impl UiConfig {
     }
 
     /// Stores a Color Zones graph height clamped to the native 100–300 logical-pixel range.
-    pub fn set_colorzones_graph_logical_height(&mut self, logical_pixels: u16) {
+    pub const fn set_colorzones_graph_logical_height(&mut self, logical_pixels: u16) {
         self.colorzones.graph_logical_height = ColorZonesGraphLogicalHeight::new(logical_pixels);
     }
 }
@@ -388,27 +388,27 @@ pub enum CollisionPolicy {
     CreateNew,
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
-fn default_version() -> ConfigurationVersion {
+const fn default_version() -> ConfigurationVersion {
     ConfigurationVersion(CURRENT_VERSION)
 }
-fn default_preview_edge() -> u32 {
+const fn default_preview_edge() -> u32 {
     1536
 }
-fn default_checkpoint() -> u32 {
+const fn default_checkpoint() -> u32 {
     60
 }
-fn default_four() -> u16 {
+const fn default_four() -> u16 {
     4
 }
-fn default_cache() -> u32 {
+const fn default_cache() -> u32 {
     512
 }
-fn default_thumbnail() -> u32 {
+const fn default_thumbnail() -> u32 {
     200
 }
-fn default_recent() -> u32 {
+const fn default_recent() -> u32 {
     2000
 }

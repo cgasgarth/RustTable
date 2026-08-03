@@ -96,7 +96,7 @@ impl BasicEditValues {
     }
 
     #[must_use]
-    pub fn value(self, field: BasicEditField) -> FiniteF64 {
+    pub const fn value(self, field: BasicEditField) -> FiniteF64 {
         match field {
             BasicEditField::Exposure => self.exposure,
             BasicEditField::RedGain => self.red_gain,
@@ -225,25 +225,25 @@ impl BasicEditInspectorViewModel {
         self.mark_unsaved();
     }
 
-    pub fn apply_saved_values(&mut self, values: BasicEditValues) {
+    pub const fn apply_saved_values(&mut self, values: BasicEditValues) {
         self.saved = values;
         self.draft = values;
         self.save_state = BasicEditSaveState::Clean;
     }
 
-    pub fn begin_save(&mut self) {
+    pub const fn begin_save(&mut self) {
         self.save_state = BasicEditSaveState::Saving;
     }
 
-    pub fn mark_save_failed(&mut self) {
+    pub const fn mark_save_failed(&mut self) {
         self.save_state = BasicEditSaveState::Failed;
     }
 
-    pub fn mark_save_conflicted(&mut self) {
+    pub const fn mark_save_conflicted(&mut self) {
         self.save_state = BasicEditSaveState::Conflict;
     }
 
-    pub fn request_save(&mut self) {
+    pub const fn request_save(&mut self) {
         self.begin_save();
     }
 

@@ -16,7 +16,7 @@ const INNER_PADDING: i32 = 4;
 
 /// Immutable source metadata used to construct a Bauhaus combobox.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct BauhausComboBoxSpec<'a> {
+pub struct BauhausComboBoxSpec<'a> {
     pub(crate) label: &'a str,
     pub(crate) tooltip: &'a str,
     pub(crate) options: &'a [&'a str],
@@ -34,7 +34,7 @@ impl<'a> BauhausComboBoxSpec<'a> {
 
 /// Full-width GTK4 Bauhaus combobox with an internal label.
 #[derive(Clone, Debug)]
-pub(crate) struct BauhausComboBox {
+pub struct BauhausComboBox {
     root: gtk4::Box,
     dropdown: gtk4::DropDown,
     options: Rc<[String]>,
@@ -86,11 +86,11 @@ impl BauhausComboBox {
         }
     }
 
-    pub(crate) fn widget(&self) -> &gtk4::Box {
+    pub(crate) const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
-    pub(crate) fn dropdown(&self) -> &gtk4::DropDown {
+    pub(crate) const fn dropdown(&self) -> &gtk4::DropDown {
         &self.dropdown
     }
 
@@ -104,7 +104,7 @@ impl BauhausComboBox {
     }
 
     /// Connects the completed-selection signal exposed by GTK4's `DropDown`.
-    pub(crate) fn connect_selection_changed(&self, callback: impl Fn(&BauhausComboBox) + 'static) {
+    pub(crate) fn connect_selection_changed(&self, callback: impl Fn(&Self) + 'static) {
         let control = self.clone();
         self.dropdown
             .connect_selected_notify(move |_| callback(&control));

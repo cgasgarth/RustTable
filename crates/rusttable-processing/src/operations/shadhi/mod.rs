@@ -6,12 +6,22 @@
 //! equations and the full-image filter plan.
 
 #![forbid(unsafe_code)]
-#![allow(
+#![expect(
     clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
+    reason = "Native Shadhi conversions preserve the retained f32 Lab ABI boundaries."
 )]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "Native Shadhi indices are range-checked before conversion to unsigned coordinates."
+)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Shadhi errors are documented by the shared typed Lab operation contract."
+)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "Shadhi descriptor invariants are checked by bounded static contract construction."
+)]
 
 use std::fmt;
 
@@ -69,7 +79,7 @@ impl ShadhiAlgorithm {
         }
     }
 
-    pub fn from_id(id: u32) -> Result<Self, ShadhiParameterError> {
+    pub const fn from_id(id: u32) -> Result<Self, ShadhiParameterError> {
         match id {
             0 => Ok(Self::Gaussian),
             1 => Ok(Self::Bilateral),
@@ -638,7 +648,7 @@ fn decode_v4(bytes: &[u8]) -> Result<ShadhiParametersV4, ShadhiCodecError> {
     })
 }
 
-fn length_error(expected: usize, actual: usize) -> ShadhiCodecError {
+const fn length_error(expected: usize, actual: usize) -> ShadhiCodecError {
     ShadhiCodecError::InvalidLength { expected, actual }
 }
 

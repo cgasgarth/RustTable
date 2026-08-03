@@ -508,6 +508,6 @@ fn branch_deletion_and_pruning_leave_restartable_journal_and_provenance() {
     assert!(HistoryState::restore(state.persistence_snapshot()).is_ok());
 }
 
-fn main_branch() -> rusttable_catalog::HistoryBranchId {
+const fn main_branch() -> rusttable_catalog::HistoryBranchId {
     rusttable_catalog::HistoryBranchId::new(1).unwrap()
 }

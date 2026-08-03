@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use std::fmt;
 
 use crate::{
@@ -204,6 +202,12 @@ pub struct Failure {
 }
 
 impl Failure {
+    /// Creates a validated failure record with source-derived recovery actions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FailureError`] when `detail` is empty or exceeds the retained
+    /// diagnostic bound.
     pub fn new(
         category: FailureCategory,
         stage: FailureStage,
@@ -239,7 +243,7 @@ impl Failure {
     }
 
     #[must_use]
-    pub fn with_node(mut self, node: u32) -> Self {
+    pub const fn with_node(mut self, node: u32) -> Self {
         self.node = Some(node);
         self.scope = FailureScope::Node;
         self.stage = FailureStage::Node;
@@ -247,7 +251,7 @@ impl Failure {
     }
 
     #[must_use]
-    pub fn with_tile(mut self, tile: u32) -> Self {
+    pub const fn with_tile(mut self, tile: u32) -> Self {
         self.tile = Some(tile);
         self.scope = FailureScope::Tile;
         self.stage = FailureStage::Tile;
@@ -425,7 +429,7 @@ impl fmt::Display for Failure {
 
 impl std::error::Error for Failure {}
 
-fn default_retryability(category: FailureCategory) -> FailureRetryability {
+const fn default_retryability(category: FailureCategory) -> FailureRetryability {
     match category {
         FailureCategory::ResourceAllocation
         | FailureCategory::GpuOutOfMemory
@@ -508,7 +512,7 @@ impl FailureLedger {
     }
 
     #[must_use]
-    pub fn primary(&self) -> Option<&Failure> {
+    pub const fn primary(&self) -> Option<&Failure> {
         self.primary.as_ref()
     }
     #[must_use]
@@ -632,6 +636,12 @@ impl FailurePolicy {
         Self
     }
 
+    /// Selects the legal recovery action for a failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError`] when the attempt budget or backend policy does
+    /// not permit another action.
     pub fn decide(
         &self,
         request: &PolicyRequest,
@@ -776,7 +786,7 @@ impl FinalReceipt {
         &self.attempts
     }
     #[must_use]
-    pub fn primary_failure(&self) -> Option<&Failure> {
+    pub const fn primary_failure(&self) -> Option<&Failure> {
         self.primary.as_ref()
     }
     #[must_use]
@@ -816,6 +826,12 @@ impl ReceiptBuilder {
         }
     }
 
+    /// Adds an attempt receipt while the policy budget remains available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError::AttemptLimit`] after the maximum attempts have
+    /// already been recorded.
     pub fn push_failure(&mut self, receipt: AttemptReceipt) -> Result<(), PolicyError> {
         if self.attempts.len() >= usize::from(MAX_ATTEMPTS) {
             return Err(PolicyError::AttemptLimit);
@@ -863,14 +879,29 @@ impl ReceiptBuilder {
 }
 
 pub trait FailureCleanupHook {
+    /// Releases or poisons resources associated with a failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns a hook error when cleanup cannot complete.
     fn cleanup(&mut self, action: CleanupAction) -> Result<(), HookError>;
 }
 
 pub trait FailureCacheHook {
+    /// Applies the cache action selected by the failure policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a hook error when cache cleanup cannot complete.
     fn apply_cache_action(&mut self, action: CacheAction) -> Result<(), HookError>;
 }
 
 pub trait FailurePublicationHook {
+    /// Applies the publication action selected by the failure policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a hook error when publication cleanup cannot complete.
     fn apply_publication_action(&mut self, action: PublicationAction) -> Result<(), HookError>;
 }
 
@@ -878,6 +909,12 @@ pub trait FailurePublicationHook {
 pub struct HookError(String);
 
 impl HookError {
+    /// Creates a validated hook error detail.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FailureError`] when `detail` is empty or exceeds the retained
+    /// diagnostic bound.
     pub fn new(detail: impl Into<String>) -> Result<Self, FailureError> {
         let detail = detail.into();
         if detail.is_empty() {
@@ -898,6 +935,11 @@ impl fmt::Display for HookError {
 
 impl std::error::Error for HookError {}
 
+/// Applies cleanup, cache, and publication recovery actions in order.
+///
+/// # Errors
+///
+/// Returns the first hook error and stops the remaining recovery actions.
 pub fn integrate_failure<C, K, P>(
     failure: &Failure,
     cleanup: &mut C,

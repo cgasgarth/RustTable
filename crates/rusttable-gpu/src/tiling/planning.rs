@@ -26,7 +26,10 @@ pub struct GpuTileRequest {
 }
 
 impl GpuTileRequest {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "tile request fields preserve native ROI, overlap, resource, and memory-plan ordering"
+    )]
     pub fn new(
         generation: DeviceGeneration,
         dimensions: ImageDimensions,
@@ -455,7 +458,7 @@ fn estimate(
     })
 }
 
-fn materialize_class(
+const fn materialize_class(
     spec: &TileResourceSpec,
     generation: DeviceGeneration,
     width: u32,

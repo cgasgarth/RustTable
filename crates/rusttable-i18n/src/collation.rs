@@ -40,7 +40,7 @@ pub enum AlternateName {
 impl CollationProfile {
     /// Creates the Darktable-style library default.
     #[must_use]
-    pub fn new(locale: LocaleTag) -> Self {
+    pub const fn new(locale: LocaleTag) -> Self {
         Self {
             locale,
             strength: StrengthName::Secondary,
@@ -70,7 +70,7 @@ impl CollationProfile {
         )
     }
 
-    fn options(&self) -> CollatorOptions {
+    const fn options(&self) -> CollatorOptions {
         let mut options = CollatorOptions::default();
         options.strength = Some(match self.strength {
             StrengthName::Primary => Strength::Primary,

@@ -5,7 +5,7 @@ use crate::{OperationCompileError, ProcessingOperation, ProcessingOperationKind}
 
 const DEFRINGE_PARAMETERS: [&str; 3] = ["radius", "threshold", "mode"];
 
-pub(crate) fn compile_defringe(
+pub fn compile_defringe(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     super::reject_unexpected(operation, &DEFRINGE_PARAMETERS)?;

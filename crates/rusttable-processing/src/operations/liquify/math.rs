@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Liquify arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use super::{
     INVERSE_ITERATIONS, INVERSE_TOLERANCE, LIQUIFY_INTERPOLATION_POINTS, LIQUIFY_STAMP_RELOCATION,
     LiquifyConfig, LiquifyExecutionError, LiquifyInterpolation, LiquifyNode, LiquifyPathKind,
@@ -7,7 +12,7 @@ use crate::{FiniteF32, LinearRgb};
 use rusttable_image::Roi;
 use sha2::{Digest, Sha256};
 
-pub(super) fn ensure_roi(
+pub(super) const fn ensure_roi(
     roi: Roi,
     dimensions: RasterDimensions,
 ) -> Result<(), LiquifyExecutionError> {
@@ -36,6 +41,10 @@ pub(super) fn transform_points<
     Ok(())
 }
 
+#[expect(
+    clippy::while_float,
+    reason = "Native liquify sampling advances a validated finite distance in f32 steps."
+)]
 pub(super) fn expand_stamps(nodes: &[LiquifyNode]) -> Result<Vec<Stamp>, LiquifyExecutionError> {
     let mut stamps = Vec::new();
     for (index, node) in nodes.iter().enumerate() {
@@ -208,7 +217,7 @@ fn point_at_length(samples: &[LiquifyPoint], distance: f32) -> LiquifyPoint {
         }
         accumulated += segment;
     }
-    samples.last().copied().unwrap_or(LiquifyPoint::zero())
+    samples.last().copied().unwrap_or_else(LiquifyPoint::zero)
 }
 
 pub(super) fn inverse_point(

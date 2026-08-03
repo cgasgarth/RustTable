@@ -105,6 +105,10 @@ fn camera_preset(
 }
 
 /// The 18 native generic built-in entries, in source order.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Native Basecurve preset declarations remain in source order as one auditable table."
+)]
 pub fn basecurve_presets() -> Vec<BasecurvePreset> {
     vec![
         preset(
@@ -374,6 +378,10 @@ pub fn basecurve_presets() -> Vec<BasecurvePreset> {
 }
 
 /// The 14 native camera entries, in source order.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Native Basecurve camera preset declarations remain in source order as one auditable table."
+)]
 pub fn basecurve_camera_presets() -> Vec<BasecurvePreset> {
     vec![
         camera_preset(
@@ -769,7 +777,7 @@ fn close_repeated_states(states: &mut [bool], tokens: &[RegexToken]) {
     }
 }
 
-fn atom_matches(atom: RegexAtom, character: char) -> bool {
+const fn atom_matches(atom: RegexAtom, character: char) -> bool {
     match atom {
         RegexAtom::Literal(expected) => expected == character,
         RegexAtom::Any => true,

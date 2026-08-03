@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "GPU boundary errors are documented by the shared execution contract and typed error variants."
+)]
 #![doc = "GPU execution boundary contracts for the `RustTable` rewrite."]
 
 mod bilateral;

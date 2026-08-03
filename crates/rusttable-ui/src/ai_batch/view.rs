@@ -1,11 +1,11 @@
-#![allow(
+#![expect(
     clippy::assigning_clones,
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::match_same_arms,
     clippy::semicolon_if_nothing_returned,
-    clippy::wildcard_imports
+    reason = "The AI batch GTK view preserves the source control projection, numeric presentation, and action wiring."
 )]
 
 use std::rc::Rc;
@@ -13,7 +13,7 @@ use std::rc::Rc;
 use gtk4::accessible::Property;
 use gtk4::prelude::*;
 
-use super::model::*;
+use super::model::{AiBatchAction, AiBatchEnqueuePolicy, AiBatchItem, AiBatchState, AiBatchTask};
 
 type ActionHandler = Rc<dyn Fn(AiBatchAction)>;
 
@@ -38,7 +38,6 @@ pub struct AiBatchPanel {
 
 impl AiBatchPanel {
     #[must_use]
-    #[allow(clippy::too_many_lines)]
     pub fn new() -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
         root.set_widget_name("ai-batch");
@@ -134,7 +133,7 @@ impl AiBatchPanel {
         }
     }
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
     pub fn set_state(&self, state: &AiBatchState) {
@@ -215,7 +214,7 @@ impl AiBatchPanel {
             "Photo {} · {} · {}",
             item.selection().photo_id,
             item.eligibility().label(),
-            item.reason().unwrap_or(item.stage().label())
+            item.reason().unwrap_or_else(|| item.stage().label())
         )));
         label.set_halign(gtk4::Align::Start);
         label.set_hexpand(true);

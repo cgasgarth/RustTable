@@ -1,5 +1,3 @@
-#![allow(clippy::struct_excessive_bools)]
-
 use std::collections::BTreeSet;
 
 use rusttable_image::OutputFormat;
@@ -23,6 +21,10 @@ pub enum MetadataField {
 }
 
 /// The encoder-side part of the canonical export capability contract.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "preserve the native capability descriptor's independent feature flags"
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncoderCapabilityDescriptor {
     id: String,
@@ -126,17 +128,17 @@ impl EncoderCapabilityDescriptor {
     }
 
     #[must_use]
-    pub fn formats(&self) -> &BTreeSet<OutputFormat> {
+    pub const fn formats(&self) -> &BTreeSet<OutputFormat> {
         &self.formats
     }
 
     #[must_use]
-    pub fn channel_layouts(&self) -> &BTreeSet<ChannelLayout> {
+    pub const fn channel_layouts(&self) -> &BTreeSet<ChannelLayout> {
         &self.channel_layouts
     }
 
     #[must_use]
-    pub fn bit_depths(&self) -> &BTreeSet<BitDepth> {
+    pub const fn bit_depths(&self) -> &BTreeSet<BitDepth> {
         &self.bit_depths
     }
 
@@ -360,7 +362,7 @@ impl CapabilitySet {
     }
 }
 
-fn metadata_actions(policy: crate::MetadataPolicy) -> [(MetadataField, MetadataAction); 11] {
+const fn metadata_actions(policy: crate::MetadataPolicy) -> [(MetadataField, MetadataAction); 11] {
     [
         (MetadataField::Exif, policy.exif),
         (MetadataField::Iptc, policy.iptc),
@@ -379,7 +381,7 @@ fn metadata_actions(policy: crate::MetadataPolicy) -> [(MetadataField, MetadataA
     ]
 }
 
-pub(crate) fn format_id(format: OutputFormat) -> &'static str {
+pub const fn format_id(format: OutputFormat) -> &'static str {
     match format {
         OutputFormat::Png => "png",
         OutputFormat::Jpeg => "jpeg",

@@ -110,8 +110,11 @@ pub struct CpuPipelineReceipt {
 
 impl CpuPipelineReceipt {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Receipt construction records the complete immutable CPU execution evidence"
+    )]
+    pub(crate) const fn new(
         input_descriptor: RgbaF32Descriptor,
         output_descriptor: RgbaF32Descriptor,
         source_identity: SourceRasterIdentity,

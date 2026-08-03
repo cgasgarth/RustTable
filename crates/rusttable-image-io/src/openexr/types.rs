@@ -344,7 +344,7 @@ pub enum ExrSampleData {
 
 impl ExrSampleData {
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         match self {
             Self::F16(values) => values.len(),
             Self::F32(values) => values.len(),
@@ -352,7 +352,7 @@ impl ExrSampleData {
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }

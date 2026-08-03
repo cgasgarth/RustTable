@@ -191,7 +191,7 @@ pub(super) fn desktop_body(
         }
     });
     workspace.connect_visible_child_name_notify({
-        let left_split = split.clone();
+        let left_split = split;
         let right_split = workspace_with_right_panel.clone();
         let panel_widths = panel_widths.clone();
         move |workspace| {
@@ -370,9 +370,11 @@ fn connect_right_rail_constraints(paned: &gtk4::Paned) {
         let layout = DARKTABLE_DESKTOP_SPEC.layout;
         let minimum = i32::from(layout.side_panel_widths.minimum_px);
         let configured_maximum = i32::from(layout.side_panel_widths.maximum_px);
-        let (opposite_rail_width, inner_handle_width, center_minimum_width) =
-            paned.start_child().and_downcast::<gtk4::Paned>().map_or(
-                (minimum, 0, i32::from(layout.center_minimum_width_px)),
+        let (opposite_rail_width, inner_handle_width, center_minimum_width) = paned
+            .start_child()
+            .and_downcast::<gtk4::Paned>()
+            .map_or_else(
+                || (minimum, 0, i32::from(layout.center_minimum_width_px)),
                 |left_split| {
                     (
                         left_split.position(),
@@ -469,7 +471,7 @@ impl WorkspacePanelWidthState {
         self.for_workspace(active_workspace(workspace)).get()
     }
 
-    fn for_workspace(
+    const fn for_workspace(
         &self,
         workspace: WorkspaceRole,
     ) -> &std::rc::Rc<std::cell::Cell<WorkspacePanelWidths>> {

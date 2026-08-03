@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use super::resolution::ReferenceProbeError;
 use super::schema::ReferenceIdentityReceipt;
 
-pub(crate) const DEFAULT_FLAGS: &[&str] = &[
+pub const DEFAULT_FLAGS: &[&str] = &[
     "--configdir",
     "--cachedir",
     "--datadir",
@@ -385,7 +385,7 @@ const fn target_triple() -> &'static str {
     }
 }
 
-pub(crate) fn isolation_arguments(
+pub fn isolation_arguments(
     flags: &[String],
     data_dir: &Path,
     config: &Path,
@@ -470,7 +470,7 @@ fn probe_command(
     Ok(bytes)
 }
 
-pub(crate) struct ProbeSandbox {
+pub struct ProbeSandbox {
     pub(crate) root: PathBuf,
     pub(crate) home: PathBuf,
     pub(crate) config: PathBuf,
@@ -521,7 +521,7 @@ impl Drop for ProbeSandbox {
     }
 }
 
-fn default_path() -> &'static str {
+const fn default_path() -> &'static str {
     if cfg!(windows) {
         r"C:\Windows\System32;C:\Windows"
     } else {
@@ -529,6 +529,6 @@ fn default_path() -> &'static str {
     }
 }
 
-fn default_log_ruleset() -> u32 {
+const fn default_log_ruleset() -> u32 {
     1
 }

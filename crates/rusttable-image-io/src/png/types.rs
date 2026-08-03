@@ -1,5 +1,3 @@
-#![allow(clippy::all, clippy::pedantic)]
-
 use std::fmt;
 
 use rusttable_image::{
@@ -117,6 +115,11 @@ pub struct PngDecodeLimits {
 
 impl PngDecodeLimits {
     /// Creates checked PNG limits from the common image limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns the common limit error when any limit is zero, inconsistent,
+    /// or exceeds the supported arithmetic bounds.
     pub fn new(
         max_source_bytes: u64,
         max_width: u32,
@@ -413,20 +416,18 @@ impl PngPixelData {
             PngSampleLayout::Gray | PngSampleLayout::Rgb => AlphaMode::None,
             PngSampleLayout::GrayA | PngSampleLayout::Rgba => AlphaMode::Straight,
         };
-        match PixelFormat::new(
+        PixelFormat::new(
             self.sample_type(),
             self.layout().channel_layout(),
             alpha,
             ByteOrder::Native,
             StorageLayout::Interleaved,
-        ) {
-            Ok(format) => format,
-            Err(_) => unreachable!("validated PNG channel format"),
-        }
+        )
+        .unwrap_or_else(|_| unreachable!("validated PNG channel format"))
     }
 
     #[must_use]
-    pub fn sample_count(&self) -> usize {
+    pub const fn sample_count(&self) -> usize {
         match self {
             Self::GrayU8 { samples, .. }
             | Self::GrayAU8 { samples, .. }
@@ -459,8 +460,9 @@ impl PngPixelData {
     /// Converts the lossless typed buffer to the legacy checked RGBA8 facade.
     #[must_use]
     pub fn to_rgba8(&self) -> Vec<u8> {
-        let mut output =
-            Vec::with_capacity(self.dimensions().pixel_count().unwrap_or(0) as usize * 4);
+        let pixel_count =
+            usize::try_from(self.dimensions().pixel_count().unwrap_or(0)).unwrap_or(0);
+        let mut output = Vec::with_capacity(pixel_count.saturating_mul(4));
         match self {
             Self::GrayU8 { samples, .. } => {
                 for &gray in samples {
@@ -468,12 +470,12 @@ impl PngPixelData {
                 }
             }
             Self::GrayAU8 { samples, .. } => {
-                for pixel in samples.chunks_exact(2) {
+                for pixel in samples.as_chunks::<2>().0 {
                     output.extend_from_slice(&[pixel[0], pixel[0], pixel[0], pixel[1]]);
                 }
             }
             Self::RgbU8 { samples, .. } => {
-                for pixel in samples.chunks_exact(3) {
+                for pixel in samples.as_chunks::<3>().0 {
                     output.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
                 }
             }
@@ -485,7 +487,7 @@ impl PngPixelData {
                 }
             }
             Self::GrayAU16 { samples, .. } => {
-                for pixel in samples.chunks_exact(2) {
+                for pixel in samples.as_chunks::<2>().0 {
                     output.extend_from_slice(&[
                         (pixel[0] >> 8) as u8,
                         (pixel[0] >> 8) as u8,
@@ -495,7 +497,7 @@ impl PngPixelData {
                 }
             }
             Self::RgbU16 { samples, .. } => {
-                for pixel in samples.chunks_exact(3) {
+                for pixel in samples.as_chunks::<3>().0 {
                     output.extend_from_slice(&[
                         (pixel[0] >> 8) as u8,
                         (pixel[1] >> 8) as u8,
@@ -505,7 +507,7 @@ impl PngPixelData {
                 }
             }
             Self::RgbaU16 { samples, .. } => {
-                for pixel in samples.chunks_exact(4) {
+                for pixel in samples.as_chunks::<4>().0 {
                     output.extend_from_slice(&[
                         (pixel[0] >> 8) as u8,
                         (pixel[1] >> 8) as u8,
@@ -538,7 +540,7 @@ impl PngPixelData {
     }
 }
 
-fn error_required_bytes(error: &rusttable_image::ImageViewError) -> usize {
+const fn error_required_bytes(error: &rusttable_image::ImageViewError) -> usize {
     match error {
         rusttable_image::ImageViewError::BufferTooShort { required, .. } => *required,
         _ => 0,
@@ -546,6 +548,10 @@ fn error_required_bytes(error: &rusttable_image::ImageViewError) -> usize {
 }
 
 /// Stable audit receipt for a PNG operation.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Each boolean records an independent PNG header or decode-state field in the audit receipt."
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PngDecodeReceipt {
     pub backend: String,

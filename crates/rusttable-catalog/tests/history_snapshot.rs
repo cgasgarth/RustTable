@@ -259,7 +259,7 @@ fn malformed_payloads_fail_closed() {
         Err(HistorySnapshotDecodeError::InvalidBoolean)
     );
 
-    let mut bad_revision_payload = bytes.clone();
+    let mut bad_revision_payload = bytes;
     let payload_marker = bad_revision_payload
         .windows(b"RTHREV\0\x01".len())
         .position(|window| window == b"RTHREV\0\x01")

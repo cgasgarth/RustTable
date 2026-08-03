@@ -74,10 +74,9 @@ impl ImportRepository for FakeRepository {
 
     fn list(&self) -> Result<Vec<ImportRecord>, RepositoryError> {
         self.list_calls.set(self.list_calls.get() + 1);
-        match &self.error {
-            Some(error) => Err(error.clone()),
-            None => Ok(self.records.clone()),
-        }
+        self.error
+            .as_ref()
+            .map_or_else(|| Ok(self.records.clone()), |error| Err(error.clone()))
     }
 }
 

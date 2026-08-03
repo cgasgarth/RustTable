@@ -13,7 +13,7 @@ pub struct SourceImportRequest {
 
 impl SourceImportRequest {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         photo_id: PhotoId,
         asset_id: AssetId,
         source: SourcePath,
@@ -38,7 +38,7 @@ impl SourceImportRequest {
     }
 
     #[must_use]
-    pub fn source(&self) -> &SourcePath {
+    pub const fn source(&self) -> &SourcePath {
         &self.source
     }
 

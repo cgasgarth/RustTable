@@ -11,7 +11,7 @@ const SOURCE_MAP_SCHEMA: &str = "rusttable.configuration-source-map.v1";
 const ISSUE: i64 = 179;
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum ConfigurationCommand {
+pub enum ConfigurationCommand {
     /// Run deterministic configuration qualification checks.
     Qualify {
         #[arg(long)]
@@ -31,7 +31,7 @@ pub(crate) enum ConfigurationCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum MigrationCommand {
+pub enum MigrationCommand {
     SourceMap {
         #[command(subcommand)]
         command: SourceMapCommand,
@@ -39,14 +39,14 @@ pub(crate) enum MigrationCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum SourceMapCommand {
+pub enum SourceMapCommand {
     Verify {
         #[arg(long)]
         issue: i64,
     },
 }
 
-pub(crate) fn run(root: &Path, command: ConfigurationCommand) -> Result {
+pub fn run(root: &Path, command: ConfigurationCommand) -> Result {
     match command {
         ConfigurationCommand::Qualify { .. } => qualify(root),
         ConfigurationCommand::Migration { command } => match command {

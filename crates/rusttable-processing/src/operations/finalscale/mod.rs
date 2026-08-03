@@ -98,7 +98,7 @@ impl FinalScaleConfig {
     }
 
     #[must_use]
-    pub fn with_quality(mut self, quality: RenderQuality) -> Self {
+    pub const fn with_quality(mut self, quality: RenderQuality) -> Self {
         self.quality = quality;
         self
     }

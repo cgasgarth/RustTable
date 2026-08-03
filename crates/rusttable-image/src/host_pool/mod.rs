@@ -3,7 +3,7 @@ mod pool;
 mod storage;
 mod views;
 
-pub(crate) use model::{checked_bucket_request, within_waste_limit};
+pub use model::{checked_bucket_request, within_waste_limit};
 
 pub use model::{
     AcquireOptions, AllocationClass, BufferAlignment, BufferRequest, BufferUsage,

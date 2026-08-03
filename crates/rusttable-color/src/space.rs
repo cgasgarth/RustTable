@@ -145,7 +145,10 @@ impl BuiltinSpace {
     }
 
     #[must_use]
-    #[allow(clippy::excessive_precision)]
+    #[expect(
+        clippy::excessive_precision,
+        reason = "Builtin chromaticity matrices retain the native decimal coefficients exactly."
+    )]
     pub fn to_xyz_matrix(self) -> Option<Matrix3> {
         let values = match self {
             Self::SrgbD65 => [

@@ -156,7 +156,7 @@ impl JpegHeader {
     }
 
     #[must_use]
-    pub fn output_dimensions(&self) -> ImageDimensions {
+    pub const fn output_dimensions(&self) -> ImageDimensions {
         self.orientation.output_dimensions(self.dimensions)
     }
 }
@@ -181,7 +181,7 @@ impl JpegPixelData {
     }
 
     #[must_use]
-    pub fn byte_len(&self) -> usize {
+    pub const fn byte_len(&self) -> usize {
         match self {
             Self::GrayU8(values) | Self::RgbU8(values) | Self::CmykU8(values) => values.len(),
             Self::GrayU16(values) | Self::RgbU16(values) | Self::CmykU16(values) => {

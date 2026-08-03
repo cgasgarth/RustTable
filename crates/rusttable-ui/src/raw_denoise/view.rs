@@ -2,10 +2,13 @@
 //!
 //! The recovery-strength control maps `src/libs/neural_restore.c:4225-4239`.
 
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::too_many_lines)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::too_many_lines,
+    reason = "The raw-denoise GTK view preserves source f32 control projection and source-ordered hierarchy."
+)]
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -185,7 +188,7 @@ impl RawDenoisePanel {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Box {
+    pub const fn widget(&self) -> &gtk4::Box {
         &self.root
     }
 
@@ -405,7 +408,7 @@ fn tile_index(tile: u32) -> u32 {
         .unwrap_or(1) as u32
 }
 
-fn output_index(policy: RawDenoiseOutputPolicy) -> u32 {
+const fn output_index(policy: RawDenoiseOutputPolicy) -> u32 {
     match policy {
         RawDenoiseOutputPolicy::PreviewBuffer => 0,
         RawDenoiseOutputPolicy::PublishDng => 1,
@@ -413,7 +416,7 @@ fn output_index(policy: RawDenoiseOutputPolicy) -> u32 {
     }
 }
 
-fn output_policy_at(index: usize) -> RawDenoiseOutputPolicy {
+const fn output_policy_at(index: usize) -> RawDenoiseOutputPolicy {
     match index {
         1 => RawDenoiseOutputPolicy::PublishDng,
         2 => RawDenoiseOutputPolicy::PublishAndImport,

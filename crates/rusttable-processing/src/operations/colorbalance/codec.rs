@@ -168,9 +168,9 @@ pub struct ColorBalanceParametersV3 {
 
 impl ColorBalanceParametersV3 {
     #[must_use]
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
-        reason = "the constructor preserves the native v3 declaration order"
+        reason = "The constructor preserves the native v3 declaration order."
     )]
     pub const fn new(
         mode: ColorBalanceMode,
@@ -335,7 +335,7 @@ impl ColorBalanceHistory {
         }
     }
 
-    pub fn current(&self) -> Result<ColorBalanceParametersV3, ColorBalanceCodecError> {
+    pub const fn current(&self) -> Result<ColorBalanceParametersV3, ColorBalanceCodecError> {
         match self {
             Self::V1(parameters) => Ok(migrate_v1_to_v3(*parameters)),
             Self::V2(parameters) => Ok(migrate_v2_to_v3(*parameters)),

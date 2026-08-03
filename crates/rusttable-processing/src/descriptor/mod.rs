@@ -256,7 +256,10 @@ pub struct TilingContract {
     pub output_multiplier_milli: u32,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "descriptor capability flags are independent serialized contract fields"
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityContract {
     pub cpu_supported: bool,
@@ -300,7 +303,10 @@ pub struct InputOutputContract {
     pub derives_output_encoding: bool,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "descriptor capability flags are independent serialized contract fields"
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaskBlendContract {
     pub consumes_mask: bool,
@@ -481,7 +487,10 @@ fn validate_key(value: &str) -> Result<(), DescriptorError> {
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "validation order and error mapping define the canonical descriptor contract"
+)]
 fn validate_parameter(parameter: &ParameterDescriptor) -> Result<(), DescriptorError> {
     if parameter.introduced_version == 0
         || parameter

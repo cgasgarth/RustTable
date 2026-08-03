@@ -53,6 +53,10 @@ pub const RAWPREPARE_RUST_ID: &str = "rusttable.rawprepare";
 /// The descriptor is evidence for the leaf only. Production registration is
 /// intentionally deferred to the shared operation and raw-image seams.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "RAW Prepare descriptor fields mirror the native parameter contract in one declaration."
+)]
 pub fn rawprepare_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new(

@@ -3,14 +3,14 @@ use rusttable_catalog::RepositoryError;
 
 use super::{SCHEMA_TABLE, VERSION_KEY, open_tag_tables};
 
-pub(crate) const METADATA_DOCUMENTS_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const METADATA_DOCUMENTS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_metadata_documents");
-pub(crate) const METADATA_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const METADATA_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_metadata_index");
-pub(crate) const METADATA_REVISION_TABLE: TableDefinition<&[u8], &[u8]> =
+pub const METADATA_REVISION_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_metadata_revision");
 
-pub(crate) fn migrate_metadata_and_tags_to_v12(database: &Database) -> Result<(), RepositoryError> {
+pub fn migrate_metadata_and_tags_to_v12(database: &Database) -> Result<(), RepositoryError> {
     let transaction = database
         .begin_write()
         .map_err(|_| RepositoryError::Unavailable)?;
@@ -28,9 +28,7 @@ pub(crate) fn migrate_metadata_and_tags_to_v12(database: &Database) -> Result<()
         .map_err(|_| RepositoryError::CommitFailure)
 }
 
-pub(crate) fn open_metadata_tables(
-    transaction: &redb::WriteTransaction,
-) -> Result<(), RepositoryError> {
+pub fn open_metadata_tables(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {
     transaction
         .open_table(METADATA_DOCUMENTS_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;

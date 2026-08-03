@@ -535,7 +535,7 @@ pub fn evaluate_graph_at_frame_boundaries_with_masks<F: Fn() -> bool>(
     )
 }
 
-pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
+pub fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
     graph: &CompiledOperationGraph,
     input: &WorkingRgbImage,
     alpha: &[f32],
@@ -554,7 +554,11 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
     )
 }
 
-pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() -> bool>(
+#[expect(
+    clippy::too_many_lines,
+    reason = "Frame evaluation keeps cancellation, mask, and publication boundaries in one auditable state machine."
+)]
+pub fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() -> bool>(
     graph: &CompiledOperationGraph,
     input: &WorkingRgbImage,
     alpha: &[f32],
@@ -1055,7 +1059,7 @@ fn red_plane(pixels: &[LinearRgb]) -> Vec<f32> {
     pixels.iter().map(|pixel| pixel.red().get()).collect()
 }
 
-fn step_context<'a>(
+const fn step_context<'a>(
     step: &FramePlanStep,
     nodes: &'a [&'a OperationGraphNode],
 ) -> &'a OperationGraphNode {
@@ -1066,14 +1070,14 @@ fn step_context<'a>(
     nodes[index]
 }
 
-fn cancelled_error(node: &OperationGraphNode) -> EvaluationError {
+const fn cancelled_error(node: &OperationGraphNode) -> EvaluationError {
     EvaluationError::Cancelled {
         step_index: node.pipeline_step_index(),
         operation_id: node.operation().operation_id(),
     }
 }
 
-fn node_error(node: &OperationGraphNode, reason: String) -> EvaluationError {
+const fn node_error(node: &OperationGraphNode, reason: String) -> EvaluationError {
     EvaluationError::OperationExecution {
         step_index: node.pipeline_step_index(),
         operation_id: node.operation().operation_id(),

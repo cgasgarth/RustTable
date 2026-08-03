@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Diffuse arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded, source-faithful CPU leaf for Darktable's diffuse/sharpen module.
 //!
 //! The direct native oracle is `src/iop/diffuse.c`; coupled helpers are
@@ -76,7 +81,7 @@ impl DiffusePixel {
         self.channels
     }
 
-    pub(crate) fn channels_mut(&mut self) -> &mut [f32; DIFFUSE_CHANNELS] {
+    pub(crate) const fn channels_mut(&mut self) -> &mut [f32; DIFFUSE_CHANNELS] {
         &mut self.channels
     }
 }
@@ -341,7 +346,7 @@ impl DiffuseHistory {
         }
     }
 
-    pub fn current(&self) -> Result<DiffuseParametersV2, DiffuseCodecError> {
+    pub const fn current(&self) -> Result<DiffuseParametersV2, DiffuseCodecError> {
         match self {
             Self::V1(parameters) => Ok(DiffuseParametersV2::from_v1(*parameters)),
             Self::V2(parameters) => Ok(*parameters),
@@ -811,7 +816,10 @@ impl DiffusePlan {
         Ok(output)
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The native wavelet process keeps all scale buffers and cancellation state explicit."
+    )]
     fn wavelets_process<F: FnMut() -> bool>(
         &self,
         input: &[DiffusePixel],

@@ -12,7 +12,7 @@ use tiff::encoder::colortype::{Gray8, Gray16, Gray32, Gray32Float, GrayI16, RGB8
 use tiff::encoder::{Compression, DeflateLevel, Predictor, TiffEncoder};
 use tiff::tags::Tag;
 
-fn limits() -> TiffDecodeLimits {
+const fn limits() -> TiffDecodeLimits {
     TiffDecodeLimits {
         max_source_bytes: 1_000_000,
         max_width: 64,
@@ -572,7 +572,7 @@ fn native_format_gate_matches_tiff_loader_fallback_matrix() {
             Err(TiffDecodeError::Unsupported { feature: "native TIFF sample format", value }) if value == u64::from(bits)
         ));
     }
-    let mut signed = page.clone();
+    let mut signed = page;
     signed.sample_formats[0] = TiffSampleFormat::Signed;
     assert!(matches!(
         signed.native_sample_format(),

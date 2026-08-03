@@ -173,7 +173,6 @@ pub(crate) fn load_selected_preview_from_repository_for_edit_with_cancellation(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 fn load_selected_preview_from_repository_for_edit(
     repository: &RedbCatalogRepository,
     source_root: &Path,

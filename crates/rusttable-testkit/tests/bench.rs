@@ -37,7 +37,7 @@ fn expected_output(scenario: &BenchmarkScenario) -> String {
         .expect("active scenario expected output")
 }
 
-fn sample(sequence: u32, wall_time_ns: u64) -> MetricSample {
+const fn sample(sequence: u32, wall_time_ns: u64) -> MetricSample {
     MetricSample {
         sequence,
         wall_time_ns,

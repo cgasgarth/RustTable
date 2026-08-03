@@ -120,7 +120,7 @@ pub struct OverexposedResult {
 
 impl OverexposedResult {
     #[must_use]
-    pub fn frame(&self) -> &DiagnosticFrame {
+    pub const fn frame(&self) -> &DiagnosticFrame {
         &self.frame
     }
     #[must_use]
@@ -132,7 +132,7 @@ impl OverexposedResult {
         self.finding
     }
     #[must_use]
-    pub fn applied(&self) -> bool {
+    pub const fn applied(&self) -> bool {
         self.finding.is_none()
     }
 }
@@ -161,6 +161,10 @@ impl OverexposedPlan {
         {
             return Err(DiagnosticFinding::InvalidState);
         }
+        #[expect(
+            clippy::suboptimal_flops,
+            reason = "preserve the native exposure threshold's powf evaluation order"
+        )]
         let lower = 2.0_f32.powf(state.lower_ev.min(-4.0));
         let upper = state.upper_percent / 100.0;
         if !lower.is_finite() || !upper.is_finite() || lower >= upper {
@@ -209,7 +213,10 @@ impl OverexposedPlan {
     }
 
     #[must_use]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "preserve the source-derived diagnostic execution stages in one auditable plan"
+    )]
     /// Executes the deterministic CPU plan, or the identical CPU fallback when
     /// the caller requests a GPU path that has no device lease at this boundary.
     ///

@@ -1,13 +1,16 @@
 //! Generation-safe controller for mask-manager intent and service results.
 
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The mask-manager controller exposes typed service failures through the application boundary."
+)]
 
 use super::model::{
     MASK_MANAGER_MAX_FEATHER, MaskManagerAction, MaskManagerServiceError, MaskManagerServicePort,
     MaskManagerSnapshot,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MaskManagerControllerError {
     Service(MaskManagerServiceError),
     InvalidControl,

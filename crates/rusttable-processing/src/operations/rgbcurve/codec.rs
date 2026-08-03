@@ -94,7 +94,7 @@ impl RgbCurveParametersV1 {
                     .expect("checked length"),
             );
         }
-        let parameters = RgbCurveParametersV1::from_raw(
+        let parameters = Self::from_raw(
             curve_nodes,
             curve_num_nodes,
             curve_type,
@@ -149,7 +149,7 @@ impl RgbCurveHistory {
         }
     }
 
-    pub fn current(&self) -> Result<&RgbCurveParametersV1, RgbCurveCodecError> {
+    pub const fn current(&self) -> Result<&RgbCurveParametersV1, RgbCurveCodecError> {
         match self {
             Self::V1(parameters) => Ok(parameters),
             Self::Opaque { version, .. } => Err(RgbCurveCodecError::UnsupportedVersion(*version)),

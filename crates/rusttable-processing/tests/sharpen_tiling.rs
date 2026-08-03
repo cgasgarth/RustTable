@@ -1,6 +1,14 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Sharpen test vectors preserve IEEE-754 parity order."
+)]
+
 //! Source-derived tests for `src/iop/sharpen.c` dynamic radius and tiling.
 
-#![allow(clippy::cast_possible_truncation)]
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "Sharpen tiling fixtures narrow bounded native dimensions to usize."
+)]
 
 use rusttable_processing::operations::sharpen::tiling::{
     SHARPEN_CPU_MEMORY_FACTOR, SHARPEN_MAX_BUFFER_FACTOR, SHARPEN_MAX_RADIUS,

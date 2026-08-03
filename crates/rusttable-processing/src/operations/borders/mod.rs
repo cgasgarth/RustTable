@@ -5,7 +5,14 @@
 //! callers.
 
 #![forbid(unsafe_code)]
-#![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Borders errors are documented by the shared typed operation contract."
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "Borders plans are intentionally usable as owned side-effecting execution values."
+)]
 
 mod descriptor;
 mod execution;

@@ -417,6 +417,10 @@ fn larger_tonal_abi_overrides_are_typed_and_match_generated_contracts() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Bloom provenance test checks the complete generated payload and native contract together."
+)]
 fn bloom_codegen_override_matches_the_source_payload_and_contract() {
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");
@@ -640,6 +644,10 @@ fn bloom_completion_claims_are_gated_and_deferrals_are_explicit() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The Color Reconstruction provenance test checks every native identity and typed payload field together."
+)]
 fn colorreconstruct_override_uses_the_native_identity_and_typed_payloads() {
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");
@@ -1043,6 +1051,10 @@ fn colorreconstruct_override_uses_the_native_identity_and_typed_payloads() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The completion contract test keeps the source-coverage and fail-closed claims in one audit case."
+)]
 fn colorreconstruct_completion_gates_claims_and_blocks_source_deletion() {
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");
@@ -1337,6 +1349,10 @@ fn colorzones_capability_closure_includes_cpu_and_gpu() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The architecture accounting test verifies all trusted, alias, status, and opaque-record invariants together."
+)]
 fn architecture_trust_accounting_keeps_aliases_and_opaque_records_explicit() {
     let (manifest, overrides) = canonical_architecture();
     validate_architecture_provenance(&manifest, &overrides)

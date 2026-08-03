@@ -89,7 +89,10 @@ fn settle_gtk() {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The GTK smoke assertion keeps the source left-rail hierarchy and allocation checks together."
+)]
 fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget) {
     assert_eq!(shell.darkroom_panel_target(), Some(expected));
     let root: gtk4::Widget = shell.window().clone().upcast();

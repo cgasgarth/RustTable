@@ -105,7 +105,7 @@ impl SubmissionRequest {
 
     /// Creates work with the supplied dependency IDs.
     #[must_use]
-    pub fn with_dependencies(
+    pub const fn with_dependencies(
         resources: Vec<ResourceLease>,
         dependencies: Vec<SubmissionId>,
     ) -> Self {
@@ -352,7 +352,7 @@ pub struct SubmissionQueue {
 impl SubmissionQueue {
     /// Creates a queue tied to the resource pool whose leases it owns.
     #[must_use]
-    pub fn new(pool: GpuResourcePool, limits: SubmissionLimits) -> Self {
+    pub const fn new(pool: GpuResourcePool, limits: SubmissionLimits) -> Self {
         Self {
             pool,
             limits,

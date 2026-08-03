@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Dither arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Bounded CPU leaf for `src/iop/dither.c` from the pinned Darktable baseline.
 //!
 //! This module owns the native history structs, explicitly separate qualified
@@ -85,7 +90,7 @@ impl DitherMethod {
         }
     }
 
-    pub fn from_id(id: u32) -> Result<Self, DitherMethodError> {
+    pub const fn from_id(id: u32) -> Result<Self, DitherMethodError> {
         match id {
             0 => Ok(Self::Random),
             1 => Ok(Self::Fs1BitGray),
@@ -422,7 +427,7 @@ impl DitherHistory {
     }
 
     #[must_use]
-    pub fn migrate_v1(&self) -> Option<DitherParametersV2> {
+    pub const fn migrate_v1(&self) -> Option<DitherParametersV2> {
         let Self::V1(parameters) = self else {
             return None;
         };
@@ -457,7 +462,7 @@ impl DitherHistory {
         }
     }
 
-    pub fn current(&self) -> Result<DitherParametersV2, DitherCodecError> {
+    pub const fn current(&self) -> Result<DitherParametersV2, DitherCodecError> {
         match self {
             Self::V1(parameters) => Ok(migrate_v1_parameters(parameters)),
             Self::V2(parameters) => Ok(*parameters),
@@ -466,7 +471,7 @@ impl DitherHistory {
     }
 }
 
-fn migrate_v1_parameters(parameters: &DitherParametersV1) -> DitherParametersV2 {
+const fn migrate_v1_parameters(parameters: &DitherParametersV1) -> DitherParametersV2 {
     DitherParametersV2 {
         method_id: parameters.method_id,
         palette: parameters.palette,

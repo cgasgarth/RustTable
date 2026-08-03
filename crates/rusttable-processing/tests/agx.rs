@@ -273,13 +273,22 @@ fn default_cpu_fixture_preserves_alpha_and_native_matrix_order() {
         assert_eq!(result.alpha().to_bits(), source.alpha().to_bits());
     }
     let (rendering_to_xyz, pipe_to_base, base_to_rendering, rendering_to_pipe) = plan.matrices();
+    #[expect(
+        clippy::tuple_array_conversions,
+        reason = "The four independently named native matrices are checked in source declaration order."
+    )]
     for matrix in [
         rendering_to_xyz,
         pipe_to_base,
         base_to_rendering,
         rendering_to_pipe,
     ] {
-        assert!(matrix.into_iter().flatten().all(f32::is_finite));
+        assert!(
+            matrix
+                .into_iter()
+                .flatten()
+                .all(|value: f32| value.is_finite())
+        );
     }
 }
 

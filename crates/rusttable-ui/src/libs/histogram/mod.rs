@@ -204,6 +204,10 @@ impl HistogramData {
             let red_bin = normalized_bin(red);
             let green_bin = normalized_bin(green);
             let blue_bin = normalized_bin(blue);
+            #[expect(
+                clippy::suboptimal_flops,
+                reason = "Histogram luminance uses the source multiply-add order for display parity."
+            )]
             let luminance_bin = normalized_bin(0.2126 * red + 0.7152 * green + 0.0722 * blue);
             bins[red_bin].red = bins[red_bin].red.saturating_add(1);
             bins[green_bin].green = bins[green_bin].green.saturating_add(1);
@@ -307,10 +311,11 @@ fn sample_stride(total_pixels: usize) -> usize {
         .max(1)
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
-    clippy::cast_sign_loss
+    clippy::cast_sign_loss,
+    reason = "Histogram samples are clamped to the normalized source range before bucket indexing."
 )]
 fn normalized_bin(value: f32) -> usize {
     if value <= 0.0 {
@@ -328,13 +333,13 @@ fn luminance_u8(red: u8, green: u8, blue: u8) -> u8 {
     u8::try_from((weighted / 256).min(u32::from(u8::MAX))).unwrap_or(u8::MAX)
 }
 
-#[allow(
-    clippy::cast_lossless,
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
-    clippy::cast_sign_loss
+    clippy::cast_sign_loss,
+    reason = "Finite nonnegative legacy histogram counts are rounded and capped to the u32 fixture domain."
 )]
-fn finite_count(value: f32) -> Option<u32> {
+const fn finite_count(value: f32) -> Option<u32> {
     if !value.is_finite() || value.is_sign_negative() {
         return None;
     }

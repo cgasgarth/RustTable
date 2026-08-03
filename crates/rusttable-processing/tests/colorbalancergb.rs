@@ -49,14 +49,14 @@ fn fixture(name: &str) -> Vec<u8> {
         .collect()
 }
 
-fn v1_sample() -> ColorBalanceRgbParametersV1 {
+const fn v1_sample() -> ColorBalanceRgbParametersV1 {
     ColorBalanceRgbParametersV1::new([
         -0.2, 0.15, 35.0, 0.1, 0.25, 210.0, -0.3, 0.4, 300.0, 0.05, 0.1, 120.0, 1.25, -1.0, 0.75,
         -0.1, 0.2, 0.3, -0.15, 25.0, -0.2, 0.15, 0.35, -22.0,
     ])
 }
 
-fn v5_sample(formula: ColorBalanceRgbSaturationFormula) -> ColorBalanceRgbParametersV5 {
+const fn v5_sample(formula: ColorBalanceRgbSaturationFormula) -> ColorBalanceRgbParametersV5 {
     let v1 = v1_sample();
     let v2 = ColorBalanceRgbParametersV2::new(v1, [0.1, -0.2, 0.15, -0.05]);
     let v3 = ColorBalanceRgbParametersV3::new(v2, 0.22);

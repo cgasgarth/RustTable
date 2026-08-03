@@ -5,7 +5,7 @@ use develop_support::fixture;
 use rusttable_catalog::{DevelopInputError, DevelopSelection};
 use rusttable_core::{EditId, PhotoId, Revision};
 
-fn selection(
+const fn selection(
     catalog_revision: Revision,
     photo_id: PhotoId,
     photo_revision: Revision,

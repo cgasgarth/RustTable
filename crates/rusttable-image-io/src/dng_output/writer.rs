@@ -717,7 +717,7 @@ fn update_samples(hasher: &mut Sha256, samples: &[u16]) {
         hasher.update(value.to_le_bytes());
     }
 }
-fn request_dimensions(request: &DngOutputRequest) -> ImageDimensions {
+const fn request_dimensions(request: &DngOutputRequest) -> ImageDimensions {
     match &request.layout {
         DngRawLayout::CfaBayerU16(v) => v.dimensions(),
         DngRawLayout::LinearRawRgbU16(v) => v.dimensions(),
@@ -833,7 +833,7 @@ fn hex(value: [u8; 32]) -> String {
     }
     out
 }
-fn rational(value: u32) -> tiff::encoder::Rational {
+const fn rational(value: u32) -> tiff::encoder::Rational {
     tiff::encoder::Rational { n: value, d: 1 }
 }
 fn rational_f32(value: f32) -> tiff::encoder::Rational {

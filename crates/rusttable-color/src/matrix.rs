@@ -4,6 +4,11 @@
 //! multiply/add order. Determinants and inversion use the `f64` planning class
 //! from the repository numerical contract and are rounded once into `f32` storage.
 
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Matrix equations retain explicit native f32 operation order; FMA would change deterministic parity results."
+)]
+
 use crate::{FiniteF32, FiniteF32Error};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -66,13 +71,19 @@ impl Matrix3 {
     }
 
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Matrix determinant narrows the checked f64 calculation to the public f32 color contract."
+    )]
     pub fn determinant(self) -> f32 {
         self.determinant_f64() as f32
     }
 
     /// Returns a checked inverse with deterministic singularity rejection.
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Matrix inversion narrows checked f64 coefficients to the public f32 color contract."
+    )]
     pub fn inverse(self) -> Result<Self, MatrixError> {
         let m = self.rows().map(f64::from);
         let determinant = self.determinant_f64();

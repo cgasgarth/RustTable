@@ -16,6 +16,11 @@ pub struct RoiPlanner;
 
 impl RoiPlanner {
     /// Plans every node in canonical order and then propagates the request in reverse.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RoiPlanningError`] when a descriptor, node mapping, or request
+    /// cannot be validated.
     pub fn plan(
         &self,
         source: RoiDescriptor,

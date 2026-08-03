@@ -34,7 +34,7 @@ struct StoredParameter {
     value: Vec<u8>,
 }
 
-pub(crate) fn encode(edit: &Edit) -> Result<Vec<u8>, ()> {
+pub fn encode(edit: &Edit) -> Result<Vec<u8>, ()> {
     let operations = edit.operations().map(encode_operation).collect();
     to_allocvec(&StoredEdit {
         version: EDIT_FORMAT_VERSION,
@@ -47,7 +47,7 @@ pub(crate) fn encode(edit: &Edit) -> Result<Vec<u8>, ()> {
     .map_err(|_| ())
 }
 
-pub(crate) fn decode(bytes: &[u8]) -> Result<Edit, ()> {
+pub fn decode(bytes: &[u8]) -> Result<Edit, ()> {
     let stored: StoredEdit = from_bytes(bytes).map_err(|_| ())?;
     if stored.version != EDIT_FORMAT_VERSION {
         return Err(());

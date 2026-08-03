@@ -25,7 +25,7 @@ const CURVE_COORDINATE_MAXIMUM: f32 = 1.0;
 const STRENGTH_MINIMUM: f32 = -200.0;
 const STRENGTH_MAXIMUM: f32 = 200.0;
 
-pub(crate) fn compile_colorzones(
+pub fn compile_colorzones(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation)?;
@@ -259,14 +259,14 @@ fn parameter_name(name: &str) -> ParameterName {
     ParameterName::new(name).expect("generated Color Zones parameter name is valid")
 }
 
-pub(crate) fn curve_count_name(curve: usize) -> String {
+pub fn curve_count_name(curve: usize) -> String {
     format!("curve_{curve}_num_nodes")
 }
 
-pub(crate) fn curve_type_name(curve: usize) -> String {
+pub fn curve_type_name(curve: usize) -> String {
     format!("curve_{curve}_type")
 }
 
-pub(crate) fn point_name(curve: usize, node: usize, coordinate: char) -> String {
+pub fn point_name(curve: usize, node: usize, coordinate: char) -> String {
     format!("curve_{curve}_node_{node}_{coordinate}")
 }

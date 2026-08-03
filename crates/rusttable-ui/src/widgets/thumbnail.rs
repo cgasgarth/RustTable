@@ -26,7 +26,7 @@ pub struct ThumbnailSurface {
 
 /// Display state retained when the lighttable rebuilds its GTK children.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ThumbnailState {
+pub enum ThumbnailState {
     Loading,
     Ready(Rgba8PreviewMetadata),
     Unavailable,
@@ -94,7 +94,7 @@ impl ThumbnailSurface {
     }
 
     #[must_use]
-    pub fn widget(&self) -> &gtk4::Overlay {
+    pub const fn widget(&self) -> &gtk4::Overlay {
         &self.root
     }
 

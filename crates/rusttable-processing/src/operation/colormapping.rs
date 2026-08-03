@@ -9,7 +9,7 @@ use super::{OperationCompileError, ProcessingOperation, ProcessingOperationKind,
 
 const PAYLOAD_CHUNKS: usize = COLOR_MAPPING_PARAMETER_BYTES.div_ceil(2_048);
 
-pub(crate) fn compile_colormapping(
+pub fn compile_colormapping(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     let defaults = encode_native_payload_chunks(&ColorMappingParametersV1::defaults().to_bytes());

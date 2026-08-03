@@ -23,6 +23,10 @@
     dead_code,
     reason = "the standalone source-shaped leaf retains native f32 casts and deferred public seams"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Soften HSL and blend equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 use std::fmt;
 use std::mem::size_of;
@@ -156,7 +160,7 @@ impl SoftenParametersV1 {
         bytes
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, SoftenCodecError> {
+    pub const fn from_bytes(bytes: &[u8]) -> Result<Self, SoftenCodecError> {
         if bytes.len() != SOFTEN_PARAMETER_BYTES {
             return Err(SoftenCodecError::InvalidLength {
                 expected: SOFTEN_PARAMETER_BYTES,
@@ -208,7 +212,7 @@ impl SoftenHistory {
 
     /// Materializes the only source-known schema. There are no legacy edges in
     /// `soften.c`; every other version remains opaque and non-executable.
-    pub fn migrate_to_current(&self) -> Result<SoftenParametersV1, SoftenCodecError> {
+    pub const fn migrate_to_current(&self) -> Result<SoftenParametersV1, SoftenCodecError> {
         match self {
             Self::V1(parameters) => Ok(*parameters),
             Self::Opaque { version, .. } => Err(SoftenCodecError::UnsupportedVersion(*version)),
@@ -1407,14 +1411,14 @@ fn clip_native(value: f32) -> f32 {
     }
 }
 
-fn map_cancellable_filter_error(error: CancellableBoxFilterError) -> SoftenExecutionError {
+const fn map_cancellable_filter_error(error: CancellableBoxFilterError) -> SoftenExecutionError {
     match error {
         CancellableBoxFilterError::Cancelled => SoftenExecutionError::Cancelled,
         CancellableBoxFilterError::Filter(error) => map_filter_error(error),
     }
 }
 
-fn map_filter_error(error: BoxFilterError) -> SoftenExecutionError {
+const fn map_filter_error(error: BoxFilterError) -> SoftenExecutionError {
     match error {
         BoxFilterError::AllocationFailed { required_bytes } => {
             SoftenExecutionError::AllocationFailed {
@@ -1511,7 +1515,10 @@ fn copy_packed_image_roi(
     Ok(output)
 }
 
-fn check_finite_parameter(name: &'static str, value: f32) -> Result<(), SoftenParameterError> {
+const fn check_finite_parameter(
+    name: &'static str,
+    value: f32,
+) -> Result<(), SoftenParameterError> {
     if !value.is_finite() {
         return Err(SoftenParameterError::NonFinite(name));
     }
@@ -1522,7 +1529,7 @@ fn write_f32(bytes: &mut [u8], offset: usize, value: f32) {
     bytes[offset..offset + size_of::<f32>()].copy_from_slice(&value.to_le_bytes());
 }
 
-fn read_f32(bytes: &[u8], offset: usize) -> f32 {
+const fn read_f32(bytes: &[u8], offset: usize) -> f32 {
     f32::from_le_bytes([
         bytes[offset],
         bytes[offset + 1],

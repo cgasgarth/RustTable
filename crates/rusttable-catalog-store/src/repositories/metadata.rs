@@ -396,7 +396,7 @@ fn batch_receipt(
     }
 }
 
-fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> CatalogMetadataError {
+const fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> CatalogMetadataError {
     match error {
         rusttable_catalog::RepositoryError::CorruptPersistedData => {
             CatalogMetadataError::CorruptPersistedData

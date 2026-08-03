@@ -170,7 +170,7 @@ impl ImageDescriptor {
     }
 
     #[must_use]
-    pub fn profile(&self) -> Option<&ProfileId> {
+    pub const fn profile(&self) -> Option<&ProfileId> {
         self.profile.as_ref()
     }
 
@@ -351,7 +351,7 @@ impl<'a> ImageViewMut<'a> {
     }
 
     #[must_use]
-    pub fn bytes(&self) -> &[u8] {
+    pub const fn bytes(&self) -> &[u8] {
         self.bytes
     }
 

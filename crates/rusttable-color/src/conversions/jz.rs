@@ -6,6 +6,11 @@
 //! nonnegative absolute XYZ in cd/m²; transformed LMS must be in `[0, 10000]`.
 //! The 2017 `JzAzBz` constants are used.
 
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "The published JzAzBz equation order is retained for deterministic native parity; FMA would change results."
+)]
+
 use super::{ColorMathError, finite_output, finite3, map_slice};
 
 const B: f32 = 1.15;

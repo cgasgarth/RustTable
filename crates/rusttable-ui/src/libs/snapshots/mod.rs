@@ -40,12 +40,12 @@ impl DarkroomSnapshotEntry {
     }
 
     #[must_use]
-    pub fn label(&self) -> &PresentationText {
+    pub const fn label(&self) -> &PresentationText {
         &self.label
     }
 
     #[must_use]
-    pub fn status(&self) -> &PresentationText {
+    pub const fn status(&self) -> &PresentationText {
         &self.status
     }
 }

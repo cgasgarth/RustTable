@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Final Scale arithmetic order is preserved for IEEE-754 parity."
+)]
+
 use super::{FinalScaleExecutionError, FinalScaleKernel, FinalScalePlan};
 use rusttable_image::Roi;
 
@@ -58,7 +63,7 @@ impl AxisCoefficients {
     }
 }
 
-pub(crate) fn execute<F: Fn() -> bool>(
+pub fn execute<F: Fn() -> bool>(
     plan: &FinalScalePlan,
     input: &[f32],
     input_roi: Roi,
@@ -173,7 +178,7 @@ fn validate(
     Ok(())
 }
 
-fn within(roi: Roi, bounds: Roi) -> bool {
+const fn within(roi: Roi, bounds: Roi) -> bool {
     roi.x() >= bounds.x()
         && roi.y() >= bounds.y()
         && roi.right() <= bounds.right()

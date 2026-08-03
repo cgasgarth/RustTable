@@ -24,6 +24,7 @@ impl fmt::Display for ShortcutParseError {
 impl std::error::Error for ShortcutParseError {}
 
 /// Imports the representable subset of Darktable's line-oriented shortcutsrc.
+///
 /// Unsupported action effect tokens are intentionally ignored after the action
 /// path, preserving the useful device/action binding rather than failing the
 /// whole file.

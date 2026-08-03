@@ -2,6 +2,11 @@
     clippy::float_cmp,
     reason = "source-derived compatibility vectors intentionally assert exact f32 results"
 )]
+#![expect(
+    clippy::imprecise_flops,
+    clippy::suboptimal_flops,
+    reason = "Native Vibrance test vectors preserve source evaluation order and IEEE-754 parity."
+)]
 
 use rusttable_color::ColorEncoding;
 use rusttable_core::{

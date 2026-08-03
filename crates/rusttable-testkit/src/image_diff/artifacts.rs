@@ -201,7 +201,11 @@ fn decode_f32_plane(bytes: &[u8]) -> Result<Vec<f32>, DiffError> {
         .collect())
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "severity is clamped to the u8 presentation range before encoding"
+)]
 fn severity_to_byte(severity: f32) -> u8 {
     (severity.clamp(0.0, 1.0) * 255.0).round() as u8
 }

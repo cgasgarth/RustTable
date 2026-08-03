@@ -327,7 +327,7 @@ enum EntryTryAcquire {
 }
 
 impl<K, V> Entry<K, V> {
-    fn new_held(key: K, allocation: CacheAllocation<V>, mode: CacheMode) -> Self {
+    const fn new_held(key: K, allocation: CacheAllocation<V>, mode: CacheMode) -> Self {
         let cost = allocation.cost();
         Self {
             key,
@@ -374,6 +374,7 @@ impl<K, V> Entry<K, V> {
             Err(TryLockError::Poisoned(_)) => return Err(CachePoison::EntryLease),
         };
         if state.removed {
+            drop(state);
             return Ok(EntryTryAcquire::Removed);
         }
         let available = match mode {
@@ -381,6 +382,7 @@ impl<K, V> Entry<K, V> {
             CacheMode::Write => state.readers == 0 && !state.writer && !state.demoting,
         };
         if !available {
+            drop(state);
             return Ok(EntryTryAcquire::Unavailable);
         }
         match mode {
@@ -392,6 +394,7 @@ impl<K, V> Entry<K, V> {
             }
             CacheMode::Write => state.writer = true,
         }
+        drop(state);
         Ok(EntryTryAcquire::Acquired)
     }
 
@@ -410,6 +413,7 @@ impl<K, V> Entry<K, V> {
                 state.writer = false;
             }
         }
+        drop(state);
         self.wake.notify_all();
     }
 
@@ -419,12 +423,14 @@ impl<K, V> Entry<K, V> {
             .lock()
             .map_err(|_| CacheLeaseError::Poisoned(CachePoison::EntryLease))?;
         if !state.writer || state.removed {
+            drop(state);
             return Err(CacheLeaseError::ValueUnavailable);
         }
         state.demoting = true;
         state.writer = false;
         state.readers = 1;
         state.demoting = false;
+        drop(state);
         self.wake.notify_all();
         Ok(())
     }
@@ -432,6 +438,7 @@ impl<K, V> Entry<K, V> {
     fn mark_removed(&self) -> Result<(), CachePoison> {
         let mut state = self.lease.lock().map_err(|_| CachePoison::EntryLease)?;
         state.removed = true;
+        drop(state);
         self.wake.notify_all();
         Ok(())
     }
@@ -649,6 +656,7 @@ where
         let mut state = self.lock_state()?;
         let previous = state.cost_quota;
         state.cost_quota = cost_quota;
+        drop(state);
         Ok(previous)
     }
 
@@ -658,13 +666,18 @@ where
     ///
     /// Returns a typed poison or capacity-allocation error.
     pub fn keys(&self) -> Result<Vec<K>, CacheError<C::Error>> {
-        let state = self.lock_state()?;
-        let mut keys = Vec::new();
-        keys.try_reserve_exact(state.lru.len())
-            .map_err(|_| CacheError::CapacityAllocation {
-                resource: "key snapshot",
+        let keys = {
+            let state = self.lock_state()?;
+            let mut keys = Vec::new();
+            keys.try_reserve_exact(state.lru.len()).map_err(|_| {
+                CacheError::CapacityAllocation {
+                    resource: "key snapshot",
+                }
             })?;
-        keys.extend(state.lru.iter().cloned());
+            keys.extend(state.lru.iter().cloned());
+            drop(state);
+            keys
+        };
         Ok(keys)
     }
 
@@ -1088,11 +1101,14 @@ where
     }
 }
 
-fn over_automatic_gc_threshold(cost: usize, quota: usize) -> bool {
+const fn over_automatic_gc_threshold(cost: usize, quota: usize) -> bool {
     (cost as u128) * 5 > (quota as u128) * 4
 }
 
-#[allow(clippy::cast_precision_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "cache accounting intentionally compares usize costs through the existing f64 fill-ratio contract; integer accounting remains exact elsewhere"
+)]
 fn strictly_below_ratio(cost: usize, quota: usize, fill_ratio: f64) -> bool {
     (cost as f64) < (quota as f64) * fill_ratio
 }

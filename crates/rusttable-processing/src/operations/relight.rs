@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Relight arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Deprecated Darktable fill-light compatibility at the typed D50 Lab boundary.
 //!
 //! Darktable's `src/iop/relight.c` consumes four-channel Lab pixels and changes
@@ -6,7 +11,14 @@
 //! channels exactly.
 
 #![forbid(unsafe_code)]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "Relight errors are documented by the shared typed Lab operation contract."
+)]
+#![expect(
+    clippy::missing_panics_doc,
+    reason = "Relight descriptor invariants are checked by bounded static contract construction."
+)]
 
 use std::fmt;
 
@@ -382,6 +394,10 @@ impl RelightPlan {
     }
 }
 
+#[expect(
+    clippy::suspicious_operation_groupings,
+    reason = "The native Gaussian formula intentionally divides by width squared."
+)]
 fn relit_lightness(lightness: f32, config: RelightConfig, center: f32, width: f32) -> f32 {
     let normalized = lightness / 100.0;
     let x = -1.0 + normalized * 2.0;

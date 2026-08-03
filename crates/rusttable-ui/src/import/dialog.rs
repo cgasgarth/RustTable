@@ -483,7 +483,8 @@ fn typed_places() -> Vec<ImportPlace> {
         let location = if path.is_dir() {
             path
         } else {
-            path.parent().map_or(path.clone(), Path::to_path_buf)
+            path.parent()
+                .map_or_else(|| path.clone(), Path::to_path_buf)
         };
         if location.is_dir() && recent_paths.insert(location.clone()) {
             places.push(ImportPlace::new(

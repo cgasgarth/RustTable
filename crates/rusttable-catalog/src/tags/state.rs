@@ -68,7 +68,7 @@ pub struct TagState {
 
 impl TagState {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             snapshot: TagSnapshot {
                 schema_version: TAG_SCHEMA_VERSION,

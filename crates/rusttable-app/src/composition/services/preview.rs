@@ -56,7 +56,7 @@ impl PreviewService {
     /// # Errors
     ///
     /// Returns a typed cancellation, decode, processing, or render failure.
-    pub(crate) fn render_bytes_with_cancellation(
+    pub fn render_bytes_with_cancellation(
         &self,
         source: &[u8],
         edit: &Edit,
@@ -196,7 +196,7 @@ impl PreviewService {
 /// Canonical CPU publication is installed before the worker is spawned, so a
 /// preview requested before device discovery completes remains renderable. The
 /// initialized runtime then upgrades that same process-long service in place.
-pub(crate) fn initialize_production_pixelpipe() {
+pub fn initialize_production_pixelpipe() {
     let _ = production_pixelpipe();
     PRODUCTION_GPU_INITIALIZATION.call_once(|| {
         if let Err(error) = thread::Builder::new()
@@ -232,10 +232,12 @@ fn initialize_production_gpu() {
     match runtime.block_on(GpuRuntime::initialize(GpuRuntimeConfig::default())) {
         Ok(gpu) => {
             let cpu_only = gpu.is_cpu_only();
-            let mut service = production_pixelpipe()
+            let pixelpipe = production_pixelpipe();
+            let mut service = pixelpipe
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             service.install_gpu(gpu);
+            drop(service);
             tracing::info!(
                 target: "rusttable.preview",
                 operation = "gpu_initialization",
@@ -488,6 +490,10 @@ fn render_with_target(
     render_decoded_with_target(input, edit, target, cancellation)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep the source decode, canonical CPU graph, and target publication sequence together"
+)]
 fn render_decoded_with_target(
     input: &DecodedImage,
     edit: &Edit,
@@ -602,7 +608,7 @@ fn render_decoded_with_target(
     Ok(output)
 }
 
-fn source_color_decision(source: SourceColor) -> Result<SourceColorDecision, PreviewError> {
+const fn source_color_decision(source: SourceColor) -> Result<SourceColorDecision, PreviewError> {
     match source.evidence() {
         SourceColorEvidence::EmbeddedIcc => Ok(SourceColorDecision::EmbeddedProfile),
         SourceColorEvidence::EmbeddedChromaticities
@@ -627,7 +633,7 @@ fn source_color_decision(source: SourceColor) -> Result<SourceColorDecision, Pre
     }
 }
 
-fn pixelpipe_encoding(source: SourceColor) -> RgbaF32ColorEncoding {
+const fn pixelpipe_encoding(source: SourceColor) -> RgbaF32ColorEncoding {
     match source.encoding() {
         ColorEncoding::LinearSrgbD65 => RgbaF32ColorEncoding::LinearSrgbD65,
         ColorEncoding::DisplayP3D65 => RgbaF32ColorEncoding::DisplayP3D65,
@@ -815,6 +821,10 @@ mod tests {
         .expect("edit")
     }
 
+    #[expect(
+        clippy::suboptimal_flops,
+        reason = "retain the source-shaped add-then-multiply order in the deterministic pixel fixture"
+    )]
     fn snapshot(operations: Vec<Operation>) -> CpuPixelpipeSnapshot {
         let graph =
             CompiledOperationGraph::compile(&edit(operations)).expect("compiled operation graph");

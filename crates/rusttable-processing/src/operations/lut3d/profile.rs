@@ -1,3 +1,8 @@
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native LUT3D profile arithmetic order is preserved for IEEE-754 parity."
+)]
+
 //! Explicit LUT profile evidence for the bounded CPU leaf.
 //!
 //! Native profile construction and ICC/LCMS acquisition remain a shared seam.

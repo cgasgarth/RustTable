@@ -2,8 +2,14 @@
 //!
 //! The recovery-strength fallback maps `src/libs/neural_restore.c:4227-4229`.
 
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::cast_precision_loss,
+    reason = "The raw-denoise model projects source strength and geometry through the native numeric boundary."
+)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "The raw-denoise model keeps service planning failures at the typed AI boundary."
+)]
 
 use std::fmt;
 
@@ -133,7 +139,6 @@ impl RawDenoiseSourceInfo {
     }
 
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn available(
         source_identity: impl Into<String>,
         edit_identity: impl Into<String>,
@@ -271,7 +276,7 @@ impl RawDenoiseSnapshot {
     }
 
     #[must_use]
-    pub fn available(
+    pub const fn available(
         selection: PhotoSelection,
         source: RawDenoiseSourceInfo,
         models: Vec<RawDenoiseModelOption>,
@@ -291,12 +296,12 @@ impl RawDenoiseSnapshot {
         self.generation
     }
     #[must_use]
-    pub fn with_generation(mut self, generation: u64) -> Self {
+    pub const fn with_generation(mut self, generation: u64) -> Self {
         self.generation = generation;
         self
     }
     #[must_use]
-    pub fn selection(&self) -> &PhotoSelection {
+    pub const fn selection(&self) -> &PhotoSelection {
         &self.selection
     }
     #[must_use]
@@ -384,7 +389,10 @@ pub struct RawDenoisePlan {
 }
 
 impl RawDenoisePlan {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The raw-denoise plan keeps source qualification, model identity, and output policy explicit."
+    )]
     pub fn build(
         generation: u64,
         source: &RawDenoiseSourceInfo,

@@ -17,6 +17,10 @@
     clippy::similar_names,
     reason = "native filmic compares sanitized f32 nodes exactly and uses source-shaped arithmetic"
 )]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Native Filmic curve equations preserve source evaluation order and IEEE-754 parity."
+)]
 
 #[cfg(not(test))]
 use crate::common::curve_tools::{
@@ -88,7 +92,7 @@ pub struct CurveLuts {
     pub nodes: Nodes,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CurveBuildError {
     InvalidDerivedState(&'static str),
     NonFiniteLut { table: &'static str, index: usize },
@@ -172,6 +176,10 @@ pub fn build_luts(parameters: ParametersV3) -> Result<CurveLuts, CurveBuildError
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Native Filmic curve derivation keeps the source's toe, shoulder, and LUT state machine together."
+)]
 pub fn derive_filmic_nodes(parameters: ParametersV3) -> Result<Nodes, CurveBuildError> {
     let source_values = [
         parameters.grey_point_source,

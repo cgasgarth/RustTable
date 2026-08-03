@@ -248,7 +248,7 @@ impl RasterFilePlan {
                 hasher.update(b"rusttable.rasterfile.form.v1");
                 hasher.update(self.asset.identity());
                 hasher.update(0.6_f32.to_bits().to_le_bytes());
-                for bound in [bounds.0, bounds.1, bounds.2, bounds.3] {
+                for bound in <[u32; 4]>::from(bounds) {
                     hasher.update(bound.to_le_bytes());
                 }
                 forms.push(RasterFileForm {

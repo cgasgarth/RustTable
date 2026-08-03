@@ -173,7 +173,7 @@ fn add_revision(
             aggregate_revision
                 .get()
                 .checked_add(1)
-                .ok_or(overflow.clone())?,
+                .ok_or_else(|| overflow.clone())?,
         )
         .ok_or(overflow)
 }
