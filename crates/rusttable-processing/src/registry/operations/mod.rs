@@ -762,14 +762,24 @@ pub fn highpass_definition() -> OperationDefinition {
             "iop.highpass.cpu.dynamic-overlap",
             "iop.highpass.alpha-zero-publication",
             "iop.highpass.gpu-unavailable",
-            "iop.highpass.ui-unavailable",
+            "iop.highpass.blend-mask-deferred",
+            "iop.highpass.ui.generic-two-sliders",
         ],
         RoiKind::Neighborhood,
         std::iter::empty(),
         CpuExecutionRoute::LabD50Pixelpipe,
     )
-    .with_ui_availability(OperationUiAvailability::Unavailable {
-        reason: "Highpass GTK controls are not ported".to_owned(),
+    .with_ui_availability(OperationUiAvailability::PartiallyAvailable {
+        reason: "the generic two-slider editor is usable, but native shared blend/mask/outer-blend controls and their action persistence remain deferred"
+            .to_owned(),
+        deferred_responsibilities: [
+            "iop.highpass.ui.shared-blend-mask-controls",
+            "iop.highpass.ui.outer-blend-controls",
+            "iop.highpass.persistence.native-shared-blend-mask-and-outer-blend",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
     })
 }
 
@@ -1549,10 +1559,10 @@ macro_rules! builtin_operations {
             $crate::registry::rgb_gain_definition,
             $crate::registry::invert_definition,
             $crate::registry::defringe_definition,
+            $crate::registry::highpass_definition,
             $crate::registry::sharpen_definition,
             $crate::registry::clahe_definition,
             $crate::registry::dither_definition,
-            $crate::registry::highpass_definition,
             $crate::registry::grain_definition,
             $crate::registry::colortransfer_definition,
             $crate::registry::colormapping_definition,

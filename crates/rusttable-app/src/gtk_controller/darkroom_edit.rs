@@ -1378,7 +1378,8 @@ fn multi_instance_operation_id(
     unreachable!("the operation ID space cannot be exhausted by a finite edit")
 }
 
-// Source pipeline order. Color Zones is immediately after Vibrance and before Bloom.
+// Source pipeline order. Highpass and Sharpen are between Defringe and Basic Adjust
+// in the merged tonal operation stack; Color Zones is immediately after Vibrance and before Bloom.
 pub(super) const DARKROOM_CANONICAL_ORDER: &[&str] = &[
     "invert",
     "temperature",
@@ -1403,6 +1404,8 @@ pub(super) const DARKROOM_CANONICAL_ORDER: &[&str] = &[
     "primaries",
     "rgbgain",
     "defringe",
+    "highpass",
+    "sharpen",
     "basicadj",
     "shadhi",
     "relight",
@@ -1531,7 +1534,11 @@ mod tests {
     };
 
     use rusttable_core::{EditId, OperationId, OperationKey, OperationOpacity, ParameterName};
+    use rusttable_processing::operations::highpass::{
+        HIGHPASS_DEFAULT_CONTRAST, HIGHPASS_DEFAULT_SHARPNESS,
+    };
     use rusttable_processing::{ColorZonesChannel, ColorZonesMode};
+    use rusttable_ui::DarkroomControlViewModel;
 
     use super::super::colorzones_edit::ColorZonesEditAction;
     use super::*;
@@ -2737,6 +2744,148 @@ mod tests {
                 "{name} uses the source default"
             );
         }
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "keep the targetless Highpass materialization and atomic persistence contract together"
+    )]
+    fn controller_materializes_targetless_highpass_defaults_and_persists_one_generic_control_in_order()
+     {
+        let registry = builtin_registry();
+        let original = Edit::from_parts(
+            EditId::new(860).expect("edit ID"),
+            PhotoId::new(861).expect("photo ID"),
+            Revision::ZERO,
+            Revision::from_u64(15),
+            [
+                registry
+                    .materialize_operation(
+                        "rusttable.defringe",
+                        OperationId::new(862).expect("Defringe ID"),
+                    )
+                    .expect("Defringe defaults"),
+                Operation::new(
+                    OperationId::new(864).expect("Sharpen ID"),
+                    OperationKey::new("rusttable.sharpen").expect("Sharpen key"),
+                    true,
+                    [],
+                )
+                .expect("registered Sharpen operation"),
+                Operation::new(
+                    OperationId::new(863).expect("Basic Adjust ID"),
+                    OperationKey::new("rusttable.basicadj").expect("Basic Adjust key"),
+                    true,
+                    [],
+                )
+                .expect("Basic Adjust compatibility operation"),
+            ],
+        )
+        .expect("edit without Highpass");
+        let generated_id = materialized_operation_id(&original, "rusttable.highpass");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        controller
+            .select_photo(original.photo_id())
+            .expect("select edit without Highpass");
+
+        let highpass = controller
+            .modules
+            .as_mut()
+            .and_then(|modules| modules.module_mut("highpass"))
+            .expect("targetless Highpass template");
+        assert_eq!(highpass.operation_id(), None);
+        highpass
+            .reconcile_snapshot(
+                original.revision(),
+                false,
+                true,
+                vec![
+                    DarkroomControlViewModel::slider(
+                        "highpass-sharpness",
+                        "Sharpness",
+                        0.0,
+                        100.0,
+                        0.01,
+                        72.0,
+                        f64::from(HIGHPASS_DEFAULT_SHARPNESS),
+                    )
+                    .expect("Highpass generic sharpness control"),
+                ],
+            )
+            .expect("install the generic Highpass control fixture");
+        let supported = highpass
+            .clone()
+            .with_availability(DarkroomModuleAvailability::Supported);
+        *highpass = supported;
+        let mounted = controller
+            .modules()
+            .and_then(|modules| modules.module("highpass"))
+            .expect("mounted targetless Highpass");
+        assert_eq!(
+            mounted
+                .controls()
+                .control("highpass-sharpness")
+                .expect("sharpness control")
+                .default_value(),
+            DarkroomControlValue::Slider(f64::from(HIGHPASS_DEFAULT_SHARPNESS))
+        );
+
+        let action = DarkroomModuleAction::Control {
+            module_id: "highpass".to_owned(),
+            operation_id: None,
+            expected_revision: original.revision(),
+            id: "highpass-sharpness".to_owned(),
+            value: DarkroomControlValue::Slider(72.0),
+        };
+        let outcome = controller
+            .apply(&action)
+            .expect("persist one targetless Highpass control");
+
+        assert!(outcome.processing_changed());
+        assert_eq!(outcome.revision(), Revision::from_u64(16));
+        let persisted = catalog.load(original.id());
+        assert_eq!(persisted.revision(), outcome.revision());
+        assert_eq!(
+            persisted
+                .operations()
+                .map(|operation| operation.key().as_str())
+                .collect::<Vec<_>>(),
+            [
+                "rusttable.defringe",
+                "rusttable.highpass",
+                "rusttable.sharpen",
+                "rusttable.basicadj",
+            ],
+            "Highpass precedes Sharpen and Basic Adjust in the merged tonal stack"
+        );
+        let highpass = persisted
+            .operations()
+            .find(|operation| operation.id() == generated_id)
+            .expect("materialized Highpass operation");
+        assert!(highpass.is_enabled());
+        assert_eq!(highpass.opacity(), OperationOpacity::ONE);
+        assert_eq!(highpass.parameters().count(), 2);
+        assert_eq!(
+            highpass.parameter(&ParameterName::new("sharpness").expect("sharpness")),
+            Some(&scalar(72.0))
+        );
+        assert_eq!(
+            highpass.parameter(&ParameterName::new("contrast").expect("contrast")),
+            Some(&scalar(f64::from(HIGHPASS_DEFAULT_CONTRAST))),
+        );
+
+        let mut repository = RedbCatalogRepository::open(&catalog.path).expect("reopen catalog");
+        let error = repository
+            .commit_replacement(original.revision(), &persisted)
+            .expect_err("a stale replacement must be rejected atomically");
+        assert!(matches!(
+            error,
+            EditRepositoryError::EditRevisionConflict { .. }
+        ));
+        drop(repository);
+        assert_eq!(catalog.load(original.id()), persisted);
     }
 
     #[test]

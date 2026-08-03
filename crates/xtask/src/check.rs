@@ -57,6 +57,10 @@ const CUSTOM_HARNESS_TESTS: &[CustomHarnessTest] = &[
     },
     CustomHarnessTest {
         package: "rusttable-ui",
+        target: "highpass_gtk_boundary",
+    },
+    CustomHarnessTest {
+        package: "rusttable-ui",
         target: "channelmixer_gtk_boundary",
     },
     CustomHarnessTest {
