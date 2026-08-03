@@ -30,11 +30,20 @@ use rusttable_processing::{
 };
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
+    operation_with_opacity(id, key, parameters, OperationOpacity::ONE)
+}
+
+fn operation_with_opacity(
+    id: u128,
+    key: &str,
+    parameters: &[(&str, f64)],
+    opacity: OperationOpacity,
+) -> Operation {
     Operation::new_with_opacity(
         OperationId::new(id).expect("nonzero ID"),
         OperationKey::new(key).expect("valid key"),
         true,
-        OperationOpacity::ONE,
+        opacity,
         parameters.iter().map(|(name, value)| {
             (
                 ParameterName::new(*name).expect("valid parameter"),
@@ -1425,6 +1434,68 @@ fn highpass_cpu_route_preserves_source_alpha_and_native_zero_spare_and_cancels()
     assert!(matches!(
         executor.execute_with_cancellation(&snapshot, &scope),
         Err(CpuPixelpipeError::Cancelled(_))
+    ));
+}
+
+#[test]
+fn highpass_rejects_nonunit_opacity_before_execution() {
+    let operation_id = 909;
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        lab_image(),
+        graph(vec![operation_with_opacity(
+            operation_id,
+            "rusttable.highpass",
+            &[("sharpness", 50.0), ("contrast", 50.0)],
+            OperationOpacity::new(0.5).expect("partial opacity"),
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Highpass snapshot");
+
+    let error = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect_err("partial-opacity Highpass must remain unsupported");
+    assert!(matches!(
+        error,
+        CpuPixelpipeError::Evaluation {
+            source: rusttable_processing::EvaluationError::OperationExecution {
+                operation_id: actual_id,
+                reason,
+                ..
+            }
+        } if actual_id.get() == operation_id
+            && reason == "Highpass masks and outer blending are deferred; only unmasked full-opacity execution is available"
+    ));
+}
+
+#[test]
+fn highpass_rejects_a_runtime_mask_before_execution() {
+    let operation_id = 910;
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        lab_image(),
+        graph(vec![operation(
+            operation_id,
+            "rusttable.highpass",
+            &[("sharpness", 50.0), ("contrast", 50.0)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Highpass snapshot")
+    .with_mask_graph(tonecurve_mask_graph(operation_id));
+
+    let error = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect_err("masked Highpass must remain unsupported");
+    assert!(matches!(
+        error,
+        CpuPixelpipeError::Evaluation {
+            source: rusttable_processing::EvaluationError::OperationExecution {
+                operation_id: actual_id,
+                reason,
+                ..
+            }
+        } if actual_id.get() == operation_id
+            && reason == "Highpass masks and outer blending are deferred; only unmasked full-opacity execution is available"
     ));
 }
 

@@ -39,12 +39,52 @@ rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
 status = "implemented"
 
 [[responsibility]]
+id = "gui-two-slider-source-contract"
+upstream_path = "src/iop/highpass.c"
+upstream_symbols = [
+    "dt_iop_highpass_gui_data_t",
+    "gui_init",
+    "dt_bauhaus_slider_from_params",
+    "dt_bauhaus_slider_set_format",
+    "gtk_widget_set_tooltip_text",
+]
+rust_path = "crates/rusttable-ui/src/iop/highpass.rs; crates/rusttable-ui/src/iop/modules/reference/registry.rs; crates/rusttable-processing/src/registry/operations/mod.rs"
+source_lines = "47-50,348-359"
+status = "implemented"
+evidence = "The retained GUI data has exactly sharpness and contrast widgets. gui_init creates those two sliders in declaration order, formats both as percentages, and assigns the exact native tooltips; Rust maps the source metadata at ui/iop/highpass.rs:160-186, projects only those parameters at ui/iop/modules/reference/registry.rs:117-145, and records the generic receipt at processing/registry/operations/mod.rs:754-771. The focused UI test asserts the order, ranges, defaults, percent suffix, tooltips, and stable widget ids at ui/iop/highpass.rs:213-251."
+
+[[responsibility]]
+id = "generic-rusttable-action-materialization-and-persistence"
+upstream_path = "src/iop/highpass.c; RustTable generic darkroom action and catalog persistence"
+upstream_symbols = [
+    "commit_params",
+    "DarkroomModuleAction::Control",
+    "materialize_operation",
+    "rewrite_operations",
+    "commit_replacement",
+]
+rust_path = "crates/rusttable-processing/src/registry/operations/mod.rs; crates/rusttable-ui/src/iop/modules/reference/registry.rs; crates/rusttable-app/src/gtk_controller/darkroom_edit.rs"
+source_lines = "src/iop/highpass.c:304-312; crates/rusttable-app/src/gtk_controller/darkroom_edit.rs:195-307,901-983,1176-1340,2754-2887"
+status = "implemented"
+evidence = "The RustTable registry materializes the typed Highpass operation with native defaults, the reference projection exposes only the two source-mapped generic controls, and the generic Control action rewrites those parameters, inserts a missing Highpass in canonical order, and commits the replacement atomically. The focused controller test covers targetless materialization, ordered insertion, both persisted parameters, and stale-revision rejection; this does not claim native shared blend/mask or outer-blend action persistence."
+
+[[responsibility]]
 id = "gpu-kernel-contract"
-upstream_path = "data/kernels/highpass.cl"
-upstream_symbols = ["highpass_invert", "highpass_hblur", "highpass_vblur", "highpass_mix"]
-rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
+upstream_path = "src/iop/highpass.c; data/kernels/highpass.cl"
+upstream_symbols = [
+    "process_cl",
+    "init_global",
+    "cleanup_global",
+    "highpass_invert",
+    "highpass_hblur",
+    "highpass_vblur",
+    "highpass_mix",
+]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs; crates/rusttable-processing/src/registry"
+source_lines = "src/iop/highpass.c:119-232,325-345; data/kernels/highpass.cl:24-163"
 status = "deferred"
-notes = "Program identity and CPU/GPU fourth-channel and blur differences are documented as retained oracle evidence; executable GPU binding remains deferred."
+deferred_reason = "GPU/OpenCL execution, kernel binding, and qualification remain unavailable."
+evidence = "The retained module creates and dispatches four OpenCL kernels, while Rust records their identity and documents the CPU/GPU channel differences without exposing an executable GPU route."
 
 [[responsibility]]
 id = "production-routing"
@@ -52,12 +92,78 @@ upstream_path = "src/iop/highpass.c and processing integration hubs"
 upstream_symbols = ["flags", "default_colorspace", "process", "commit_params"]
 rust_path = "crates/rusttable-processing/src/operations/highpass.rs; crates/rusttable-processing/src/descriptor; crates/rusttable-processing/src/registry; crates/rusttable-import; crates/rusttable-pixelpipe"
 status = "implemented"
-notes = "Production registry, typed descriptor, v1 history import, CPU evaluator and pixelpipe dispatch, snapshot identity, and the bounded CPU capability contract are integrated."
+notes = "Production registry, typed descriptor, operation-local v1 history decoding, CPU evaluator and pixelpipe dispatch, snapshot identity, and the bounded CPU capability contract are integrated. Conversion of Darktable history into durable catalog state is separately deferred below."
 
 [[responsibility]]
-id = "remaining-shared-capabilities"
-upstream_path = "src/iop/highpass.c; src/develop/blend.c; shared GPU, UI, mask, and blend owners"
-upstream_symbols = ["process_cl", "gui_init", "IOP_FLAGS_SUPPORTS_BLENDING"]
-rust_path = "crates/rusttable-processing/src/operations/highpass.rs; crates/rusttable-processing/src/registry; crates/rusttable-pixelpipe"
+id = "shared-blending-masks-and-blend-if"
+upstream_path = "src/iop/highpass.c; src/develop/blend.c; src/develop/blend.h"
+upstream_symbols = [
+    "flags",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "dt_develop_blend_params_t",
+    "dt_develop_mask_mode_t",
+    "dt_develop_blendif_channels_t",
+    "dt_develop_blendif_process_parameters",
+    "dt_develop_blend_process",
+    "dt_develop_blend_process_cl",
+]
+rust_path = "crates/rusttable-processing/src/registry; crates/rusttable-pixelpipe; crates/rusttable-ui"
+source_lines = "src/iop/highpass.c:81-84; src/develop/blend.h:93-222; src/develop/blend.c:161-219,458-766,867-1373"
 status = "deferred"
-notes = "Executable GPU binding, GTK controls, imported masks, outer blending, and broader blend capability remain explicitly unavailable rather than approximated."
+deferred_reason = "Native shared blending, drawn/parametric/raster masks, and blend-if channels remain unavailable."
+evidence = "Highpass advertises IOP_FLAGS_SUPPORTS_BLENDING, but its operation-local Rust route does not materialize the shared blend parameters, masks, or blend-if processing owned by develop/blend.c."
+
+[[responsibility]]
+id = "outer-blending"
+upstream_path = "src/iop/highpass.c; src/develop/blend.c"
+upstream_symbols = ["flags", "IOP_FLAGS_SUPPORTS_BLENDING", "dt_develop_blend_process"]
+rust_path = "crates/rusttable-processing/src/registry; crates/rusttable-pixelpipe"
+source_lines = "src/iop/highpass.c:81-84; src/develop/blend.c:458-766"
+status = "deferred"
+deferred_reason = "Highpass outer blending and its shared publication boundary are not ported."
+evidence = "The native flags opt the module into the common outer blend stage, whereas the current Rust registry receipt names only the generic two-slider UI and the CPU leaf only owns the Highpass Lab operation."
+
+[[responsibility]]
+id = "presets"
+upstream_path = "src/iop/highpass.c"
+upstream_symbols = ["init_presets"]
+rust_path = "crates/rusttable-ui; crates/rusttable-app"
+source_lines = "no init_presets definition in src/iop/highpass.c (1-365)"
+status = "deferred"
+deferred_reason = "Highpass preset registration and persistence are not ported."
+evidence = "The retained Highpass file has no init_presets callback, and Rust does not invent a preset workflow for the two-slider source contract."
+
+[[responsibility]]
+id = "picker-and-autotune"
+upstream_path = "src/iop/highpass.c"
+upstream_symbols = ["color_picker_apply", "apply_autotune"]
+rust_path = "crates/rusttable-ui; crates/rusttable-app"
+source_lines = "no color_picker_apply or apply_autotune definition in src/iop/highpass.c (1-365)"
+status = "deferred"
+deferred_reason = "Picker and autotune workflows remain unavailable."
+evidence = "The retained Highpass module exposes neither picker nor autotune callbacks, and no Rust UI or app workflow claims either capability."
+
+[[responsibility]]
+id = "darktable-history-to-catalog-conversion"
+upstream_path = "src/common/history.h; src/common/history.c; src/iop/highpass.c"
+upstream_symbols = [
+    "dt_history_item_t",
+    "dt_history_get_items",
+    "dt_history_load_and_apply",
+    "DT_MODULE_INTROSPECTION",
+]
+rust_path = "crates/rusttable-import/src/darktable/history.rs; crates/rusttable-catalog/src/history; crates/rusttable-catalog-store"
+source_lines = "src/common/history.h:112-163; src/common/history.c:175-233,1050-1108; src/iop/highpass.c:39-45; crates/rusttable-import/src/darktable/history.rs:488-521"
+status = "deferred"
+deferred_reason = "Converting retained Darktable history rows into durable RustTable catalog history is not claimed by the Highpass route."
+evidence = "The Rust import bridge decodes operation-local Highpass rows, but the source history item/application workflow and durable catalog materialization remain separate responsibilities."
+
+[[responsibility]]
+id = "additional-gtk-editor-surfaces-and-persistence"
+upstream_path = "src/iop/highpass.c; src/develop/blend.c"
+upstream_symbols = ["gui_init", "gui_update", "gui_cleanup", "IOP_FLAGS_SUPPORTS_BLENDING"]
+rust_path = "crates/rusttable-ui; crates/rusttable-app; crates/rusttable-pixelpipe"
+source_lines = "src/iop/highpass.c:81-84,348-359; src/develop/blend.c:458-766"
+status = "deferred"
+deferred_reason = "Native shared blend/mask editor surfaces, outer-blend publication, and their action persistence remain deferred; generic RustTable two-slider action materialization and persistence are implemented separately."
+evidence = "The current registry receipt exposes the source-mapped two-slider editor with partial UI availability at registry/operations/mod.rs:754-782. The source map does not claim native gui_update/gui_cleanup responsibilities or the shared blend/mask and outer-blend editor and persistence workflow."

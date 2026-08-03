@@ -24,6 +24,7 @@ use crate::iop::colorzones::{
 use crate::iop::crop::{
     CROP_ALIASES, CROP_DESCRIPTION, CROP_GROUP_KEYS, CROP_MODULE_ID, CROP_TITLE,
 };
+use crate::iop::highpass::{HIGHPASS_MODULE_ID, HIGHPASS_SOURCE_MAP, HighpassSourceMap};
 use crate::iop::soften::{SOFTEN_DESCRIPTION, SOFTEN_GROUP_KEYS, SOFTEN_MODULE_ID, SOFTEN_TITLE};
 use crate::iop::velvia::{VELVIA_MODULE_ID, VELVIA_SOURCE_MAP, VelviaSourceMap};
 use crate::iop::vibrance::{VIBRANCE_MODULE_ID, VIBRANCE_SOURCE_MAP, VibranceSourceMap};
@@ -113,6 +114,7 @@ fn module_from_descriptor(
         (id == COLORCORRECTION_MODULE_ID).then_some(COLORCORRECTION_SOURCE_MAP);
     let colorcontrast_source_map =
         (id == COLORCONTRAST_MODULE_ID).then_some(COLORCONTRAST_SOURCE_MAP);
+    let highpass_source_map = (id == HIGHPASS_MODULE_ID).then_some(HIGHPASS_SOURCE_MAP);
     let velvia_source_map = (id == VELVIA_MODULE_ID).then_some(VELVIA_SOURCE_MAP);
     let vibrance_source_map = (id == VIBRANCE_MODULE_ID).then_some(VIBRANCE_SOURCE_MAP);
     let bloom_custom_editor = id == BLOOM_MODULE_ID;
@@ -125,12 +127,19 @@ fn module_from_descriptor(
         || colorreconstruct_custom_editor
         || colorzones_custom_editor
         || soften_custom_editor;
+    // Highpass has a source-mapped generic editor even though its shared
+    // blend/mask and outer-blend surfaces remain unavailable. Do not broaden
+    // partial support into generic controls for unrelated operations.
+    let generic_controls = ui_availability.is_available()
+        || (highpass_source_map.is_some() && ui_availability.is_partial());
     let mut controls = Vec::new();
-    if ui_availability.is_available() && !custom_editor {
+    if generic_controls && !custom_editor {
         for parameter in &descriptor.parameters {
             if colorcorrection_source_map
                 .is_some_and(|source_map| source_map.saturation(&parameter.id).is_none())
                 || colorcontrast_source_map
+                    .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
+                || highpass_source_map
                     .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
                 || vibrance_source_map
                     .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
@@ -148,6 +157,7 @@ fn module_from_descriptor(
         .or_else(|| crop_editor.then(|| CROP_TITLE.to_owned()))
         .or_else(|| colorcorrection_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| colorcontrast_source_map.map(|source_map| source_map.title().to_owned()))
+        .or_else(|| highpass_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| velvia_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| vibrance_source_map.map(|source_map| source_map.title().to_owned()))
         .unwrap_or_else(|| operation_title(descriptor));
@@ -165,11 +175,13 @@ fn module_from_descriptor(
     let default_enabled = !custom_editor
         && colorcorrection_source_map.is_none_or(ColorCorrectionSourceMap::default_enabled)
         && colorcontrast_source_map.is_none_or(ColorContrastSourceMap::default_enabled)
+        && highpass_source_map.is_none_or(HighpassSourceMap::default_enabled)
         && velvia_source_map.is_none_or(VelviaSourceMap::default_enabled)
         && vibrance_source_map.is_none_or(VibranceSourceMap::default_enabled);
     let default_expanded = colorcorrection_source_map
         .is_some_and(ColorCorrectionSourceMap::default_expanded)
         || colorcontrast_source_map.is_some_and(ColorContrastSourceMap::default_expanded)
+        || highpass_source_map.is_some_and(HighpassSourceMap::default_expanded)
         || velvia_source_map.is_some_and(VelviaSourceMap::default_expanded)
         || vibrance_source_map.is_some_and(VibranceSourceMap::default_expanded);
     let mut module = DarkroomModuleViewModel::new(
@@ -220,6 +232,11 @@ fn module_from_descriptor(
         module = module
             .with_group_keys(source_map.group_keys().iter().copied())
             .with_aliases(source_map.aliases().iter().copied());
+    } else if let Some(source_map) = highpass_source_map {
+        module = module
+            .with_description(source_map.description())
+            .with_group_keys(source_map.group_keys().iter().copied())
+            .with_aliases(source_map.aliases().iter().copied());
     } else if let Some(source_map) = velvia_source_map {
         module = module
             .with_group_keys(source_map.group_keys().iter().copied())
@@ -262,6 +279,16 @@ fn control_from_parameter(
             })
     } else if module_id == COLORCONTRAST_MODULE_ID {
         COLORCONTRAST_SOURCE_MAP
+            .slider(&parameter.id)
+            .map_or((None, None, None), |source| {
+                (
+                    Some(source.label().to_owned()),
+                    Some(source.slider_presentation()),
+                    Some(source.step()),
+                )
+            })
+    } else if module_id == HIGHPASS_MODULE_ID {
+        HIGHPASS_SOURCE_MAP
             .slider(&parameter.id)
             .map_or((None, None, None), |source| {
                 (
@@ -749,7 +776,76 @@ mod tests {
     }
 
     #[test]
-    fn partial_ui_does_not_project_generic_descriptor_controls() {
+    fn highpass_projects_exactly_two_source_mapped_sliders_without_blend_mask_controls() {
+        let modules = modules_from_registry().expect("registry module projection");
+        let highpass = modules.module("highpass").expect("Highpass module");
+
+        assert!(!highpass.is_hidden());
+        assert!(highpass.availability().is_supported());
+        assert!(highpass.availability().is_partial());
+        assert!(!highpass.availability().is_fully_supported());
+        assert_eq!(
+            highpass.availability().reason(),
+            Some(
+                "the generic two-slider editor is usable, but native shared blend/mask/outer-blend controls and their action persistence remain deferred"
+            )
+        );
+        assert_eq!(
+            highpass.status_text(),
+            "Partial · the generic two-slider editor is usable, but native shared blend/mask/outer-blend controls and their action persistence remain deferred"
+        );
+        assert_eq!(
+            highpass.availability().deferred_responsibilities(),
+            &[
+                "iop.highpass.ui.shared-blend-mask-controls".to_owned(),
+                "iop.highpass.ui.outer-blend-controls".to_owned(),
+                "iop.highpass.persistence.native-shared-blend-mask-and-outer-blend".to_owned(),
+            ]
+        );
+        assert!(!highpass.enabled());
+        assert_eq!(
+            highpass
+                .controls()
+                .controls()
+                .map(|control| control.id().as_str())
+                .collect::<Vec<_>>(),
+            ["highpass-sharpness", "highpass-contrast"],
+            "partial Highpass projects only its source-mapped generic sliders"
+        );
+        assert!(
+            highpass
+                .controls()
+                .controls()
+                .all(|control| control.kind() == DarkroomControlKind::Slider)
+        );
+
+        let definition = builtin_registry()
+            .definition("rusttable.highpass")
+            .expect("Highpass backend definition");
+        assert!(definition.gpu().is_none());
+        assert_eq!(
+            definition.cpu_execution_route(),
+            Some(rusttable_processing::CpuExecutionRoute::LabD50Pixelpipe)
+        );
+        assert!(!definition.descriptor().mask_blend.consumes_mask);
+        assert!(!definition.descriptor().mask_blend.publishes_mask);
+        assert!(!definition.descriptor().mask_blend.blend_if);
+    }
+
+    #[test]
+    fn unavailable_tonal_ui_stays_hidden_without_generic_controls() {
+        let modules = modules_from_registry().expect("registry module projection");
+        for operation_id in ["basecurve", "tonecurve"] {
+            let module = modules.module(operation_id).expect("tonal module");
+            assert!(module.is_hidden(), "{operation_id} should stay hidden");
+            assert!(!module.enabled(), "{operation_id} should stay disabled");
+            assert!(module.availability().is_unsupported());
+            assert_eq!(module.controls().controls().len(), 0);
+        }
+    }
+
+    #[test]
+    fn unrelated_partial_ui_does_not_project_generic_descriptor_controls() {
         let ui_availability = OperationUiAvailability::PartiallyAvailable {
             reason: "custom editor only".to_owned(),
             deferred_responsibilities: vec!["operation.ui.deferred".to_owned()],

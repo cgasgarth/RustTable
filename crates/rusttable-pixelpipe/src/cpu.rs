@@ -870,6 +870,15 @@ fn execute_lab_point_chain(
         }
         if let rusttable_processing::ProcessingOperationKind::Highpass { config } = operation.kind()
         {
+            if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+                return Err(CpuPixelpipeError::Evaluation {
+                    source: EvaluationError::OperationExecution {
+                        step_index: node.pipeline_step_index(),
+                        operation_id: operation.operation_id(),
+                        reason: "Highpass masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+                    },
+                });
+            }
             execute_highpass_lab(
                 *config,
                 &mut output,

@@ -81,5 +81,10 @@ name = "vibrance_gtk_boundary"
 path = "tests/vibrance_gtk_boundary.rs"
 harness = false
 
+[[test]]
+name = "highpass_gtk_boundary"
+path = "tests/highpass_gtk_boundary.rs"
+harness = false
+
 [lints]
 workspace = true

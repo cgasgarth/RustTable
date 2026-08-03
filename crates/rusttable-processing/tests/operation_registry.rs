@@ -139,10 +139,33 @@ fn highpass_materializes_but_routes_execution_to_lab_pixelpipe() {
             .evidence_ids()
             .contains(&"iop.highpass.cpu.lab-d50-box-filter".to_owned())
     );
+    assert!(definition.gpu().is_none());
     assert_eq!(
         definition.ui_availability(),
-        &OperationUiAvailability::Unavailable {
-            reason: "Highpass GTK controls are not ported".to_owned(),
+        &OperationUiAvailability::PartiallyAvailable {
+            reason: "the generic two-slider editor is usable, but native shared blend/mask/outer-blend controls and their action persistence remain deferred"
+                .to_owned(),
+            deferred_responsibilities: [
+                "iop.highpass.ui.shared-blend-mask-controls",
+                "iop.highpass.ui.outer-blend-controls",
+                "iop.highpass.persistence.native-shared-blend-mask-and-outer-blend",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        }
+    );
+    assert!(!definition.ui_availability().is_available());
+    assert!(definition.ui_availability().is_usable());
+    assert!(definition.ui_availability().is_partial());
+    assert_eq!(
+        definition.descriptor().mask_blend,
+        rusttable_processing::descriptor::MaskBlendContract {
+            consumes_mask: false,
+            publishes_mask: false,
+            blend_if: false,
+            geometry: false,
+            analysis: false,
         }
     );
 
@@ -486,9 +509,9 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
             "rgbgain",
             "invert",
             "defringe",
+            "highpass",
             "sharpen",
-            "clahe",
-            "dither"
+            "clahe"
         ]
     );
     assert_eq!(ids.last(), Some(&"colorout"));
