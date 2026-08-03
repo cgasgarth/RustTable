@@ -2,9 +2,13 @@ use std::fmt;
 
 use rusttable_core::{Edit, EditId, OperationId, PhotoId, Revision};
 
+use crate::operations::rawprepare::{
+    RAWPREPARE_SOURCE_REGISTRATION, RawPrepareError, RawPrepareImageMetadata,
+    RawPrepareParametersV2, RawPreparePlan, RawPrepareRoute,
+};
 use crate::{
     CompiledPipeline, PipelineCompileError, PipelineStepIndex, PreparedCpuOperation,
-    ProcessingOperation,
+    ProcessingOperation, SourceProcessingOperation,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -33,6 +37,71 @@ pub enum OperationGraphOutput {
     Source,
     Node(OperationGraphNodeIndex),
 }
+
+/// Registration for the typed sensor-stage operation that precedes the RGB
+/// operation graph.
+///
+/// It is deliberately not an [`OperationGraphNode`]. Those nodes execute
+/// against `LinearRgb`, while Raw Prepare consumes a one-plane sensor mosaic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RawSourcePreparationSegment {
+    operation: SourceProcessingOperation,
+    stage: &'static str,
+    input: &'static str,
+    output: &'static str,
+}
+
+impl RawSourcePreparationSegment {
+    #[must_use]
+    pub const fn operation(self) -> SourceProcessingOperation {
+        self.operation
+    }
+
+    #[must_use]
+    pub const fn stage(self) -> &'static str {
+        self.stage
+    }
+
+    #[must_use]
+    pub const fn input(self) -> &'static str {
+        self.input
+    }
+
+    #[must_use]
+    pub const fn output(self) -> &'static str {
+        self.output
+    }
+
+    #[must_use]
+    pub fn route(self, metadata: &RawPrepareImageMetadata) -> RawPrepareRoute {
+        let _ = self;
+        crate::operations::rawprepare::rawprepare_route(metadata)
+    }
+
+    /// Compiles the source metadata and v2 parameters without entering the
+    /// generic linear-RGB registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same typed validation errors as the bounded source-stage
+    /// planner when metadata, crop, or black/white levels are unsupported.
+    pub fn plan(
+        self,
+        metadata: &RawPrepareImageMetadata,
+        parameters: &RawPrepareParametersV2,
+    ) -> Result<RawPreparePlan, RawPrepareError> {
+        let _ = self;
+        RawPreparePlan::new(metadata, parameters)
+    }
+}
+
+pub const RAW_SOURCE_PREPARATION_SEGMENT: RawSourcePreparationSegment =
+    RawSourcePreparationSegment {
+        operation: RAWPREPARE_SOURCE_REGISTRATION.operation,
+        stage: RAWPREPARE_SOURCE_REGISTRATION.stage,
+        input: RAWPREPARE_SOURCE_REGISTRATION.input,
+        output: RAWPREPARE_SOURCE_REGISTRATION.output,
+    };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OperationGraphNode {

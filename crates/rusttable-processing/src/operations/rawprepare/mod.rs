@@ -25,6 +25,12 @@ pub mod codec;
 pub mod execution;
 pub mod source_map;
 
+pub use source_map::{
+    RAWPREPARE_SOURCE_MAP, RAWPREPARE_SOURCE_REGISTRATION, RawPreparePortStatus, RawPrepareRoute,
+    RawPrepareRouteRejection, RawPrepareSourceMapEntry, RawPrepareSourceRegistration,
+    rawprepare_route,
+};
+
 pub use codec::{
     RAWPREPARE_COMPATIBILITY_ID, RAWPREPARE_HISTORY_V1_PARAMETER_BYTES,
     RAWPREPARE_HISTORY_V2_PARAMETER_BYTES, RAWPREPARE_INTROSPECTION_VERSION,
@@ -203,6 +209,35 @@ fn integer(id: &str, default: i64, unit: &str) -> ParameterDescriptor {
     }
 }
 
+/// Typed identity for the only source operation exposed by this lane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RawPrepareSourceOperation {
+    RawPrepare,
+}
+
+impl RawPrepareSourceOperation {
+    #[must_use]
+    pub const fn compatibility_id(self) -> &'static str {
+        match self {
+            Self::RawPrepare => RAWPREPARE_COMPATIBILITY_ID,
+        }
+    }
+
+    #[must_use]
+    pub const fn rust_id(self) -> &'static str {
+        match self {
+            Self::RawPrepare => "rusttable.rawprepare.source",
+        }
+    }
+
+    #[must_use]
+    pub const fn stage(self) -> &'static str {
+        match self {
+            Self::RawPrepare => "raw-sensor-linear",
+        }
+    }
+}
+
 /// Capability facts are kept separate so a caller cannot mistake a CPU leaf
 /// for production registration or a decoder/GPU/UI implementation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,6 +246,7 @@ pub struct RawPrepareCapabilities {
     pub gpu: bool,
     pub import_materialization: bool,
     pub production_routing: bool,
+    pub source_routing: bool,
     pub ui: bool,
 }
 
@@ -221,6 +257,7 @@ pub const fn capabilities() -> RawPrepareCapabilities {
         gpu: false,
         import_materialization: false,
         production_routing: false,
+        source_routing: true,
         ui: false,
     }
 }

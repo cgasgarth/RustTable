@@ -34,3 +34,33 @@ upstream_path = "src/common/image.h"
 responsibility = "owned orientation, camera identity, crop, CFA, level, and color facts consumed downstream"
 rust_path = "crates/rusttable-image-io/src/raw/types.rs"
 rust_symbol = "RawFrame"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_common.h"
+responsibility = "typed image-loader outcomes and bounded input boundary before signature dispatch"
+rust_path = "crates/rusttable-image-io/src/input.rs"
+rust_symbol = "FileImageInput"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_rawspeed.h"
+responsibility = "owned U16 Bayer/X-Trans sensor samples and camera metadata; native RawSpeed calls remain deferred"
+rust_path = "crates/rusttable-image-io/src/raw/types/receipt.rs"
+rust_symbol = "RawDecodeReceipt"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_libraw.h"
+responsibility = "explicit unsupported LibRaw camera/compression branches"
+rust_path = "crates/rusttable-image-io/src/raw/types.rs"
+rust_symbol = "RawCapabilityError"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_rawspeed.cc"
+responsibility = "deferred native RawSpeed loader; no C++ or unsafe replacement is linked"
+rust_path = "crates/rusttable-image-io/src/raw/adapter.rs"
+rust_symbol = "RawlerRawDecoder"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_libraw.c"
+responsibility = "deferred native LibRaw loader; CR3, X3F, float RAW, and SRAW stay unsupported"
+rust_path = "crates/rusttable-image-io/src/raw/types.rs"
+rust_symbol = "RawCapabilityKind"

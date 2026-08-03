@@ -14,7 +14,9 @@ pub use manifest::{
 pub use probe::{RAW_PROBE_BUDGET_BYTES, RawContainerRegistry};
 pub use types::*;
 
-use rusttable_image::{DecodeLimits, DecodedFrame, DecodedImage, ImageInputError, ImageProbe};
+use rusttable_image::{
+    DecodeLimits, DecodedFrame, DecodedImage, ImageInputError, ImageProbe, InputFormat,
+};
 
 pub(crate) fn is_raw(bytes: &[u8]) -> bool {
     !matches!(
@@ -46,4 +48,26 @@ pub(crate) fn decode_raw_legacy_frame(
     limits: DecodeLimits,
 ) -> Result<DecodedFrame, ImageInputError> {
     adapter::decode_legacy_frame(bytes, limits)
+}
+
+pub(crate) fn canonical_metadata_receipt(
+    bytes: &[u8],
+    limits: DecodeLimits,
+) -> Result<Option<Vec<u8>>, ImageInputError> {
+    if !is_raw(bytes) {
+        return Ok(None);
+    }
+    let request = RawDecodeRequest::new(adapter::raw_limits(limits)?);
+    let result = RawlerRawDecoder::new()
+        .decode_bytes(bytes, &request)
+        .map_err(adapter::raw_input_error)?;
+    result
+        .receipt
+        .metadata
+        .to_canonical_bytes()
+        .map(Some)
+        .map_err(|_| ImageInputError::MalformedInput {
+            format: InputFormat::Raw,
+            message: "RAW metadata receipt could not be serialized".to_owned(),
+        })
 }

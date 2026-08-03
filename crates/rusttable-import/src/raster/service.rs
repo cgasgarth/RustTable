@@ -19,7 +19,7 @@ use super::model::{
     AtomicRasterCatalog, AtomicRasterCatalogError, RasterCatalogEntry, RasterImportBatch,
     RasterImportCancellation, RasterImportFailure, RasterImportItemId, RasterImportObserver,
     RasterImportProgress, RasterImportReceipt, RasterImportRequest, RasterImportStage,
-    RasterImportStatus, RasterPreviewPort,
+    RasterImportStatus, RasterPreviewPort, RawReceiptProvider,
 };
 use super::reference::{ReferenceSourceError, encode_reference_source, reference_path_identity};
 use crate::{
@@ -28,6 +28,7 @@ use crate::{
 };
 
 const MAX_CONCURRENT_IMPORTS: usize = 4;
+const MAX_CANONICAL_RAW_RECEIPT_BYTES: usize = 1024 * 1024;
 
 struct PreparedRaster {
     item_id: RasterImportItemId,
@@ -39,12 +40,22 @@ struct PreparedRaster {
     metadata: rusttable_core::ImageMetadata,
     metadata_status: ImportMetadataStatus,
     metadata_diagnostic: Option<rusttable_metadata::MetadataInputError>,
+    /// Opaque canonical bytes supplied by the RAW decoder lane.
+    raw_receipt: Option<Vec<u8>>,
     visual: VisualFingerprint,
 }
 
 struct BuiltRasterRegistration {
     entry: RasterCatalogEntry,
     registration: ImportRegistration,
+}
+
+struct NoRawReceiptProvider;
+
+impl RawReceiptProvider for NoRawReceiptProvider {
+    fn raw_receipt(&self, _format: InputFormat, _source: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 pub struct RasterImportService<'a> {
@@ -78,6 +89,32 @@ impl<'a> RasterImportService<'a> {
         cancellation: &RasterImportCancellation,
         observer: &dyn RasterImportObserver,
     ) -> RasterImportBatch {
+        let raw_receipts = NoRawReceiptProvider;
+        self.import_with_raw_receipts(
+            request,
+            catalog,
+            preview,
+            cancellation,
+            observer,
+            &raw_receipts,
+        )
+    }
+
+    /// Imports while transporting decoder-owned canonical RAW receipts.
+    ///
+    /// The provider is called only for successfully decoded RAW sources. Its
+    /// bytes are never interpreted or reconstructed by the catalog lane; they
+    /// are validated for a bounded nonempty payload and persisted atomically
+    /// beside the registration details.
+    pub fn import_with_raw_receipts(
+        &self,
+        request: &RasterImportRequest,
+        catalog: &mut dyn AtomicRasterCatalog,
+        preview: &dyn RasterPreviewPort,
+        cancellation: &RasterImportCancellation,
+        observer: &dyn RasterImportObserver,
+        raw_receipts: &dyn RawReceiptProvider,
+    ) -> RasterImportBatch {
         let _span = tracing::info_span!(
             target: "rusttable.import",
             "raster_import",
@@ -106,7 +143,8 @@ impl<'a> RasterImportService<'a> {
                         let Some((item_id, path)) = items.get(index) else {
                             break;
                         };
-                        let result = self.prepare_one(*item_id, path, cancellation, observer);
+                        let result =
+                            self.prepare_one(*item_id, path, cancellation, observer, raw_receipts);
                         prepared
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner)[index] =
@@ -134,12 +172,17 @@ impl<'a> RasterImportService<'a> {
         RasterImportBatch::new(receipts)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "ordered source opening, probing, decoding, metadata, and receipt stages mirror the native import pipeline"
+    )]
     fn prepare_one(
         &self,
         item_id: RasterImportItemId,
         path: &Path,
         cancellation: &RasterImportCancellation,
         observer: &dyn RasterImportObserver,
+        raw_receipts: &dyn RawReceiptProvider,
     ) -> Result<PreparedRaster, Box<RasterImportReceipt>> {
         let alias = safe_alias(path);
         if cancellation.is_cancelled() {
@@ -202,6 +245,24 @@ impl<'a> RasterImportService<'a> {
                 observer,
             )));
         };
+        let raw_receipt = if probe.format() == InputFormat::Raw {
+            raw_receipts.raw_receipt(probe.format(), &bytes)
+        } else {
+            None
+        };
+        if raw_receipt.as_ref().is_some_and(|receipt| {
+            receipt.is_empty() || receipt.len() > MAX_CANONICAL_RAW_RECEIPT_BYTES
+        }) {
+            return Err(Box::new(failed_with_evidence(
+                item_id,
+                alias,
+                hash,
+                Some(probe.format()),
+                RasterImportStage::Decoding,
+                RasterImportFailure::InternalInvariant,
+                observer,
+            )));
+        }
         let visual = VisualFingerprint::from_decoded(&decoded);
         let (metadata, metadata_status, metadata_diagnostic) = match self
             .metadata_input
@@ -235,6 +296,7 @@ impl<'a> RasterImportService<'a> {
             metadata,
             metadata_status,
             metadata_diagnostic,
+            raw_receipt,
             visual,
         })
     }
@@ -265,6 +327,7 @@ impl<'a> RasterImportService<'a> {
             metadata,
             metadata_status,
             metadata_diagnostic,
+            raw_receipt,
             visual,
         } = prepared;
         if cancellation.is_cancelled() {
@@ -335,6 +398,7 @@ impl<'a> RasterImportService<'a> {
                     probe,
                     metadata,
                     metadata_status,
+                    raw_receipt.as_deref(),
                     visual,
                 ) {
                     Ok(built) => built,
@@ -460,6 +524,7 @@ impl<'a> RasterImportService<'a> {
                 probe,
                 metadata,
                 metadata_status,
+                raw_receipt.as_deref(),
                 visual,
             ) {
                 Ok(built) => built,
@@ -582,6 +647,7 @@ fn build_entry(
     probe: rusttable_image::ImageProbe,
     metadata: rusttable_core::ImageMetadata,
     metadata_status: ImportMetadataStatus,
+    raw_receipt: Option<&[u8]>,
     visual: VisualFingerprint,
 ) -> Result<BuiltRasterRegistration, RasterImportFailure> {
     let path_identity = reference_path_identity(path).map_err(map_reference_error)?;
@@ -626,6 +692,10 @@ fn build_entry(
         ImportMetadataSummary::from_record_with_status(&record, metadata_status),
         receipt,
     );
+    let details = match raw_receipt {
+        Some(raw_receipt) => details.with_raw_receipt(raw_receipt.to_vec()),
+        None => details,
+    };
     let duplicate_evidence = DuplicateEvidence::from_record(
         &record,
         ReferencePathIdentity::new(path_identity),

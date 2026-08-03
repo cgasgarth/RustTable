@@ -1,3 +1,6 @@
+//! Source lineage: `src/imageio/imageio.c` and `src/imageio/imageio_common.h`.
+//! File input owns one bounded source snapshot before decoder dispatch.
+
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -36,11 +39,7 @@ impl FileImageInput {
     }
 
     fn read_source(&self, path: &Path) -> Result<Vec<u8>, ImageInputError> {
-        let read_limit = self
-            .limits
-            .max_source_bytes()
-            .checked_add(1)
-            .ok_or(ImageInputError::ArithmeticOverflow)?;
+        let read_limit = self.limits.max_source_bytes().saturating_add(1);
         let mut file = File::open(path).map_err(|error| io_error(&error))?;
         let mut bytes = Vec::new();
         file.by_ref()
@@ -93,6 +92,16 @@ impl FileImageInput {
     pub fn decode_linear_frame_bytes(&self, bytes: &[u8]) -> Result<DecodedFrame, ImageInputError> {
         self.enforce_source_limit(bytes)?;
         self.registry.decode_frame_bytes(bytes, self.limits)
+    }
+
+    /// Returns the decoder-owned canonical metadata receipt for a RAW source.
+    ///
+    /// # Errors
+    ///
+    /// Returns the bounded RAW decoder or canonical serialization failure.
+    pub fn raw_metadata_receipt(&self, bytes: &[u8]) -> Result<Option<Vec<u8>>, ImageInputError> {
+        self.enforce_source_limit(bytes)?;
+        crate::raw::canonical_metadata_receipt(bytes, self.limits)
     }
 }
 

@@ -1,3 +1,6 @@
+//! Source lineage: `src/imageio/imageio_common.h` and `src/imageio/imageio.c`.
+//! This module owns the checked decoder request, receipt, and frame boundary.
+
 use crate::{
     AlphaMode, ByteOrder, ChannelLayout, DecodeLimits, ImageDescriptor, InputFormat, Orientation,
     OwnedImage, PixelFormat, RawMosaicSource, Roi, SampleType, SourceColor, SourceColorEvidence,

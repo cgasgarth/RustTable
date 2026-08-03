@@ -7,6 +7,8 @@ use rusttable_image::{ImageDimensions, InputFormat};
 use crate::{DuplicateEvidence, ImportRecord, PhotoGroupId};
 
 pub const IMPORT_DETAILS_VERSION: u8 = 1;
+/// Maximum canonical RAW decoder receipt retained with one import.
+pub const MAX_RAW_RECEIPT_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportMetadataStatus {
@@ -285,17 +287,28 @@ impl ImportRegistrationReceipt {
 pub struct ImportDetails {
     summary: ImportMetadataSummary,
     receipt: ImportRegistrationReceipt,
+    /// Canonical, decoder-owned RAW receipt bytes.
+    ///
+    /// The catalog deliberately keeps this payload opaque: the RAW decoder owns
+    /// its schema and source-backed CFA/geometry/calibration meaning, while the
+    /// catalog owns its atomic lifetime and round-trip persistence.
+    raw_receipt: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportDetailsValidationError {
     MismatchedRecordOrEdit,
+    InvalidRawReceipt,
 }
 
 impl ImportDetails {
     #[must_use]
     pub const fn new(summary: ImportMetadataSummary, receipt: ImportRegistrationReceipt) -> Self {
-        Self { summary, receipt }
+        Self {
+            summary,
+            receipt,
+            raw_receipt: None,
+        }
     }
 
     #[must_use]
@@ -306,6 +319,19 @@ impl ImportDetails {
     #[must_use]
     pub const fn receipt(&self) -> &ImportRegistrationReceipt {
         &self.receipt
+    }
+
+    /// Returns the decoder-owned canonical RAW receipt, when the source was RAW.
+    #[must_use]
+    pub fn raw_receipt(&self) -> Option<&[u8]> {
+        self.raw_receipt.as_deref()
+    }
+
+    /// Attaches one bounded canonical RAW decoder receipt without interpreting it.
+    #[must_use]
+    pub fn with_raw_receipt(mut self, raw_receipt: Vec<u8>) -> Self {
+        self.raw_receipt = Some(raw_receipt);
+        self
     }
 
     #[must_use]
@@ -342,6 +368,13 @@ impl ImportDetails {
             || edit.photo_id() != record.photo().id()
         {
             return Err(ImportDetailsValidationError::MismatchedRecordOrEdit);
+        }
+        if self
+            .raw_receipt
+            .as_ref()
+            .is_some_and(|receipt| receipt.is_empty() || receipt.len() > MAX_RAW_RECEIPT_BYTES)
+        {
+            return Err(ImportDetailsValidationError::InvalidRawReceipt);
         }
         Ok(())
     }

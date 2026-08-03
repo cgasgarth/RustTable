@@ -12,7 +12,7 @@ use rusttable_app::workspace::{load_selected_export_render, run_raster_import};
 use rusttable_image::{
     CancellationToken, ColorEncoding, DecodedImage, ImageInput, InputFormat, SampleType,
 };
-use rusttable_image_io::{FileImageInput, ImageDecoderRegistry};
+use rusttable_image_io::{FileImageInput, ImageDecoderRegistry, RawMetadataReceipt};
 use rusttable_import::RasterImportCancellation;
 use rusttable_render::{
     MipmapLevel, RenderTarget, SrgbFallbackContract, ThumbnailGenerator, ThumbnailRequest,
@@ -198,6 +198,12 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
         decoder_probe(fixture.bytes()).dimensions()
     );
     assert_eq!(details.receipt().source_alias(), fixture.source_name());
+    let raw_receipt = details
+        .raw_receipt()
+        .expect("persisted RAW metadata receipt");
+    assert!(!raw_receipt.is_empty());
+    RawMetadataReceipt::from_canonical_bytes(raw_receipt)
+        .expect("persisted RAW metadata receipt is canonical");
     assert!(!format!("{details:?}").contains(directory.0.to_str().expect("UTF-8 path")));
     drop(repository);
 

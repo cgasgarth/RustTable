@@ -723,3 +723,14 @@ fn matched_malformed_jpeg_never_falls_back_to_another_decoder() {
         })
     ));
 }
+
+#[test]
+fn incomplete_jpeg_soi_is_not_a_jpeg_signature() {
+    let result = ImageDecoderRegistry::standard().probe_bytes(&[0xff, 0xd8], limits());
+
+    assert!(matches!(
+        result,
+        Err(ImageInputError::UnsupportedSignature { signature })
+            if signature == [0xff, 0xd8]
+    ));
+}

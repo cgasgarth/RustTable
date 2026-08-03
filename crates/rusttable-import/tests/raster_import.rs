@@ -7,8 +7,8 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Barrier, Mutex};
 
 use rusttable_catalog::{
-    DuplicateClassification, DuplicateEvidence, DuplicateSearchResult, ImportMetadataStatus,
-    ImportRegistration, ReferencePathIdentity, classify_duplicate,
+    DuplicateClassification, DuplicateEvidence, DuplicateSearchResult, ImportDetails,
+    ImportMetadataStatus, ImportRegistration, ReferencePathIdentity, classify_duplicate,
 };
 use rusttable_core::{
     ContentHash, ImageMetadata, MetadataEntry, MetadataText, ParameterName, ParameterValue,
@@ -61,6 +61,7 @@ impl Drop for TempDirectory {
 struct MemoryCatalog {
     entries: Vec<RasterCatalogEntry>,
     duplicate_evidence: Vec<DuplicateEvidence>,
+    registration_details: Vec<ImportDetails>,
     fail_commit: bool,
     fail_find_by_source: Option<AtomicRasterCatalogError>,
     fail_duplicate_query: bool,
@@ -137,6 +138,8 @@ impl AtomicRasterCatalog for MemoryCatalog {
                 .duplicate_evidence()
                 .expect("raster registration evidence"),
         );
+        self.registration_details
+            .push(registration.details().clone());
         Ok(())
     }
 
@@ -160,6 +163,16 @@ impl AtomicRasterCatalog for MemoryCatalog {
             .find(|candidate| candidate.photo_id() == evidence.photo_id())
             .ok_or(AtomicRasterCatalogError::Corrupt)?;
         *persisted = evidence;
+        if let Some(details) = self
+            .registration_details
+            .iter_mut()
+            .find(|details| details.receipt().photo_id() == entry.record.photo().id())
+        {
+            *details = registration.details().clone();
+        } else {
+            self.registration_details
+                .push(registration.details().clone());
+        }
         Ok(())
     }
 
@@ -291,6 +304,43 @@ fn service() -> RasterImportService<'static> {
     )
 }
 
+#[test]
+fn raw_receipt_provider_is_carried_into_registration_details() {
+    let directory = TempDirectory::new();
+    let path = directory.write("source.raw", b"decoder-owned source bytes");
+    let request = RasterImportRequest::new([path]).expect("request");
+    let snapshot = FileSourceSnapshotReader;
+    let image = RawImageInput;
+    let metadata = EmptyMetadata;
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).expect("source limits"),
+        &snapshot,
+        &image,
+        &metadata,
+    );
+    let receipt_bytes = b"canonical raw receipt v1".to_vec();
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service.import_with_raw_receipts(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+        &canonical_raw_receipt,
+    );
+
+    assert_eq!(
+        batch.receipts().next().map(|receipt| receipt.status),
+        Some(RasterImportStatus::Imported)
+    );
+    assert_eq!(catalog.registration_details.len(), 1);
+    assert_eq!(
+        catalog.registration_details[0].raw_receipt(),
+        Some(receipt_bytes.as_slice())
+    );
+}
+
 struct EmptyMetadata;
 
 impl MetadataInput for EmptyMetadata {
@@ -411,6 +461,43 @@ impl ImageInput for DecodeFails {
 
     fn decode_path(&self, path: &Path) -> Result<DecodedImage, ImageInputError> {
         self.delegate.decode_path(path)
+    }
+}
+
+struct RawImageInput;
+
+impl ImageInput for RawImageInput {
+    fn probe_bytes(&self, _bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
+        Ok(ImageProbe::new(
+            InputFormat::Raw,
+            rusttable_image::ImageDimensions::new(2, 1).expect("dimensions"),
+        ))
+    }
+
+    fn decode_bytes(&self, _bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
+        DecodedImage::new(
+            rusttable_image::ImageDimensions::new(2, 1).expect("dimensions"),
+            vec![127; 2 * 4],
+        )
+        .map_err(|_| ImageInputError::AllocationFailure)
+    }
+
+    fn probe_path(&self, _path: &Path) -> Result<ImageProbe, ImageInputError> {
+        self.probe_bytes(&[])
+    }
+
+    fn decode_path(&self, _path: &Path) -> Result<DecodedImage, ImageInputError> {
+        self.decode_bytes(&[])
+    }
+}
+
+fn canonical_raw_receipt(format: InputFormat, source: &[u8]) -> Option<Vec<u8>> {
+    match format {
+        InputFormat::Raw => {
+            assert_eq!(source, b"decoder-owned source bytes");
+            Some(b"canonical raw receipt v1".to_vec())
+        }
+        _ => None,
     }
 }
 

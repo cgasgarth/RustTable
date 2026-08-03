@@ -9,12 +9,15 @@ use rusttable_core::{AssetId, ByteLength, EditId, Orientation, PhotoId};
 use rusttable_image::{ImageDimensions, InputFormat};
 
 const DETAILS_FORMAT_VERSION: u8 = 1;
+const MAX_RAW_RECEIPT_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredDetails {
     version: u8,
     summary: StoredSummary,
     receipt: StoredReceipt,
+    #[serde(default)]
+    raw_receipt: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,6 +53,12 @@ pub fn encode(details: &ImportDetails) -> Result<Vec<u8>, ()> {
     if summary.version() != IMPORT_DETAILS_VERSION || receipt.version() != IMPORT_DETAILS_VERSION {
         return Err(());
     }
+    if details
+        .raw_receipt()
+        .is_some_and(|value| value.is_empty() || value.len() > MAX_RAW_RECEIPT_BYTES)
+    {
+        return Err(());
+    }
     let dimensions = summary.dimensions();
     let stored = StoredDetails {
         version: DETAILS_FORMAT_VERSION,
@@ -77,6 +86,7 @@ pub fn encode(details: &ImportDetails) -> Result<Vec<u8>, ()> {
                 .map(|photo_id| photo_id.get().to_be_bytes()),
             status: encode_status(receipt.status()),
         },
+        raw_receipt: details.raw_receipt().map(ToOwned::to_owned),
     };
     to_allocvec(&stored).map_err(|_| ())
 }
@@ -88,6 +98,10 @@ pub fn decode(bytes: &[u8]) -> Result<ImportDetails, ()> {
         || stored.receipt.version != IMPORT_DETAILS_VERSION
         || decode_status(stored.receipt.status).is_err()
         || decode_metadata_status(stored.summary.metadata_status).is_err()
+        || stored
+            .raw_receipt
+            .as_ref()
+            .is_some_and(|value| value.is_empty() || value.len() > MAX_RAW_RECEIPT_BYTES)
     {
         return Err(());
     }
@@ -126,7 +140,11 @@ pub fn decode(bytes: &[u8]) -> Result<ImportDetails, ()> {
             .map(|value| PhotoId::new(value).ok_or(()))
             .transpose()?,
     );
-    Ok(ImportDetails::new(summary, receipt))
+    let details = ImportDetails::new(summary, receipt);
+    Ok(match stored.raw_receipt {
+        Some(raw_receipt) => details.with_raw_receipt(raw_receipt),
+        None => details,
+    })
 }
 
 const fn encode_format(format: InputFormat) -> u8 {
@@ -188,8 +206,12 @@ const fn default_metadata_status() -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_format, encode_format};
-    use rusttable_image::InputFormat;
+    use super::{decode, decode_format, encode, encode_format};
+    use rusttable_catalog::{
+        ImportDetails, ImportMetadataStatus, ImportMetadataSummary, ImportRegistrationReceipt,
+    };
+    use rusttable_core::{AssetId, ByteLength, EditId, PhotoId};
+    use rusttable_image::{ImageDimensions, InputFormat};
 
     #[test]
     fn format_codes_preserve_legacy_values_and_add_modern_rasters() {
@@ -206,5 +228,34 @@ mod tests {
             assert_eq!(decode_format(code), Ok(format));
         }
         assert!(decode_format(0).is_err());
+    }
+
+    #[test]
+    fn canonical_raw_receipt_round_trips_through_codec() {
+        let summary = ImportMetadataSummary::new_with_status(
+            InputFormat::Raw,
+            ImageDimensions::new(2, 1).expect("dimensions"),
+            None,
+            false,
+            false,
+            false,
+            ImportMetadataStatus::Available,
+        );
+        let receipt = ImportRegistrationReceipt::new(
+            "source.raw".to_owned(),
+            [7; 32],
+            ByteLength::from_bytes(24),
+            PhotoId::new(1).expect("photo id"),
+            AssetId::new(2).expect("asset id"),
+            EditId::new(3).expect("edit id"),
+        )
+        .expect("receipt");
+        let raw_receipt = b"canonical raw receipt v1".to_vec();
+        let details = ImportDetails::new(summary, receipt).with_raw_receipt(raw_receipt.clone());
+
+        let encoded = encode(&details).expect("encode");
+        let decoded = decode(&encoded).expect("decode");
+
+        assert_eq!(decoded.raw_receipt(), Some(raw_receipt.as_slice()));
     }
 }

@@ -124,6 +124,17 @@ fn byte_decode_rejects_oversized_source_before_codec_work() {
 }
 
 #[test]
+fn source_limit_max_does_not_overflow_path_reads() {
+    let result = with_fixture("max-source-limit", &fixture("gif"), |path| {
+        input(u64::MAX).probe_path(path)
+    });
+    assert!(matches!(
+        result,
+        Err(ImageInputError::UnsupportedSignature { .. })
+    ));
+}
+
+#[test]
 fn missing_path_is_a_typed_io_error() {
     let result = input(1_000_000).probe_path(Path::new("does-not-exist.rusttable"));
     assert!(matches!(result, Err(ImageInputError::Io { .. })));

@@ -8,7 +8,7 @@ pub use model::{
     RasterImportBatch, RasterImportCancellation, RasterImportFailure, RasterImportItemId,
     RasterImportObserver, RasterImportProgress, RasterImportReceipt, RasterImportRequest,
     RasterImportRequestError, RasterImportStage, RasterImportStatus, RasterPreviewError,
-    RasterPreviewPort, RasterPreviewReceipt,
+    RasterPreviewPort, RasterPreviewReceipt, RawReceiptProvider,
 };
 pub use reference::{
     decode_reference_source, encode_reference_source, normalize_reference_path,

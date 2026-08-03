@@ -5,13 +5,14 @@ use rusttable_catalog::{
     ReferencePathIdentity,
 };
 use rusttable_catalog_store::{AtomicCatalogStoreError, RedbCatalogRepository};
-use rusttable_image::DecodeLimits;
+use rusttable_image::{DecodeLimits, InputFormat};
 use rusttable_image_io::FileImageInput;
 use rusttable_import::{
     AtomicRasterCatalog, AtomicRasterCatalogError, FileSourceSnapshotReader, ImportSourceLimits,
     RasterCatalogEntry, RasterDuplicateIdentity, RasterImportBatch, RasterImportCancellation,
     RasterImportObserver, RasterImportRequest, RasterImportService, RasterPreviewError,
-    RasterPreviewPort, RasterPreviewReceipt, SourceSnapshotReader, decode_reference_source,
+    RasterPreviewPort, RasterPreviewReceipt, RawReceiptProvider, SourceSnapshotReader,
+    decode_reference_source,
 };
 use rusttable_metadata::{ExifMetadataInput, MetadataLimits};
 use rusttable_render::PreviewBounds;
@@ -25,6 +26,18 @@ const MAX_DIMENSION: u32 = 16_384;
 const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_DECODE_BYTES: u64 = 256 * 1024 * 1024;
 const THUMBNAIL_EDGE: u32 = 256;
+
+struct AppRawReceiptProvider<'a> {
+    image: &'a FileImageInput,
+}
+
+impl RawReceiptProvider for AppRawReceiptProvider<'_> {
+    fn raw_receipt(&self, format: InputFormat, source: &[u8]) -> Option<Vec<u8>> {
+        (format == InputFormat::Raw)
+            .then(|| self.image.raw_metadata_receipt(source).ok().flatten())
+            .flatten()
+    }
+}
 
 /// Imports a validated nonempty raster batch into the supplied catalog.
 ///
@@ -59,15 +72,30 @@ pub fn run_raster_import_with_diagnostics(
     let snapshot = FileSourceSnapshotReader;
     let image = FileImageInput::new(decode_limits());
     let metadata = ExifMetadataInput::new(metadata_limits());
+    let raw_receipts = AppRawReceiptProvider { image: &image };
     let service = RasterImportService::new(source_limits(), &snapshot, &image, &metadata);
     let batch = RedbCatalogRepository::open(catalog_path).map_or_else(
         |_| {
             let mut catalog = UnavailableCatalog;
-            service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
+            service.import_with_raw_receipts(
+                &request,
+                &mut catalog,
+                &AppPreview,
+                cancellation,
+                observer,
+                &raw_receipts,
+            )
         },
         |repository| {
             let mut catalog = AppCatalog(repository);
-            service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
+            service.import_with_raw_receipts(
+                &request,
+                &mut catalog,
+                &AppPreview,
+                cancellation,
+                observer,
+                &raw_receipts,
+            )
         },
     );
     for receipt in batch.receipts() {

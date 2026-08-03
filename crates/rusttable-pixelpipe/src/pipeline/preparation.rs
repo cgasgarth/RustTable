@@ -1,7 +1,7 @@
 use std::fmt;
 
 use rusttable_color::ColorEncoding;
-use rusttable_image::ChannelLayout;
+use rusttable_image::{ChannelLayout, RawMosaicSource};
 use rusttable_masks::MaskIdentity;
 use rusttable_processing::descriptor::{
     OperationDescriptor, OperationFlags, RoiKind, TilingContract,
@@ -462,6 +462,42 @@ impl<'a> PipelinePreparer<'a> {
     #[must_use]
     pub const fn new(source: &'a dyn OperationPreparationSource) -> Self {
         Self { source }
+    }
+
+    /// Compiles the bounded CPU rawprepare plan for one detached source.
+    ///
+    /// The default crop takes precedence over the decoder active area, matching
+    /// the source-side rawprepare contract. Pixel bytes remain outside the plan
+    /// identity; callers must retain the exact source snapshot identity while
+    /// executing the plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns the processing rawprepare error when the source crop or metadata
+    /// cannot be compiled.
+    pub fn prepare_raw_source(
+        source: &RawMosaicSource,
+    ) -> Result<rusttable_processing::RawPreparePlan, rusttable_processing::RawPrepareError> {
+        rusttable_processing::RawPreparePlan::new(
+            source.mosaic(),
+            rusttable_processing::RawPrepareConfig::new(
+                source.default_crop().or_else(|| source.active_area()),
+            ),
+        )
+    }
+
+    /// Executes a previously compiled rawprepare plan against the exact source
+    /// snapshot retained by the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns the processing rawprepare error when source metadata or samples
+    /// cannot be normalized.
+    pub fn execute_raw_source(
+        plan: &rusttable_processing::RawPreparePlan,
+        source: &RawMosaicSource,
+    ) -> Result<rusttable_processing::NormalizedRaw, rusttable_processing::RawPrepareError> {
+        plan.execute(source.mosaic())
     }
 
     /// Prepares one immutable snapshot through the source boundary.

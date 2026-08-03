@@ -12,9 +12,10 @@ use rusttable_image_io::{
 };
 use rusttable_pixelpipe::{
     CancellationScope, CancellationStage, CpuPixelpipeError, CpuPixelpipeOutputMode,
-    CpuPixelpipeScaleContext, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError,
-    PixelpipeExecutionResult, PixelpipeExecutionService, RgbaF32ColorEncoding, RgbaF32Descriptor,
-    RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation,
+    CpuPixelpipeScaleContext, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, PipelinePreparer,
+    PipelineSnapshotInput, PixelpipeExecutionResult, PixelpipeExecutionService,
+    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+    RgbaF32SourceRepresentation,
 };
 use rusttable_processing::{
     CompiledOperationGraph, DemosaicAlgorithm, FiniteF32, LinearRgb, RasterDimensions,
@@ -349,7 +350,8 @@ fn prepare_frame(
         SrgbFallbackContract::Colorimetric
     };
     let mut graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
-    let (source_pixels, dimensions, representation) = source_frame_pixels(input, &mut graph)?;
+    let (source_pixels, dimensions, representation) =
+        source_frame_pixels(input, &mut graph, cancellation)?;
     let source_color = input.source_color();
     let source_color_decision = source_color_decision(source_color).inspect_err(|_| {
         tracing::error!(
@@ -430,8 +432,33 @@ fn prepare_frame(
 fn source_frame_pixels(
     input: &DecodedFrame,
     graph: &mut CompiledOperationGraph,
+    cancellation: Option<&CancellationScope>,
 ) -> Result<(Vec<[f32; 4]>, RasterDimensions, RgbaF32SourceRepresentation), PreviewError> {
     let temperature = pre_demosaic_temperature(graph).map_err(PreviewError::RawPipeline)?;
+    let raw_prepare_identity = if let Some(raw_source) = input.raw_source() {
+        check_preview_cancellation(cancellation, CancellationStage::Preparation)?;
+        if !PipelineSnapshotInput::raw_source_supported(raw_source) {
+            return Err(PreviewError::RawPipeline(
+                rusttable_processing::RawPipelineError::Demosaic(
+                    rusttable_processing::DemosaicError::UnsupportedCfa,
+                ),
+            ));
+        }
+        let source_identity = PipelineSnapshotInput::raw_source_identity(raw_source);
+        let preparation_plan = PipelinePreparer::<'static>::prepare_raw_source(raw_source)
+            .map_err(|error| {
+                PreviewError::RawPipeline(rusttable_processing::RawPipelineError::Prepare(error))
+            })?;
+        debug_assert_eq!(
+            source_identity,
+            PipelineSnapshotInput::raw_source_identity(raw_source),
+            "RAW preparation must retain the exact source snapshot identity"
+        );
+        check_preview_cancellation(cancellation, CancellationStage::Preparation)?;
+        Some(preparation_plan.identity())
+    } else {
+        None
+    };
     // The native RAW decoder has already run raw color calibration while
     // constructing `DecodedFrame::image()`. Re-demosaicing that frame here
     // would discard the decoder's camera matrix/white-balance work and yields
@@ -444,6 +471,12 @@ fn source_frame_pixels(
         let execution = plan
             .execute(raw_source)
             .map_err(PreviewError::RawPipeline)?;
+        debug_assert_eq!(
+            raw_prepare_identity,
+            Some(plan.receipt().raw_prepare_identity()),
+            "RAW pipeline must execute the prepared source plan"
+        );
+        check_preview_cancellation(cancellation, CancellationStage::Preparation)?;
         if plan.receipt().temperature_applied_once() {
             *graph = graph.without_pre_demosaic_temperature();
         }
