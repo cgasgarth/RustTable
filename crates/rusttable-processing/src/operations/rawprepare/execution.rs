@@ -336,11 +336,12 @@ impl Default for RawPrepareTiling {
     }
 }
 
-/// The source `modify_roi_*` contract for one output tile. `input` is the
-/// row-major buffer supplied by the upstream operation; `full_input` is the
-/// exact scaled `piece->buf_in` dimensions used by gain-map coordinates;
-/// `output` uses the global output coordinates used by `_BL` and gain-map
-/// interpolation.
+/// The source `modify_roi_*` contract for one output tile.
+///
+/// `input` is the row-major buffer supplied by the upstream operation;
+/// `full_input` is the exact scaled `piece->buf_in` dimensions used by
+/// gain-map coordinates; `output` uses the global output coordinates used by
+/// `_BL` and gain-map interpolation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RawPrepareTile {
     input: RasterDimensions,

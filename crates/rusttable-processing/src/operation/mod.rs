@@ -107,6 +107,13 @@ const RGB_GAIN_PARAMETERS: [&str; 3] = ["red", "green", "blue"];
 const CROP_PARAMETERS: [&str; 6] = ["cx", "cy", "cw", "ch", "ratio_n", "ratio_d"];
 const FLIP_PARAMETERS: [&str; 2] = ["mode", "orientation"];
 const ROTATEPIXELS_PARAMETERS: [&str; 3] = ["rx", "ry", "angle"];
+/// Typed operations that execute on decoded source data before the RGB graph.
+///
+/// These values are intentionally separate from [`ProcessingOperationKind`]:
+/// the generic operation registry and its linear-RGB executor cannot represent
+/// a single-plane RAW buffer without inventing an image predicate.
+pub use crate::operations::rawprepare::RawPrepareSourceOperation as SourceProcessingOperation;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessingOperation {
     pub(crate) operation_id: OperationId,

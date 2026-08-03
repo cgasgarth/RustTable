@@ -42,6 +42,7 @@ pub mod overlay;
 pub mod perspective;
 pub mod primaries;
 pub mod rasterfile;
+pub mod rawprepare;
 pub mod relight;
 pub mod retouch;
 pub mod rgblevels;

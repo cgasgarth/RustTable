@@ -766,6 +766,10 @@ impl RedbCatalogRepository {
             ),
             details.receipt().clone(),
         );
+        let refreshed_details = match details.raw_receipt() {
+            Some(raw_receipt) => refreshed_details.with_raw_receipt(raw_receipt.to_vec()),
+            None => refreshed_details,
+        };
         let refreshed_duplicate_evidence = duplicate_evidence.map(|evidence| {
             DuplicateEvidence::from_record(&refreshed, evidence.source(), evidence.visual())
         });

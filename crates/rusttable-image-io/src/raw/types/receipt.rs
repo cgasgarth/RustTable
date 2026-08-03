@@ -1,3 +1,7 @@
+//! Source lineage: `src/imageio/imageio.c`, `src/imageio/imageio_rawspeed.h`,
+//! `src/imageio/imageio_libraw.h`, and retained RAW fields in `src/common/image.h`.
+//! Receipts retain only owned U16 sensor and bounded metadata evidence.
+
 use super::{
     RawCameraIdentity, RawColorMatrix, RawCompressionEvidence, RawContainerKind, RawFrame,
     RawLevelPattern, RawMetadataReceipt, RawPreviewDescriptor, RawRect, RawSourceReceipt,

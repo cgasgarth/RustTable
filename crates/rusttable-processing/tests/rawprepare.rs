@@ -185,6 +185,54 @@ fn xtrans_crop_rotates_the_native_six_by_six_table() {
 }
 
 #[test]
+fn rawprepare_route_maps_only_the_supported_source_shape() {
+    let dimensions = RasterDimensions::new(4, 4).expect("dimensions");
+    let crop = RawPrepareCrop::new(0, 0, 0, 0);
+    let raw = bayer_metadata(
+        dimensions,
+        DT_IMAGE_RAW,
+        RawPrepareSampleFormat::U16,
+        1,
+        crop,
+    );
+    assert_eq!(
+        rawprepare::rawprepare_route(&raw),
+        rawprepare::RawPrepareRoute::RawPrepare(rawprepare::RawPrepareSourceOperation::RawPrepare,)
+    );
+    assert_eq!(
+        rawprepare::RAWPREPARE_SOURCE_REGISTRATION.operation,
+        rawprepare::RawPrepareSourceOperation::RawPrepare
+    );
+
+    let sraw = RawPrepareImageMetadata::new(
+        dimensions,
+        DT_IMAGE_S_RAW,
+        RawPrepareSampleFormat::F32,
+        4,
+        RawPrepareCfa::None,
+        crop,
+        [0; 4],
+        1000,
+    );
+    assert_eq!(
+        rawprepare::rawprepare_route(&sraw),
+        rawprepare::RawPrepareRoute::Rejected(rawprepare::RawPrepareRouteRejection::Sraw,)
+    );
+
+    let float_raw = bayer_metadata(
+        dimensions,
+        DT_IMAGE_RAW,
+        RawPrepareSampleFormat::F32,
+        1,
+        crop,
+    );
+    assert_eq!(
+        rawprepare::rawprepare_route(&float_raw),
+        rawprepare::RawPrepareRoute::Rejected(rawprepare::RawPrepareRouteRejection::FloatRaw,)
+    );
+}
+
+#[test]
 fn four_channel_cpu_path_normalizes_fourth_lane_in_source_order() {
     let dimensions = RasterDimensions::new(2, 2).expect("dimensions");
     let crop = RawPrepareCrop::new(0, 0, 0, 0);
@@ -542,5 +590,6 @@ fn descriptor_and_capabilities_do_not_overclaim_integration() {
     assert!(!capabilities.gpu);
     assert!(!capabilities.import_materialization);
     assert!(!capabilities.production_routing);
+    assert!(capabilities.source_routing);
     assert!(!capabilities.ui);
 }

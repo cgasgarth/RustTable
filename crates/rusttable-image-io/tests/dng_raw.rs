@@ -1,11 +1,12 @@
+use std::fs;
 use std::io::Cursor;
 
 use rusttable_image::{
-    ChannelLayout, ColorEncoding, DecodeLimits, DecodeStage, Orientation, SampleType,
+    ChannelLayout, ColorEncoding, DecodeLimits, DecodeStage, ImageInput, Orientation, SampleType,
 };
 use rusttable_image_io::{
-    ImageDecoderRegistry, RawCapabilityKind, RawContainerKind, RawDecodeLimits, RawDecodeRequest,
-    RawPlaneLayout, RawlerRawDecoder,
+    FileImageInput, ImageDecoderRegistry, RawCapabilityKind, RawContainerKind, RawDecodeLimits,
+    RawDecodeRequest, RawPlaneLayout, RawlerRawDecoder,
 };
 use tiff::encoder::colortype::{Gray8, Gray16};
 use tiff::encoder::{Rational, TiffEncoder, TiffKind};
@@ -351,6 +352,23 @@ fn classic_and_bigtiff_dng_preserve_samples_metadata_and_preview_inventory() {
             [Some(2.0), Some(1.0), Some(4.0)]
         );
     }
+}
+
+#[test]
+fn raw_tags_beat_a_tiff_extension_for_signature_selection() {
+    let path =
+        std::env::temp_dir().join(format!("rusttable-dng-as-tiff-{}.tif", std::process::id()));
+    fs::write(&path, dng_fixture(false, None)).expect("DNG fixture");
+    let probe = FileImageInput::new(image_limits())
+        .probe_path(&path)
+        .expect("RAW signature should be selected");
+    fs::remove_file(path).expect("remove DNG fixture");
+
+    assert_eq!(probe.format(), rusttable_image::InputFormat::Raw);
+    assert_eq!(
+        (probe.dimensions().width(), probe.dimensions().height()),
+        (2, 4)
+    );
 }
 
 #[test]

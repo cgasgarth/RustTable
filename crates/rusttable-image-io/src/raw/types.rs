@@ -1,3 +1,7 @@
+//! Source lineage: `src/common/image.h`, `src/imageio/imageio_rawspeed.h`,
+//! and `src/imageio/imageio_libraw.h`. Unsupported native loader branches stay
+//! explicit at this owned RAW frame boundary.
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 

@@ -3,13 +3,17 @@ use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterText, ParameterValue, PhotoId, Revision,
 };
-use rusttable_image::{ColorEncoding, Orientation, SourceColor, SourceColorFallback};
+use rusttable_image::{
+    BlackWhiteLevels, CfaColor, CfaPattern, CfaPhase, ColorEncoding, ImageDimensions, Orientation,
+    RawMosaic, RawMosaicSource, SourceColor, SourceColorFallback,
+};
 use rusttable_pixelpipe::{
     CancellationReason, CancellationScope, CpuImplementation, CpuPipelineReceiptError,
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeRequest,
     CpuPixelpipeScaleContext, CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError,
-    PipelineGeneration, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation,
+    PipelineGeneration, PipelinePreparer, PipelineSnapshotInput, RgbaF32Channel,
+    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+    RgbaF32SourceRepresentation,
 };
 use rusttable_processing::operations::colormapping::{FLAG_HAS_SOURCE_TARGET, HISTN};
 use rusttable_processing::{
@@ -99,6 +103,22 @@ fn image() -> RgbaF32Image {
         ],
     )
     .expect("valid input")
+}
+
+fn raw_source(pattern: CfaPattern, samples: Vec<u16>) -> RawMosaicSource {
+    let dimensions = ImageDimensions::new(2, 2).expect("RAW dimensions");
+    let levels = BlackWhiteLevels::new(0, 4_000).expect("RAW levels");
+    let mosaic = RawMosaic::new(
+        dimensions,
+        2,
+        samples,
+        pattern,
+        CfaPhase::new(0, 0, pattern),
+        levels,
+        Orientation::Normal,
+    )
+    .expect("RAW mosaic");
+    RawMosaicSource::new(mosaic, None)
 }
 
 fn source_colored_image(value: f32, source_color: SourceColor) -> RgbaF32Image {
@@ -202,6 +222,65 @@ fn lab_image() -> RgbaF32Image {
         pixels,
     )
     .expect("valid Lab input")
+}
+
+#[test]
+fn rawprepare_route_snapshot_identity_includes_source_samples() {
+    let first = raw_source(CfaPattern::bayer_rggb(), vec![0, 1_000, 2_000, 4_000]);
+    let second = raw_source(CfaPattern::bayer_rggb(), vec![0, 1_001, 2_000, 4_000]);
+    let first_identity = PipelineSnapshotInput::raw_source_identity(&first);
+    let second_identity = PipelineSnapshotInput::raw_source_identity(&second);
+    assert_ne!(first_identity, second_identity);
+    assert_eq!(
+        first_identity,
+        PipelineSnapshotInput::raw_source_identity(&first)
+    );
+}
+
+#[test]
+fn rawprepare_route_rejects_unsupported_cfa_sources() {
+    let source = raw_source(
+        CfaPattern::Bayer([
+            [CfaColor::Clear, CfaColor::Green],
+            [CfaColor::Green, CfaColor::Blue],
+        ]),
+        vec![0, 1_000, 2_000, 4_000],
+    );
+    assert!(!PipelineSnapshotInput::raw_source_supported(&source));
+}
+
+#[test]
+fn rawprepare_route_publishes_only_prepared_normalized_output() {
+    let source = raw_source(CfaPattern::bayer_rggb(), vec![0, 1_000, 2_000, 4_000]);
+    let plan = PipelinePreparer::<'static>::prepare_raw_source(&source).expect("RAW plan");
+    let prepared = PipelinePreparer::<'static>::execute_raw_source(&plan, &source)
+        .expect("prepared RAW output");
+    assert_eq!(
+        prepared.dimensions(),
+        ImageDimensions::new(2, 2).expect("dimensions")
+    );
+    let values = prepared
+        .samples()
+        .iter()
+        .map(|sample| sample.get())
+        .collect::<Vec<_>>();
+    assert_eq!(values, [0.0, 0.25, 0.5, 1.0]);
+}
+
+#[test]
+fn rawprepare_route_checks_cancellation_before_cpu_publication() {
+    let generation = PipelineGeneration::new(1).expect("generation");
+    let scope = CancellationScope::root(generation);
+    scope.cancel(CancellationReason::SupersededGeneration(generation));
+    let request = CpuPixelpipeRequest::new(
+        image(),
+        graph(Vec::new()),
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let error = CpuPixelpipeExecutor
+        .execute_with_cancellation(&request, &scope)
+        .expect_err("cancelled RAW route must not publish");
+    assert!(matches!(error, CpuPixelpipeError::Cancelled(_)));
 }
 
 #[test]

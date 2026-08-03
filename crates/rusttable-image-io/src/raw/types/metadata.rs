@@ -1,3 +1,6 @@
+//! Source lineage: `src/common/image.h` and the RAW metadata declarations
+//! coupled to `src/imageio/imageio.c`.
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -291,6 +294,10 @@ impl RawMetadataReceipt {
                 version: value.normalized.schema_version,
             });
         }
+        if value.sources.len() > MAX_EVIDENCE_ITEMS + 2 {
+            return Err(RawMetadataError::CorruptReceipt);
+        }
+        validate_receipt_provenance(&value)?;
         if value.normalized.stable_hash() != value.normalized_sha256 {
             return Err(RawMetadataError::CorruptReceipt);
         }
@@ -689,6 +696,7 @@ pub fn normalize_raw_metadata(
                     (
                         selection.source.source.precedence(),
                         selection.source.source_id.as_str(),
+                        selection.source.source_sha256,
                     )
                 })
                 .map(|selection| RawMetadataFallback {
@@ -766,6 +774,40 @@ pub fn normalize_dng_metadata(
     )
 }
 
+fn validate_receipt_provenance(receipt: &RawMetadataReceipt) -> Result<(), RawMetadataError> {
+    for provenance in receipt
+        .sources
+        .iter()
+        .chain(&receipt.normalized.camera.provenance)
+    {
+        validate_provenance(provenance)?;
+    }
+    for provenance in &receipt.normalized.geometry.provenance {
+        validate_provenance(provenance)?;
+    }
+    for provenance in &receipt.normalized.calibration.provenance {
+        validate_provenance(provenance)?;
+    }
+    for matrix in &receipt.normalized.calibration.matrices {
+        validate_provenance(&matrix.provenance)?;
+    }
+    for finding in &receipt.normalized.findings {
+        validate_provenance(&finding.source)?;
+    }
+    for selection in &receipt.selections {
+        validate_provenance(&selection.source)?;
+    }
+    for conflict in &receipt.conflicts {
+        validate_provenance(&conflict.selected)?;
+        validate_provenance(&conflict.rejected)?;
+    }
+    for fallback in &receipt.fallbacks {
+        validate_provenance(&fallback.selected)?;
+        validate_provenance(&fallback.invalid)?;
+    }
+    Ok(())
+}
+
 fn validate_provenance(value: &RawMetadataProvenance) -> Result<(), RawMetadataError> {
     if value.source_id.is_empty()
         || value.source_id.len() > MAX_SOURCE_ID_BYTES
@@ -794,7 +836,13 @@ fn normalize_identity(
                 .as_ref()
                 .map(|value| (&item.provenance, value))
         })
-        .max_by_key(|(source, _)| (source.source.precedence(), source.source_id.as_str()))
+        .max_by_key(|(source, _)| {
+            (
+                source.source.precedence(),
+                source.source_id.as_str(),
+                source.source_sha256,
+            )
+        })
         .map(|(_, value)| value.clone());
     let variant = evidence
         .iter()
@@ -804,7 +852,13 @@ fn normalize_identity(
                 .as_ref()
                 .map(|value| (&item.provenance, value))
         })
-        .max_by_key(|(source, _)| (source.source.precedence(), source.source_id.as_str()))
+        .max_by_key(|(source, _)| {
+            (
+                source.source.precedence(),
+                source.source_id.as_str(),
+                source.source_sha256,
+            )
+        })
         .map(|(_, value)| value.clone())
         .or_else(|| nonempty(&parts.camera.mode).filter(|mode| mode != "dng"));
 
@@ -910,7 +964,13 @@ where
     if let Some(value) = base {
         candidates.push(value);
     }
-    candidates.sort_by_key(|(source, _)| (source.source.precedence(), source.source_id.as_str()));
+    candidates.sort_by_key(|(source, _)| {
+        (
+            source.source.precedence(),
+            source.source_id.as_str(),
+            source.source_sha256,
+        )
+    });
     let mut selected: Option<(&RawMetadataProvenance, T)> = None;
     for (source, value) in candidates.into_iter().rev() {
         if !valid(&value) {

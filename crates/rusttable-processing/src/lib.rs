@@ -76,9 +76,12 @@ pub use exposure::{
 };
 pub use graph::{
     CompiledOperationGraph, OperationGraphCompileError, OperationGraphInput, OperationGraphNode,
-    OperationGraphNodeIndex, OperationGraphOutput,
+    OperationGraphNodeIndex, OperationGraphOutput, RAW_SOURCE_PREPARATION_SEGMENT,
+    RawSourcePreparationSegment,
 };
-pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
+pub use operation::{
+    OperationCompileError, ProcessingOperation, ProcessingOperationKind, SourceProcessingOperation,
+};
 pub use operation_mask::{OperationMaskSet, OperationMaskSetError};
 pub use operations::agx::{
     AGX_COMPATIBILITY_ID, AGX_PARAMETER_BYTES_V7, AGX_PARAMETER_FIELD_ORDER,
@@ -214,6 +217,17 @@ pub use operations::rasterfile::{
     RasterFileParametersV1, RasterFilePlan, RasterFileReceipt, RasterFileTile,
     RasterFileVectorizationReceipt, RasterMaskAsset, RasterMaskAssetError, RasterMaskCache,
     RasterMaskFormat, RasterMaskLimits, decode_history, migrate_history,
+};
+pub use operations::rawprepare::{
+    RAWPREPARE_SOURCE_MAP, RAWPREPARE_SOURCE_REGISTRATION, RawPrepareCfa as SourceRawPrepareCfa,
+    RawPrepareCrop as SourceRawPrepareCrop,
+    RawPrepareImageMetadata as SourceRawPrepareImageMetadata,
+    RawPrepareInputKind as SourceRawPrepareInputKind,
+    RawPrepareMemoryBudget as SourceRawPrepareMemoryBudget, RawPreparePlan as SourceRawPreparePlan,
+    RawPrepareRoute, RawPrepareRouteRejection,
+    RawPrepareSampleFormat as SourceRawPrepareSampleFormat, RawPrepareSourceOperation,
+    RawPrepareSourceRegistration, RawPrepareTile as SourceRawPrepareTile,
+    RawPrepareTiling as SourceRawPrepareTiling, rawprepare_route,
 };
 pub use operations::retouch::{
     RETOUCH_MAX_SCALES, RETOUCH_SCHEMA_VERSION, RetouchAlgorithm, RetouchBlurType, RetouchConfig,

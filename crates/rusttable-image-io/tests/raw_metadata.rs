@@ -74,6 +74,22 @@ fn xpro2_decode_publishes_canonical_14_bit_xtrans_metadata_without_changing_raw(
 }
 
 #[test]
+fn canonical_receipt_rejects_unsafe_provenance_identifiers() {
+    let mut receipt = decode_fixture().receipt.metadata;
+    receipt.sources.push(provenance(
+        RawMetadataSourceKind::MakerNote,
+        "unsafe/source",
+        9,
+    ));
+    let bytes = receipt.to_canonical_bytes().expect("canonical receipt");
+
+    assert!(matches!(
+        RawMetadataReceipt::from_canonical_bytes(&bytes),
+        Err(rusttable_image_io::RawMetadataError::UnsafeSourceId)
+    ));
+}
+
+#[test]
 #[expect(
     clippy::too_many_lines,
     reason = "the integration fixture exercises source precedence, invalid override findings, and canonical provenance in one scenario"
@@ -210,6 +226,65 @@ fn standardized_dng_beats_maker_note_and_invalid_override_falls_back_with_proven
         value.field == RawMetadataField::DefaultCrop
             && value.invalid.source == RawMetadataSourceKind::ReviewedOverride
     }));
+}
+
+#[test]
+fn equal_precedence_metadata_uses_provenance_hash_as_a_stable_tie_breaker() {
+    let decoded = decode_fixture();
+    let context = RawMetadataContext {
+        primary_source: provenance(RawMetadataSourceKind::BackendProfile, "same-source", 0),
+        backend_profile_id: decoded.receipt.camera_profile_id.clone(),
+        content_sha256: decoded.receipt.source.source_sha256,
+    };
+    let first = RawMetadataEvidence {
+        provenance: provenance(RawMetadataSourceKind::MakerNote, "same-source", 1),
+        identity: RawIdentityEvidence {
+            unique_model: Some("lower-hash".to_owned()),
+            ..RawIdentityEvidence::default()
+        },
+        geometry: RawGeometryEvidence {
+            pixel_aspect: Some(RawPixelAspect {
+                horizontal: 1,
+                vertical: 1,
+            }),
+            ..RawGeometryEvidence::default()
+        },
+        calibration: RawCalibrationEvidence::default(),
+    };
+    let second = RawMetadataEvidence {
+        provenance: provenance(RawMetadataSourceKind::MakerNote, "same-source", 2),
+        identity: RawIdentityEvidence {
+            unique_model: Some("higher-hash".to_owned()),
+            ..RawIdentityEvidence::default()
+        },
+        geometry: RawGeometryEvidence {
+            pixel_aspect: Some(RawPixelAspect {
+                horizontal: 2,
+                vertical: 1,
+            }),
+            ..RawGeometryEvidence::default()
+        },
+        calibration: RawCalibrationEvidence::default(),
+    };
+
+    let forward =
+        normalize_raw_metadata(&decoded.frame, &context, &[first.clone(), second.clone()])
+            .expect("metadata");
+    let reverse =
+        normalize_raw_metadata(&decoded.frame, &context, &[second, first]).expect("metadata");
+
+    assert_eq!(forward, reverse);
+    assert_eq!(
+        forward.normalized.camera.source.unique_model.as_deref(),
+        Some("higher-hash")
+    );
+    assert_eq!(
+        forward.normalized.geometry.pixel_aspect,
+        Some(RawPixelAspect {
+            horizontal: 2,
+            vertical: 1
+        })
+    );
 }
 
 #[test]

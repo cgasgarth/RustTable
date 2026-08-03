@@ -1,6 +1,8 @@
-//! Source-to-Rust responsibility map for the bounded rawprepare leaf.
+//! Source-to-Rust responsibility map and typed source-stage routing.
 
 #![forbid(unsafe_code)]
+
+use super::{RawPrepareSourceOperation, execution::RawPrepareImageMetadata};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RawPrepareSourceMapEntry {
@@ -33,11 +35,11 @@ pub const RAWPREPARE_SOURCE_MAP: &[RawPrepareSourceMapEntry] = &[
     RawPrepareSourceMapEntry {
         native_symbol: "_image_set_rawcrops / _image_is_normalized",
         native_file: "src/iop/rawprepare.c",
-        rust_symbol: "cropped_dimensions / classify_input",
+        rust_symbol: "cropped_dimensions / rawprepare_route",
         status: RawPreparePortStatus::Ported,
     },
     RawPrepareSourceMapEntry {
-        native_symbol: "commit_params",
+        native_symbol: "commit_params / output_format",
         native_file: "src/iop/rawprepare.c",
         rust_symbol: "RawPreparePlan::new_with_budget",
         status: RawPreparePortStatus::Ported,
@@ -50,7 +52,7 @@ pub const RAWPREPARE_SOURCE_MAP: &[RawPrepareSourceMapEntry] = &[
     },
     RawPrepareSourceMapEntry {
         native_symbol: "_BL / dt_rawspeed_crop_dcraw_filters",
-        native_file: "src/iop/rawprepare.c; src/imageio/imageio_rawspeed.cc",
+        native_file: "src/iop/rawprepare.c; src/imageio/imageio_rawspeed.h",
         rust_symbol: "black_level_index / RawPrepareCfa::after_crop",
         status: RawPreparePortStatus::Ported,
     },
@@ -61,45 +63,33 @@ pub const RAWPREPARE_SOURCE_MAP: &[RawPrepareSourceMapEntry] = &[
         status: RawPreparePortStatus::Ported,
     },
     RawPrepareSourceMapEntry {
-        native_symbol: "process raw mosaic branches",
+        native_symbol: "process raw mosaic U16 branch",
         native_file: "src/iop/rawprepare.c",
-        rust_symbol: "RawPreparePlan::execute_u16 / execute_f32",
+        rust_symbol: "RawPreparePlan::execute_u16",
         status: RawPreparePortStatus::Ported,
     },
     RawPrepareSourceMapEntry {
-        native_symbol: "process pre-downsampled buffer branch",
-        native_file: "src/iop/rawprepare.c; data/kernels/basic.cl",
-        rust_symbol: "RawPreparePlan::execute_four_channel",
-        status: RawPreparePortStatus::Ported,
+        native_symbol: "process pre-downsampled/SRAW/float branches",
+        native_file: "src/iop/rawprepare.c",
+        rust_symbol: "RawPrepareRouteRejection",
+        status: RawPreparePortStatus::ExplicitlyDeferred,
     },
     RawPrepareSourceMapEntry {
-        native_symbol: "_check_gain_maps / embedded GainMap interpolation",
+        native_symbol: "_check_gain_maps / dt_dng_gain_map_t",
         native_file: "src/iop/rawprepare.c; src/common/dng_opcode.h",
-        rust_symbol: "RawPrepareGainMapSet / gain_map_gain",
-        status: RawPreparePortStatus::Ported,
+        rust_symbol: "typed source metadata boundary",
+        status: RawPreparePortStatus::ExplicitlyDeferred,
     },
     RawPrepareSourceMapEntry {
-        native_symbol: "flags / process_tiling",
+        native_symbol: "IOP_FLAGS_ALLOW_TILING / modify_roi_*",
         native_file: "src/iop/rawprepare.c; src/develop/tiling.h",
         rust_symbol: "RawPrepareTiling / RawPrepareTile",
         status: RawPreparePortStatus::Ported,
     },
     RawPrepareSourceMapEntry {
-        native_symbol: "OpenMP/OpenCL scheduling and publication",
+        native_symbol: "OpenMP/OpenCL/detail-mask publication",
         native_file: "src/iop/rawprepare.c; data/kernels/basic.cl",
-        rust_symbol: "execute_* cancellation-safe Vec publication",
-        status: RawPreparePortStatus::ExplicitlyDeferred,
-    },
-    RawPrepareSourceMapEntry {
-        native_symbol: "dt_dev_write_scharr_mask",
-        native_file: "src/iop/rawprepare.c; src/develop/pixelpipe_hb.c",
-        rust_symbol: "pixelpipe detail-mask seam",
-        status: RawPreparePortStatus::ExplicitlyDeferred,
-    },
-    RawPrepareSourceMapEntry {
-        native_symbol: "dt_opencl_* / rawprepare_* kernels",
-        native_file: "src/iop/rawprepare.c; data/kernels/basic.cl",
-        rust_symbol: "no Rust GPU capability",
+        rust_symbol: "no GPU or detail-mask capability",
         status: RawPreparePortStatus::ExplicitlyDeferred,
     },
     RawPrepareSourceMapEntry {
@@ -114,10 +104,63 @@ pub const RAWPREPARE_SOURCE_MAP: &[RawPrepareSourceMapEntry] = &[
         rust_symbol: "no Rust GTK capability",
         status: RawPreparePortStatus::ExplicitlyDeferred,
     },
-    RawPrepareSourceMapEntry {
-        native_symbol: "shared operation registry / history / pixelpipe routing",
-        native_file: "src/iop/rawprepare.c; processing shared hubs",
-        rust_symbol: "no shared-hub changes in this leaf",
-        status: RawPreparePortStatus::ExplicitlyDeferred,
-    },
 ];
+
+/// The only registered source-stage operation in this lane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RawPrepareSourceRegistration {
+    pub operation: RawPrepareSourceOperation,
+    pub stage: &'static str,
+    pub input: &'static str,
+    pub output: &'static str,
+    pub gpu: bool,
+    pub generic_rgb_registry: bool,
+}
+
+pub const RAWPREPARE_SOURCE_REGISTRATION: RawPrepareSourceRegistration =
+    RawPrepareSourceRegistration {
+        operation: RawPrepareSourceOperation::RawPrepare,
+        stage: "raw-sensor-linear",
+        input: "raw-u16-mosaic",
+        output: "raw-f32-mosaic",
+        gpu: false,
+        generic_rgb_registry: false,
+    };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RawPrepareRoute {
+    RawPrepare(RawPrepareSourceOperation),
+    Rejected(RawPrepareRouteRejection),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RawPrepareRouteRejection {
+    NonRaw,
+    Sraw,
+    FloatRaw,
+    UnsupportedLayout,
+}
+
+/// Maps decoder metadata to the typed source operation without constructing a
+/// generic linear-RGB operation. Unsupported native branches are explicit.
+#[must_use]
+pub fn rawprepare_route(metadata: &RawPrepareImageMetadata) -> RawPrepareRoute {
+    if metadata.flags() & super::execution::DT_IMAGE_S_RAW != 0 {
+        return RawPrepareRoute::Rejected(RawPrepareRouteRejection::Sraw);
+    }
+    if metadata.flags() & super::execution::DT_IMAGE_RAW == 0 {
+        return RawPrepareRoute::Rejected(RawPrepareRouteRejection::NonRaw);
+    }
+    if metadata.sample_format() != super::execution::RawPrepareSampleFormat::U16 {
+        return RawPrepareRoute::Rejected(RawPrepareRouteRejection::FloatRaw);
+    }
+    if metadata.channels() != 1 || !metadata.cfa().is_mosaic() {
+        return RawPrepareRoute::Rejected(RawPrepareRouteRejection::UnsupportedLayout);
+    }
+    if let super::execution::RawPrepareCfa::Bayer { filters, .. } = metadata.cfa()
+        && (filters == 0 || filters == 9)
+    {
+        return RawPrepareRoute::Rejected(RawPrepareRouteRejection::UnsupportedLayout);
+    }
+    RawPrepareRoute::RawPrepare(RawPrepareSourceOperation::RawPrepare)
+}

@@ -191,10 +191,12 @@ fn unavailable_metadata_status_and_refresh_are_atomic_and_same_photo() {
         edit.id(),
     )
     .unwrap();
+    let raw_receipt = b"opaque raw metadata receipt".to_vec();
     let details = ImportDetails::new(
         ImportMetadataSummary::from_record_with_status(&record, ImportMetadataStatus::Unavailable),
         receipt,
-    );
+    )
+    .with_raw_receipt(raw_receipt.clone());
     let registration = ImportRegistration::new(details, [7; 32].into());
     let mut repository = RedbCatalogRepository::open(&path).unwrap();
     repository
@@ -223,6 +225,7 @@ fn unavailable_metadata_status_and_refresh_are_atomic_and_same_photo() {
         updated_details.summary().metadata_status(),
         ImportMetadataStatus::Available
     );
+    assert_eq!(updated_details.raw_receipt(), Some(raw_receipt.as_slice()));
     assert_eq!(ImportRepository::list(&repository).unwrap().len(), 1);
     support::remove(&path);
 }

@@ -1,3 +1,5 @@
+//! Source lineage: `src/imageio/imageio.c`, `src/imageio/imageio_rawspeed.h`,
+//! and the retained RAW image declarations in `src/common/image.h`.
 //! Linear RAW development shared by the native frame and legacy image boundaries.
 //!
 //! The stage order follows Darktable's `rawprepare` -> as-shot white balance

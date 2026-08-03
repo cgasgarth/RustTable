@@ -143,6 +143,19 @@ where
     }
 }
 
+pub trait RawReceiptProvider: Send + Sync {
+    fn raw_receipt(&self, format: InputFormat, source: &[u8]) -> Option<Vec<u8>>;
+}
+
+impl<F> RawReceiptProvider for F
+where
+    F: Fn(InputFormat, &[u8]) -> Option<Vec<u8>> + Send + Sync,
+{
+    fn raw_receipt(&self, format: InputFormat, source: &[u8]) -> Option<Vec<u8>> {
+        self(format, source)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RasterImportFailure {
     SourceUnavailable,

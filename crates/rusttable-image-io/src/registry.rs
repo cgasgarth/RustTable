@@ -1,3 +1,6 @@
+//! Source lineage: `src/imageio/imageio.c`, `src/imageio/imageio_common.h`,
+//! and `src/imageio/imageio_module.h`. Signature order is intentionally fixed.
+
 use rusttable_color::{IccColorSpace, Primaries, TransferFunction, WhitePoint};
 use rusttable_image::{
     DecodeLimits, DecodeReceipt, DecodedFrame, DecodedImage, DecoderDescriptor, DecoderIdentity,
@@ -313,7 +316,7 @@ fn unsupported_signature(bytes: &[u8]) -> ImageInputError {
 }
 
 fn is_jpeg(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[0xff, 0xd8])
+    bytes.starts_with(&[0xff, 0xd8, 0xff])
 }
 
 fn probe_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
