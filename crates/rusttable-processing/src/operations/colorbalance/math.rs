@@ -107,7 +107,7 @@ const fn round_away_from_zero(value: f32) -> i32 {
     any(target_arch = "x86", target_arch = "x86_64"),
     target_feature = "sse2"
 ))]
-const fn exp2_integer_part(value: f32) -> i32 {
+fn exp2_integer_part(value: f32) -> i32 {
     round_to_nearest_even(value)
 }
 
