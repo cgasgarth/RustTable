@@ -6,7 +6,6 @@ pub mod presentation;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
-use std::thread;
 use std::time::Duration;
 
 use gtk4::glib::{self, ControlFlow};
@@ -124,28 +123,26 @@ pub fn start_selected_preview(
     let (sender, receiver) = mpsc::channel();
     let worker_diagnostics = diagnostics.clone();
     let display_profile_for_worker = display_profile.cloned();
-    let worker = thread::Builder::new()
-        .name("rusttable-preview".to_owned())
-        .spawn(move || {
-            let state = GtkPreviewController::render_selected_with_generation_for_edit(
-                &catalog,
-                &worker_diagnostics,
-                edit.id(),
-                edit.revision(),
-                token.generation(),
-                &cancellation,
-                display_profile_for_worker.as_ref(),
-            );
-            let histogram = histogram_for_preview(&state);
-            let thumbnail = thumbnail_for_preview(&state);
-            let _ = sender.send(PreviewResult {
-                token,
-                state,
-                histogram,
-                thumbnail,
-            });
+    let submitted = lifecycle.borrow().submit_work(move || {
+        let state = GtkPreviewController::render_selected_with_generation_for_edit(
+            &catalog,
+            &worker_diagnostics,
+            edit.id(),
+            edit.revision(),
+            token.generation(),
+            &cancellation,
+            display_profile_for_worker.as_ref(),
+        );
+        let histogram = histogram_for_preview(&state);
+        let thumbnail = thumbnail_for_preview(&state);
+        let _ = sender.send(PreviewResult {
+            token,
+            state,
+            histogram,
+            thumbnail,
         });
-    if worker.is_err() {
+    });
+    if !submitted {
         diagnostics.preview_failure(
             "start_selected_preview",
             "processing",

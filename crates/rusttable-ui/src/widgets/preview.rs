@@ -173,11 +173,14 @@ impl PhotoPreview {
 
     /// Shows that the selected photo is being rendered without blocking the GTK main loop.
     pub fn set_loading(&self) {
-        self.clear_texture();
         self.status.set_text("loading preview");
-        self.dimensions.set_text("");
-        self.placeholder.set_text("loading preview");
-        self.placeholder.set_visible(true);
+        if self.texture.borrow().is_some() {
+            self.placeholder.set_visible(false);
+        } else {
+            self.dimensions.set_text("");
+            self.placeholder.set_text("loading preview");
+            self.placeholder.set_visible(true);
+        }
     }
 
     /// Shows the exact display-safe failure supplied by the application preview controller.
