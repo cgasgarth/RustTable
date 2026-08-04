@@ -362,15 +362,10 @@ fn activate_application(
     let history_refresh_shell = shell.clone();
     let history_refresh_catalog = Rc::clone(&catalog_controller);
     let thumbnail_refresh_shell = shell.clone();
-    let thumbnail_refresh_catalog = Rc::clone(&catalog_controller);
     let thumbnail_refresh_lifecycle = Rc::clone(thumbnail_lifecycle);
     darkroom_bridge.set_after_commit(Rc::new(move || {
         history_refresh_bridge.refresh(&history_refresh_shell, &history_refresh_catalog.borrow());
-        refresh_active_thumbnail(
-            &thumbnail_refresh_shell,
-            &thumbnail_refresh_catalog.borrow(),
-            &thumbnail_refresh_lifecycle,
-        );
+        refresh_active_thumbnail(&thumbnail_refresh_shell, &thumbnail_refresh_lifecycle);
     }));
     let export_selection = export_panel;
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
