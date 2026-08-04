@@ -32,13 +32,16 @@ jobs:
           sudo apt-get install --no-install-recommends libgtk-4-dev libheif-dev libnuma-dev nasm
           dpkg-query -W -f='${Status}\n' libnuma-dev | grep -Fx 'install ok installed'
           nasm --version
+      - name: Free runner disk space for coverage
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin
-            target
           key: rust-coverage-0.6.16-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
       - name: Install coverage tool
         shell: bash
