@@ -6,7 +6,7 @@ pub mod presentation;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gtk4::glib::{self, ControlFlow};
 use rusttable_display_profile::DisplayProfileSnapshot;
@@ -21,7 +21,9 @@ use rusttable_ui::{
 
 use crate::composition::thumbnails::ThumbnailLifecycle;
 use crate::diagnostics::AppDiagnostics;
-use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
+use crate::gtk_preview_controller::{
+    GtkPreview, GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState,
+};
 
 pub use lifecycle::PreviewLifecycle;
 use lifecycle::PreviewSelectionToken;
@@ -120,10 +122,12 @@ pub fn start_selected_preview(
         shell.set_photo_thumbnail_loading(photo_id);
     }
     shell.set_darkroom_preview_loading(generation);
+    let queued_at = Instant::now();
     let (sender, receiver) = mpsc::channel();
     let worker_diagnostics = diagnostics.clone();
     let display_profile_for_worker = display_profile.cloned();
     let submitted = lifecycle.borrow().submit_work(move || {
+        let worker_started_at = Instant::now();
         let state = GtkPreviewController::render_selected_with_generation_for_edit(
             &catalog,
             &worker_diagnostics,
@@ -133,8 +137,21 @@ pub fn start_selected_preview(
             &cancellation,
             display_profile_for_worker.as_ref(),
         );
+        let render_finished_at = Instant::now();
+        let dimensions = state.ready().map(GtkPreview::dimensions);
         let histogram = histogram_for_preview(&state);
         let thumbnail = thumbnail_for_preview(&state);
+        let finished_at = Instant::now();
+        worker_diagnostics.preview_timing(
+            token.photo_id(),
+            token.edit_id(),
+            token.generation(),
+            dimensions,
+            elapsed_millis(queued_at, worker_started_at),
+            elapsed_millis(worker_started_at, render_finished_at),
+            elapsed_millis(render_finished_at, finished_at),
+            elapsed_millis(queued_at, finished_at),
+        );
         let _ = sender.send(PreviewResult {
             token,
             state,
@@ -211,6 +228,10 @@ pub fn start_selected_preview(
             }
         }
     });
+}
+
+fn elapsed_millis(start: Instant, end: Instant) -> u64 {
+    u64::try_from(end.saturating_duration_since(start).as_millis()).unwrap_or(u64::MAX)
 }
 
 fn install_if_current(

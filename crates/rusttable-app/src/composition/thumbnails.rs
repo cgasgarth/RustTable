@@ -283,10 +283,9 @@ pub(super) fn start_workspace_thumbnails(
     });
 }
 
-/// Invalidates the active filmstrip image before scheduling the post-edit render.
+/// Invalidates the active filmstrip image; the selected preview republishes its edited thumbnail.
 pub(super) fn refresh_active_thumbnail(
     shell: &GtkShell,
-    catalog: &GtkCatalogController,
     lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
 ) {
     if let Some(photo_id) = shell
@@ -296,7 +295,6 @@ pub(super) fn refresh_active_thumbnail(
         lifecycle.borrow_mut().invalidate(photo_id);
         shell.set_photo_thumbnail_loading(photo_id);
     }
-    start_workspace_thumbnails(shell, catalog, lifecycle);
 }
 
 #[cfg(test)]

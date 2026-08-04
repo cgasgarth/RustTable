@@ -120,6 +120,42 @@ impl AppDiagnostics {
         );
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "preview timing keeps queue, render, postprocess, and total durations explicit"
+    )]
+    pub(crate) fn preview_timing(
+        &self,
+        photo_id: PhotoId,
+        edit_id: EditId,
+        generation: u64,
+        dimensions: Option<ImageDimensions>,
+        queue_wait_ms: u64,
+        render_ms: u64,
+        postprocess_ms: u64,
+        total_ms: u64,
+    ) {
+        self.record(
+            "app",
+            "preview.timing",
+            Severity::Info,
+            "render_selected",
+            "timing",
+            None,
+            Some(photo_id),
+            Some(edit_id),
+            Some(generation),
+            None,
+            dimensions,
+            vec![
+                DiagnosticField::unsigned("queue_wait_ms", queue_wait_ms),
+                DiagnosticField::unsigned("render_ms", render_ms),
+                DiagnosticField::unsigned("postprocess_ms", postprocess_ms),
+                DiagnosticField::unsigned("total_ms", total_ms),
+            ],
+        );
+    }
+
     pub(crate) fn preview_fallback(
         &self,
         operation: &'static str,
@@ -467,6 +503,7 @@ fn preview_code(stage: &str) -> &str {
         "texture" => "preview.texture",
         "stale_generation" => "preview.stale_generation",
         "display_presentation" => "preview.display_presentation",
+        "timing" => "preview.timing",
         _ => "preview.failure",
     }
 }
@@ -544,6 +581,7 @@ mod tests {
             ("histogram", "preview.histogram"),
             ("texture", "preview.texture"),
             ("stale_generation", "preview.stale_generation"),
+            ("timing", "preview.timing"),
         ] {
             assert_eq!(preview_code(stage), code);
         }
