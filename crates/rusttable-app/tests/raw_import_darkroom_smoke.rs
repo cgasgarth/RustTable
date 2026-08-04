@@ -396,9 +396,18 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
         panic!("catalog remains ready after selection");
     };
     let loading_workspace = ready.workspace().clone();
-    let workspace = loading_workspace
-        .with_selected_preview(photo_id, SelectedPreviewState::Ready(metadata))
-        .expect("selected detail");
+    let workspace = {
+        #[cfg(target_os = "linux")]
+        {
+            loading_workspace.clone()
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            loading_workspace
+        }
+    }
+    .with_selected_preview(photo_id, SelectedPreviewState::Ready(metadata))
+    .expect("selected detail");
     let detail = workspace
         .detail(photo_id)
         .expect("selected darkroom detail");
