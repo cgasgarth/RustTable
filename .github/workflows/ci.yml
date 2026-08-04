@@ -82,9 +82,15 @@ jobs:
         if: matrix.platform == 'Windows'
         shell: pwsh
         run: |
+          choco install pkgconfiglite --no-progress --yes
           $env:VCPKG_ROOT = 'C:\vcpkg'
           "VCPKG_ROOT=$env:VCPKG_ROOT" >> $env:GITHUB_ENV
-          & "$env:VCPKG_ROOT\vcpkg.exe" install libheif:x64-windows-static-md
+          & "$env:VCPKG_ROOT\vcpkg.exe" install gtk:x64-windows-static-md libheif:x64-windows-static-md
+          $pkgConfigPath = "$env:VCPKG_ROOT\installed\x64-windows\lib\pkgconfig"
+          "PKG_CONFIG_PATH=$pkgConfigPath" >> $env:GITHUB_ENV
+          "PKG_CONFIG_LIBDIR=$pkgConfigPath" >> $env:GITHUB_ENV
+          pkg-config --version
+          pkg-config --modversion gtk4
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
@@ -100,10 +106,10 @@ jobs:
       - name: Install pinned cargo-nextest
         shell: bash
         run: |
-          if ! cargo nextest --version 2>/dev/null | grep -Fxq "cargo-nextest ${NEXTEST_VERSION}"; then
+          if ! cargo nextest --version 2>/dev/null | grep -Fq "cargo-nextest ${NEXTEST_VERSION}"; then
             cargo install cargo-nextest --version "${NEXTEST_VERSION}" --locked
           fi
-          test "$(cargo nextest --version)" = "cargo-nextest ${NEXTEST_VERSION}"
+          cargo nextest --version | grep -F "cargo-nextest ${NEXTEST_VERSION}"
       - name: Run nextest shard
         run: cargo nextest run --workspace --all-features --locked --profile ci --partition "hash:${{ matrix.shard }}/2"
       - name: Upload JUnit report
