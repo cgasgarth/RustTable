@@ -739,6 +739,7 @@ pub fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
                 opacity,
                 pixel_index_offset,
                 |_, value| (value - black.get()) * scale.get(),
+                &cancelled,
             )
         }
         ProcessingOperationKind::LinearOffset { value } => apply_channels(
@@ -748,6 +749,7 @@ pub fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             opacity,
             pixel_index_offset,
             |_, sample| sample + value.get(),
+            &cancelled,
         ),
         ProcessingOperationKind::RgbGain { red, green, blue } => apply_channels(
             pixels,
@@ -763,6 +765,7 @@ pub fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
                 };
                 value * gain.get()
             },
+            &cancelled,
         ),
         ProcessingOperationKind::Invert { config } => {
             let plan = crate::operations::invert::InvertPlan::new(*config, dimensions);
@@ -964,6 +967,7 @@ pub fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
                     };
                     value * multiplier.get()
                 },
+                &cancelled,
             )
         }
         ProcessingOperationKind::Bloom { config } => {

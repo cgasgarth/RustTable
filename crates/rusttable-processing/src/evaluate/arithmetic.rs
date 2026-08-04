@@ -51,18 +51,26 @@ pub fn apply_reconstruction(
     Ok(())
 }
 
-pub fn apply_channels<F>(
+pub fn apply_channels<F, C>(
     pixels: &mut [LinearRgb],
     step_index: PipelineStepIndex,
     operation_id: OperationId,
     opacity: f32,
     pixel_index_offset: usize,
     transform: F,
+    cancelled: C,
 ) -> Result<(), EvaluationError>
 where
     F: Fn(RgbChannel, f32) -> f32,
+    C: Fn() -> bool,
 {
     for (local_pixel_index, pixel) in pixels.iter_mut().enumerate() {
+        if cancelled() {
+            return Err(EvaluationError::Cancelled {
+                step_index,
+                operation_id,
+            });
+        }
         let pixel_index = pixel_index_offset + local_pixel_index;
         let current = *pixel;
         let red_candidate = checked_channel(

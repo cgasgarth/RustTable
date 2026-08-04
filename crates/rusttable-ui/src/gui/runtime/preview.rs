@@ -42,7 +42,7 @@ impl GtkShell {
         }
     }
 
-    /// Clears the old full-size texture while the selected preview is computed off-loop.
+    /// Marks the selected preview as loading while retaining the last published full-size frame.
     ///
     /// A ready catalog thumbnail is real image data from the same photo, so it remains visible in
     /// the navigation/filmstrip surfaces and provides a provisional RGB histogram. The completed
