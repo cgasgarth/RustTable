@@ -33,7 +33,7 @@ fn prohibit_macos_test_activation() {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn prohibit_macos_test_activation() {}
+const fn prohibit_macos_test_activation() {}
 
 #[expect(
     clippy::too_many_lines,
