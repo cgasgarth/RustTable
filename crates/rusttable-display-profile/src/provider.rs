@@ -115,20 +115,15 @@ impl SystemProfileAdapter {
         Self { provider }
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     #[must_use]
     pub const fn current() -> Self {
         Self::new(current_provider())
     }
 
-    /// Selects the current provider, probing Linux desktop environment variables.
-    #[cfg(target_os = "linux")]
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "Linux provider selection reads runtime WAYLAND_DISPLAY and DISPLAY variables"
-    )]
+    #[cfg(not(target_os = "macos"))]
     #[must_use]
-    pub const fn current() -> Self {
+    pub fn current() -> Self {
         Self::new(current_provider())
     }
 
