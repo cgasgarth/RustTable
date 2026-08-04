@@ -113,6 +113,104 @@ fn tonecurve_materializes_but_routes_execution_to_lab_pixelpipe() {
 }
 
 #[test]
+fn colisa_is_deprecated_cpu_only_lab_point_operation() {
+    let registry = builtin_registry();
+    let definition = registry
+        .definition("rusttable.colisa")
+        .expect("Colisa definition");
+    let descriptor = definition.descriptor();
+    assert_eq!(descriptor.id.compatibility_name, "colisa");
+    assert_eq!(descriptor.id.schema_version, 1);
+    assert_eq!(descriptor.id.parameter_version, 1);
+    assert_eq!(
+        descriptor
+            .parameters
+            .iter()
+            .map(|parameter| parameter.id.as_str())
+            .collect::<Vec<_>>(),
+        ["contrast", "brightness", "saturation"]
+    );
+    for parameter in &descriptor.parameters {
+        assert_eq!(
+            parameter.kind,
+            rusttable_processing::descriptor::ParameterKind::Scalar {
+                minimum: -1.0,
+                maximum: 1.0,
+            }
+        );
+        assert_eq!(
+            parameter.default,
+            rusttable_processing::descriptor::ParameterDefault::Scalar(0.0)
+        );
+    }
+    assert!(descriptor.flags.contains(OperationFlags::DEPRECATED));
+    assert!(descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE));
+    assert!(descriptor.flags.contains(OperationFlags::TILEABLE));
+    assert!(descriptor.flags.contains(OperationFlags::DETERMINISTIC_CPU));
+    assert_eq!(
+        descriptor.io.input.encodings,
+        [rusttable_color::ColorEncoding::LabD50]
+    );
+    assert_eq!(
+        descriptor.io.output.encodings,
+        [rusttable_color::ColorEncoding::LabD50]
+    );
+    assert_eq!(
+        definition.cpu_execution_route(),
+        Some(CpuExecutionRoute::LabD50Pixelpipe)
+    );
+    assert!(definition.cpu().is_some());
+    assert!(definition.gpu().is_none());
+    assert!(definition.availability().is_available());
+    assert!(!definition.ui_availability().is_usable());
+    assert!(
+        registry
+            .capability(
+                "rusttable.colisa",
+                &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+                rusttable_color::ColorEncoding::LabD50,
+                Some("preview"),
+            )
+            .is_some_and(|capability| capability.available)
+    );
+
+    let prepared = registry
+        .prepare_cpu(&operation(
+            54,
+            "rusttable.colisa",
+            &[
+                ("contrast", 0.25),
+                ("brightness", -0.5),
+                ("saturation", 0.75),
+            ],
+        ))
+        .expect("Colisa preparation");
+    assert_eq!(
+        prepared.execution_route(),
+        CpuExecutionRoute::LabD50Pixelpipe
+    );
+    assert!(matches!(
+        prepared.operation().kind(),
+        ProcessingOperationKind::Colisa { config }
+            if config.parameters()
+                == rusttable_processing::operations::colisa::ColisaParametersV1::new(
+                    0.25, -0.5, 0.75
+                )
+    ));
+    let finite = FiniteF32::new(0.25).expect("finite pixel");
+    let mut pixels = [LinearRgb::new(finite, finite, finite)];
+    let error = prepared
+        .execute(
+            PipelineStepIndex::new(0),
+            &mut pixels,
+            RasterDimensions::new(1, 1).expect("dimensions"),
+            0,
+        )
+        .expect_err("generic evaluation must not approximate the Lab route");
+    assert!(error.to_string().contains("Lab D50 pixelpipe route"));
+}
+
+#[test]
 fn highpass_materializes_but_routes_execution_to_lab_pixelpipe() {
     let registry = builtin_registry();
     let definition = registry

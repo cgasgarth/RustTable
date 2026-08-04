@@ -679,6 +679,71 @@ pub fn tonecurve_descriptor() -> OperationDescriptor {
     }
 }
 
+/// Descriptor for Darktable's deprecated Lab D50 Colisa path.
+#[must_use]
+#[expect(
+    clippy::missing_panics_doc,
+    reason = "the static descriptor identity is validated at construction"
+)]
+pub fn colisa_descriptor() -> OperationDescriptor {
+    let image = lab_image_predicate();
+    OperationDescriptor {
+        id: DescriptorId::new("colisa", "rusttable.colisa", 1, 1, 1).expect("static ID"),
+        parameters: vec![
+            scalar_processing_parameter("contrast", -1.0, 1.0, 0.0, "normalized"),
+            scalar_processing_parameter("brightness", -1.0, 1.0, 0.0, "normalized"),
+            scalar_processing_parameter("saturation", -1.0, 1.0, 0.0, "normalized"),
+        ],
+        flags: OperationFlags::DEPRECATED
+            .insert(OperationFlags::HISTORY_VISIBLE)
+            .insert(OperationFlags::STYLE_ELIGIBLE)
+            .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::DETERMINISTIC_CPU)
+            .insert(OperationFlags::COLOR)
+            .insert(OperationFlags::BLENDING),
+        stage: "frequential-lab-d50".to_owned(),
+        roi: RoiKind::Identity,
+        tiling: TilingContract {
+            overlap_pixels: 0,
+            alignment_pixels: 1,
+            minimum_tile_edge: 1,
+            preferred_tile_edge: 256,
+            temporary_multiplier_milli: 1_000,
+            input_multiplier_milli: 1_000,
+            output_multiplier_milli: 1_000,
+        },
+        capability: CapabilityContract {
+            cpu_supported: true,
+            gpu_tier: None,
+            required_features: Vec::new(),
+            required_formats: vec!["rgba32float".to_owned()],
+            deterministic_cpu: true,
+            deterministic_gpu: false,
+            fallback_to_cpu: true,
+            precision: "native scalar f32 Lab D50 LUT".to_owned(),
+            modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
+        },
+        io: InputOutputContract {
+            input: image.clone(),
+            output: image,
+            derives_output_encoding: false,
+        },
+        mask_blend: MaskBlendContract {
+            consumes_mask: false,
+            publishes_mask: false,
+            blend_if: false,
+            geometry: false,
+            analysis: false,
+        },
+        migration: MigrationContract {
+            source_versions: vec![1],
+            target_version: 1,
+            opaque_unknown_allowed: true,
+        },
+        ui: None,
+    }
+}
+
 /// Descriptor for the bounded tileable linear-RGB Base Curve path.
 #[must_use]
 #[expect(

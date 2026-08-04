@@ -21,6 +21,7 @@ pub fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId
         crate::ProcessingOperationKind::ToneCurve { .. } => {
             crate::descriptor::tonecurve_descriptor().id
         }
+        crate::ProcessingOperationKind::Colisa { .. } => crate::descriptor::colisa_descriptor().id,
         crate::ProcessingOperationKind::Agx { .. } => crate::descriptor::agx_descriptor().id,
         crate::ProcessingOperationKind::BasicAdj { .. } => {
             crate::descriptor::basicadj_descriptor().id

@@ -5,6 +5,7 @@ use crate::operations::{
     bloom::BloomConfig,
     channelmixer::ChannelMixerConfig,
     clipping::ClippingConfig,
+    colisa::{ColisaConfig, ColisaParametersV1},
     colorcontrast::ColorContrastConfig,
     colorcorrection::ColorCorrectionConfig,
     colorin::ColorInConfig,
@@ -134,6 +135,9 @@ pub enum ProcessingOperationKind {
     },
     ToneCurve {
         config: ToneCurveConfig,
+    },
+    Colisa {
+        config: ColisaConfig,
     },
     Agx {
         config: AgxConfig,
@@ -406,6 +410,9 @@ impl ProcessingOperation {
     }
     pub(crate) fn compile_tonecurve(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_tonecurve(operation)
+    }
+    pub(crate) fn compile_colisa(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_colisa(operation)
     }
     pub(crate) fn compile_agx(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_agx(operation)
@@ -1180,6 +1187,36 @@ fn compile_tonecurve(operation: &Operation) -> Result<ProcessingOperation, Opera
         kind: ProcessingOperationKind::ToneCurve {
             config: ToneCurveConfig::new(parameters),
         },
+    })
+}
+
+fn compile_colisa(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    const PARAMETERS: [&str; 3] = ["contrast", "brightness", "saturation"];
+    reject_unexpected(operation, &PARAMETERS)?;
+    let parameters = ColisaParametersV1::new(
+        parameter_f32(
+            operation,
+            "contrast",
+            f64::from(crate::operations::colisa::COLISA_DEFAULT_CONTRAST),
+        )?,
+        parameter_f32(
+            operation,
+            "brightness",
+            f64::from(crate::operations::colisa::COLISA_DEFAULT_BRIGHTNESS),
+        )?,
+        parameter_f32(
+            operation,
+            "saturation",
+            f64::from(crate::operations::colisa::COLISA_DEFAULT_SATURATION),
+        )?,
+    );
+    let config =
+        ColisaConfig::new(parameters).map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Colisa { config },
     })
 }
 

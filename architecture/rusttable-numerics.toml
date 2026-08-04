@@ -80,6 +80,10 @@ path = "crates/rusttable-processing/src/operations/colisa/mod.rs"
 policy = "ExplicitFused"
 
 [[explicit_fma]]
+path = "crates/rusttable-processing/tests/colisa_leaf.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
 path = "crates/rusttable-processing/src/operations/dither.rs"
 policy = "ExplicitFused"
 

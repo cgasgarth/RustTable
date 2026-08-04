@@ -17,14 +17,14 @@ use super::{
 use crate::ProcessingOperation;
 use crate::descriptor::{
     DescriptorId, OperationDescriptor, OperationFlags, agx_descriptor, basecurve_descriptor,
-    bloom_descriptor, channelmixer_descriptor, colorcontrast_descriptor, colormapping_descriptor,
-    colortransfer_descriptor, colorzones_descriptor, crop_descriptor, dither_descriptor,
-    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
-    graduatednd_descriptor, grain_descriptor, highpass_descriptor, invert_descriptor,
-    levels_descriptor, linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor,
-    rgblevels_descriptor, rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor,
-    sharpen_descriptor, soften_descriptor, temperature_descriptor, tonecurve_descriptor,
-    velvia_descriptor, vibrance_descriptor, vignette_descriptor,
+    bloom_descriptor, channelmixer_descriptor, colisa_descriptor, colorcontrast_descriptor,
+    colormapping_descriptor, colortransfer_descriptor, colorzones_descriptor, crop_descriptor,
+    dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
+    flip_descriptor, graduatednd_descriptor, grain_descriptor, highpass_descriptor,
+    invert_descriptor, levels_descriptor, linear_offset_descriptor, relight_descriptor,
+    rgb_gain_descriptor, rgblevels_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    shadhi_descriptor, sharpen_descriptor, soften_descriptor, temperature_descriptor,
+    tonecurve_descriptor, velvia_descriptor, vibrance_descriptor, vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -208,6 +208,16 @@ fn prepare_tonecurve(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare_without_executor(
         ProcessingOperation::compile_tonecurve(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+    )
+}
+
+fn prepare_colisa(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare_without_executor(
+        ProcessingOperation::compile_colisa(operation).map_err(FactoryError::Operation)?,
         descriptor,
     )
 }
@@ -807,6 +817,31 @@ pub fn tonecurve_definition() -> OperationDefinition {
     )
     .with_ui_availability(OperationUiAvailability::Unavailable {
         reason: "Tone Curve GTK controls and histogram workflow are not ported".to_owned(),
+    })
+}
+
+pub fn colisa_definition() -> OperationDefinition {
+    routed_geometry_definition(
+        colisa_descriptor(),
+        prepare_colisa,
+        &[
+            "iop.colisa.params.v1-12-byte-little-endian",
+            "iop.colisa.cpu.lab-d50-lut",
+            "iop.colisa.cpu.exponential-extrapolation",
+            "iop.colisa.cpu.cancellation-budget-publication",
+            "iop.colisa.alpha-spare-preserve",
+            "iop.colisa.identity-roi-tileable",
+            "iop.colisa.order.v30-47",
+            "iop.colisa.deprecated-style-identity",
+            "iop.colisa.blend-mask-deferred",
+            "iop.colisa.gpu-unavailable",
+        ],
+        RoiKind::Identity,
+        std::iter::empty(),
+        CpuExecutionRoute::LabD50Pixelpipe,
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Colisa is deprecated and its native GTK editor is not ported".to_owned(),
     })
 }
 
@@ -1569,6 +1604,7 @@ macro_rules! builtin_operations {
             $crate::registry::rgblevels_definition,
             $crate::registry::basecurve_definition,
             $crate::registry::tonecurve_definition,
+            $crate::registry::operations::colisa_definition,
             $crate::registry::agx_definition,
             $crate::registry::levels_definition,
             $crate::registry::relight_definition,

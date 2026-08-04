@@ -656,6 +656,7 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
                 | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
                 | rusttable_processing::ProcessingOperationKind::Highpass { .. }
                 | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
+                | rusttable_processing::ProcessingOperationKind::Colisa { .. }
         );
         has_active_lab_operation |= is_lab_operation;
         has_active_continuous_lab_operation |= matches!(
@@ -665,6 +666,7 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
                 | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
                 | rusttable_processing::ProcessingOperationKind::Highpass { .. }
                 | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
+                | rusttable_processing::ProcessingOperationKind::Colisa { .. }
         );
         all_active_operations_are_lab &= is_lab_operation;
     }
@@ -689,6 +691,7 @@ fn is_pure_lab_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bo
                         | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
                         | rusttable_processing::ProcessingOperationKind::Highpass { .. }
                         | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
+                        | rusttable_processing::ProcessingOperationKind::Colisa { .. }
                 )
         })
 }
@@ -717,6 +720,7 @@ const fn operation_uses_lab_stage(kind: &rusttable_processing::ProcessingOperati
             | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
             | rusttable_processing::ProcessingOperationKind::Highpass { .. }
             | rusttable_processing::ProcessingOperationKind::ToneCurve { .. }
+            | rusttable_processing::ProcessingOperationKind::Colisa { .. }
     )
 }
 
@@ -1100,6 +1104,9 @@ fn execute_lab_point_operation(
         }
         rusttable_processing::ProcessingOperationKind::ToneCurve { config } => {
             execute_lab_tonecurve(config, output, mask, opacity, context)
+        }
+        rusttable_processing::ProcessingOperationKind::Colisa { config } => {
+            execute_lab_colisa(*config, output, mask, opacity, context)
         }
         _ => execute_lab_registered_rgb_stage(output, context),
     }
@@ -1503,6 +1510,88 @@ fn execute_lab_tonecurve(
     Ok(result)
 }
 
+fn execute_lab_colisa(
+    config: rusttable_processing::operations::colisa::ColisaConfig,
+    output: &[[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+    context: &LabPointOperationContext<'_>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: context.node.pipeline_step_index(),
+                operation_id: context.node.operation().operation_id(),
+                reason: "Colisa masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+            },
+        });
+    }
+
+    let samples = output
+        .len()
+        .checked_mul(4)
+        .ok_or_else(|| colisa_operation_error(context.node, "Colisa raster shape overflowed"))?;
+    let output_bytes = samples
+        .checked_mul(std::mem::size_of::<f32>())
+        .ok_or_else(|| colisa_operation_error(context.node, "Colisa output size overflowed"))?;
+    let mut input = Vec::new();
+    input.try_reserve_exact(samples).map_err(|_| {
+        colisa_operation_error(
+            context.node,
+            format!("Colisa could not allocate {output_bytes} input bytes"),
+        )
+    })?;
+    for channels in output {
+        input.extend_from_slice(channels);
+    }
+
+    let plan = rusttable_processing::operations::colisa::ColisaPlan::compile_with_cancellation(
+        config.parameters(),
+        rusttable_processing::operations::colisa::COLISA_TABLE_BYTES,
+        || context.scope.is_some_and(|scope| scope.check().is_err()),
+    )
+    .map_err(|error| colisa_evaluation_error(context.node, &error, context.scope))?;
+    let candidate = plan
+        .execute(
+            rusttable_processing::operations::colisa::ColisaRaster::new(
+                &input,
+                context.dimensions.width(),
+                context.dimensions.height(),
+                rusttable_processing::operations::colisa::ColisaFormat::LabF32x4,
+            ),
+            output_bytes,
+            || context.scope.is_some_and(|scope| scope.check().is_err()),
+        )
+        .map_err(|error| colisa_evaluation_error(context.node, &error, context.scope))?;
+
+    let mut result = Vec::new();
+    result.try_reserve_exact(output.len()).map_err(|_| {
+        colisa_operation_error(
+            context.node,
+            format!("Colisa could not allocate {} output pixels", output.len()),
+        )
+    })?;
+    let (candidate, remainder) = candidate.as_chunks::<4>();
+    if !remainder.is_empty() {
+        return Err(colisa_operation_error(
+            context.node,
+            "Colisa produced an incomplete pixel",
+        ));
+    }
+    for (index, channels) in candidate.iter().enumerate() {
+        if index % 1_024 == 0
+            && let Some(scope) = context.scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        result.push(*channels);
+    }
+    if let Some(scope) = context.scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    Ok(result)
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "the sharpen boundary carries mutable pixels, scale, mask, node identity, and cancellation"
@@ -1649,6 +1738,34 @@ fn tonecurve_evaluation_error(
             reason: source.to_string(),
         },
     }
+}
+
+fn colisa_operation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    reason: impl Into<String>,
+) -> CpuPixelpipeError {
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: reason.into(),
+        },
+    }
+}
+
+fn colisa_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: &rusttable_processing::operations::colisa::ColisaError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if matches!(
+        source,
+        rusttable_processing::operations::colisa::ColisaError::Cancelled
+    ) && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    colisa_operation_error(node, source.to_string())
 }
 
 fn sharpen_evaluation_error(

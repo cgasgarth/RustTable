@@ -504,6 +504,13 @@ pub fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
                 "Tone Curve requires the Lab D50 pixelpipe route",
             ),
         )),
+        ProcessingOperationKind::Colisa { .. } => Err(operation_plan_error(
+            step_index,
+            operation_id,
+            OperationExecutionError::UnsupportedCapability(
+                "Colisa requires the Lab D50 pixelpipe route",
+            ),
+        )),
         ProcessingOperationKind::Agx { config } => {
             require_unblended_tonal_route(
                 step_index,

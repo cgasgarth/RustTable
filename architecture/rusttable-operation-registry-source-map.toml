@@ -117,6 +117,12 @@ owner = "crates/rusttable-processing/src/registry/operations/mod.rs"
 status = "replaced"
 
 [[operation]]
+rust_id = "rusttable.colisa"
+manifest_name = "colisa"
+owner = "crates/rusttable-processing/src/registry/operations/mod.rs"
+status = "replaced"
+
+[[operation]]
 rust_id = "rusttable.highpass"
 manifest_name = "highpass"
 owner = "crates/rusttable-processing/src/registry/operations/mod.rs"

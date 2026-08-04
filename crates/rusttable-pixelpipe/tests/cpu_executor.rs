@@ -1500,6 +1500,121 @@ fn highpass_rejects_a_runtime_mask_before_execution() {
 }
 
 #[test]
+fn colisa_lab_route_is_tile_invariant_alpha_preserving_and_snapshot_bound() {
+    let input = lab_image();
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        input.clone(),
+        graph(vec![operation(
+            911,
+            "rusttable.colisa",
+            &[("contrast", 0.5), ("brightness", 0.25), ("saturation", 0.5)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Colisa snapshot");
+    let executor = CpuPixelpipeExecutor;
+    let full = executor.execute(&snapshot).expect("full Colisa execution");
+    let tiled = executor
+        .execute_tiled(&snapshot, CpuTilePlan::new(7, 9).expect("tile plan"))
+        .expect("tiled Colisa execution");
+
+    assert_eq!(full.image(), tiled.image());
+    assert_eq!(full.receipt(), tiled.receipt());
+    assert!(
+        full.image()
+            .pixels()
+            .iter()
+            .zip(input.pixels())
+            .all(|(pixel, source)| {
+                pixel.alpha().to_bits() == source.alpha().to_bits()
+                    && pixel.red().is_finite()
+                    && pixel.green().is_finite()
+                    && pixel.blue().is_finite()
+            }),
+        "Colisa must preserve the fourth lane while changing Lab channels"
+    );
+    assert_eq!(
+        full.image().pixels()[0].green().to_bits(),
+        (-48.0_f32).to_bits()
+    );
+    assert_eq!(
+        full.image().pixels()[0].blue().to_bits(),
+        (-48.0_f32).to_bits()
+    );
+    assert_ne!(
+        full.image().pixels()[0].red().to_bits(),
+        input.pixels()[0].red().to_bits()
+    );
+
+    let changed = CpuPixelpipeSnapshot::try_new(
+        input,
+        graph(vec![operation(
+            911,
+            "rusttable.colisa",
+            &[
+                ("contrast", 0.25),
+                ("brightness", 0.25),
+                ("saturation", 0.5),
+            ],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("changed Colisa snapshot");
+    assert_ne!(snapshot.identity(), changed.identity());
+
+    let scope = CancellationScope::root(PipelineGeneration::new(911).expect("generation"));
+    scope.cancel(CancellationReason::EditChanged);
+    assert!(matches!(
+        executor.execute_with_cancellation(&snapshot, &scope),
+        Err(CpuPixelpipeError::Cancelled(_))
+    ));
+}
+
+#[test]
+fn colisa_rejects_nonunit_opacity_and_runtime_masks_before_execution() {
+    let operation_id = 912;
+    let partial = CpuPixelpipeSnapshot::try_new(
+        lab_image(),
+        graph(vec![operation_with_opacity(
+            operation_id,
+            "rusttable.colisa",
+            &[("contrast", 0.5), ("brightness", 0.0), ("saturation", 0.5)],
+            OperationOpacity::new(0.5).expect("partial opacity"),
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("partial-opacity Colisa snapshot");
+    let masked = CpuPixelpipeSnapshot::try_new(
+        lab_image(),
+        graph(vec![operation(
+            operation_id,
+            "rusttable.colisa",
+            &[("contrast", 0.5), ("brightness", 0.0), ("saturation", 0.5)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("masked Colisa snapshot")
+    .with_mask_graph(tonecurve_mask_graph(operation_id));
+
+    for snapshot in [partial, masked] {
+        let error = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .expect_err("Colisa blend and mask semantics must remain fail-closed");
+        assert!(matches!(
+            error,
+            CpuPixelpipeError::Evaluation {
+                source: rusttable_processing::EvaluationError::OperationExecution {
+                    operation_id: actual_id,
+                    reason,
+                    ..
+                }
+            } if actual_id.get() == operation_id
+                && reason == "Colisa masks and outer blending are deferred; only unmasked full-opacity execution is available"
+        ));
+    }
+}
+
+#[test]
 fn levels_cpu_route_preserves_lab_alpha_tiles_and_cancellation() {
     let snapshot = CpuPixelpipeSnapshot::try_new(
         lab_image(),

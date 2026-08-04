@@ -14,6 +14,7 @@ pub mod censorize;
 pub mod channelmixer;
 pub mod clahe;
 pub mod clipping;
+pub mod colisa;
 pub mod colorcontrast;
 pub mod colorcorrection;
 pub mod colorharmonizer;
