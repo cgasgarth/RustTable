@@ -34,6 +34,7 @@ pub const COLISA_RUST_ID: &str = "rusttable.colisa";
 pub const COLISA_PARAMETER_VERSION: u16 = 1;
 pub const COLISA_PARAMETER_BYTES: usize = 12;
 pub const COLISA_TABLE_ENTRIES: usize = 0x1_0000;
+pub const COLISA_TABLE_BYTES: usize = 2 * COLISA_TABLE_ENTRIES * size_of::<f32>();
 pub const COLISA_CANCELLATION_POLL_PIXELS: usize = 256;
 pub const COLISA_DEFAULT_CONTRAST: f32 = 0.0;
 pub const COLISA_DEFAULT_BRIGHTNESS: f32 = 0.0;
@@ -119,6 +120,37 @@ impl ColisaParametersV1 {
             read_f32(bytes, 4),
             read_f32(bytes, 8),
         ))
+    }
+}
+
+/// Validated operation state used by the typed processing graph.
+///
+/// The native values remain exact `f32` bit patterns while the graph stores
+/// them as bits so the operation kind can retain `Eq` and `Hash` identities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ColisaConfig {
+    values: [u32; 3],
+}
+
+impl ColisaConfig {
+    pub fn new(parameters: ColisaParametersV1) -> Result<Self, ColisaError> {
+        validate_parameters(parameters)?;
+        Ok(Self {
+            values: [
+                parameters.contrast.to_bits(),
+                parameters.brightness.to_bits(),
+                parameters.saturation.to_bits(),
+            ],
+        })
+    }
+
+    #[must_use]
+    pub const fn parameters(self) -> ColisaParametersV1 {
+        ColisaParametersV1::new(
+            f32::from_bits(self.values[0]),
+            f32::from_bits(self.values[1]),
+            f32::from_bits(self.values[2]),
+        )
     }
 }
 

@@ -714,6 +714,7 @@ fn verify_registry_operations(root: &Path, document: &toml::Value) -> Result {
         "rusttable.vignette",
         "rusttable.graduatednd",
         "rusttable.basecurve",
+        "rusttable.colisa",
         "rusttable.highpass",
         "rusttable.tonecurve",
         "rusttable.watermark",

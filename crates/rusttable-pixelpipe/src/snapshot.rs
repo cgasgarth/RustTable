@@ -20,7 +20,8 @@ const GRADUATED_ND_SNAPSHOT_KIND_TAG: u8 = 40;
 const BASECURVE_SNAPSHOT_KIND_TAG: u8 = 41;
 const HIGHPASS_SNAPSHOT_KIND_TAG: u8 = 42;
 const TONECURVE_SNAPSHOT_KIND_TAG: u8 = 43;
-const SNAPSHOT_KIND_TAGS: [u8; 44] = [
+const COLISA_SNAPSHOT_KIND_TAG: u8 = 44;
+const SNAPSHOT_KIND_TAGS: [u8; 45] = [
     0,
     1,
     2,
@@ -65,6 +66,7 @@ const SNAPSHOT_KIND_TAGS: [u8; 44] = [
     BASECURVE_SNAPSHOT_KIND_TAG,
     HIGHPASS_SNAPSHOT_KIND_TAG,
     TONECURVE_SNAPSHOT_KIND_TAG,
+    COLISA_SNAPSHOT_KIND_TAG,
 ];
 const _: () = assert!(snapshot_kind_tags_are_unique(&SNAPSHOT_KIND_TAGS));
 
@@ -752,6 +754,10 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
         ProcessingOperationKind::ToneCurve { config } => {
             hasher.update([TONECURVE_SNAPSHOT_KIND_TAG]);
             hasher.update(config.payload());
+        }
+        ProcessingOperationKind::Colisa { config } => {
+            hasher.update([COLISA_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
         }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }

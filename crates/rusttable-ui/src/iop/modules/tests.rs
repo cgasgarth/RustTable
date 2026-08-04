@@ -495,6 +495,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "rgblevels",
             "basecurve",
             "tonecurve",
+            "colisa",
             "agx",
             "levels",
             "relight",

@@ -57,7 +57,7 @@ pub use censorize::censorize_descriptor;
 pub use effects::{bloom_descriptor, soften_descriptor};
 pub use masks::mask_manager_descriptor;
 pub use operations::{
-    basecurve_descriptor, color_reconstruction_descriptor, exposure_descriptor,
+    basecurve_descriptor, colisa_descriptor, color_reconstruction_descriptor, exposure_descriptor,
     highlights_descriptor, highpass_descriptor, linear_offset_descriptor, rgb_gain_descriptor,
     temperature_descriptor, tonecurve_descriptor,
 };

@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "416f014fdc42dcdb93a4c1f8c4e792445af6c5d3e131365483922e6eeb81b376"
+snapshot_hash = "91aa1f5ce4f1ae981e15d5e3bb90d211c7c3ece7b320babb1f7c818c78b3d90a"
 
 [[operation]]
 rust_id = "rusttable.agx"
@@ -79,6 +79,14 @@ rust_id = "rusttable.clipping"
 compatibility_name = "clipping"
 descriptor_version = 5
 parameter_version = 5
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.colisa"
+compatibility_name = "colisa"
+descriptor_version = 1
+parameter_version = 1
 implementation_version = 1
 status = "available"
 
